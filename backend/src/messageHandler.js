@@ -451,10 +451,10 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const eventList = Array.isArray(intent.events) && intent.events.length > 0
         ? intent.events
         : [{
-            title:               intent.event_title ?? originalText,
-            date:                intent.event_date,
-            time:                intent.event_time,
-            recurrence:          intent.event_recurrence ?? null,
+            title:                intent.event_title ?? originalText,
+            date:                 intent.event_date,
+            time:                 intent.event_time ?? null,
+            recurrence:           intent.event_recurrence ?? null,
             reminder_days_before: intent.reminder_days_before ?? 1,
           }];
 
@@ -465,6 +465,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         await db.createEvent(userId, {
           title: evTitle,
           date: ev.date,
+          time: ev.time ?? null,
           recurrence: ev.recurrence ?? null,
           reminderDaysBefore: reminderDays,
         });

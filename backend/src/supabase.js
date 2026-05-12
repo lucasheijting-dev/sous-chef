@@ -228,10 +228,10 @@ async function deleteNote(noteId) {
 
 // ── Events ─────────────────────────────────────────────────────────────────────
 
-async function createEvent(userId, { title, date, recurrence, reminderDaysBefore }) {
+async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore }) {
   const { data, error } = await supabase
     .from('events')
-    .insert({ user_id: userId, title, date, recurrence: recurrence ?? null, reminder_days_before: reminderDaysBefore ?? 1 })
+    .insert({ user_id: userId, title, date, time: time ?? null, recurrence: recurrence ?? null, reminder_days_before: reminderDaysBefore ?? 1 })
     .select('id')
     .single();
 
