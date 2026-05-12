@@ -447,17 +447,46 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     // ── Calendar ─────────────────────────────────────────────────────────────
 
     case 'calendar': {
-      const title  = intent.event_title ?? originalText;
-      const time   = intent.event_time ? ` om ${intent.event_time}` : '';
-      await db.createEvent(userId, {
-        title,
-        date: intent.event_date,
-        recurrence: intent.event_recurrence,
-        reminderDaysBefore: intent.reminder_days_before ?? 1,
-      });
-      const dateStr   = intent.event_date ? ` op ${formatDate(intent.event_date)}${time}` : '';
-      const recurring = intent.event_recurrence === 'yearly' ? ' (jaarlijks)' : '';
-      return `📅 Ingepland: *${title}*${dateStr}${recurring}. Reminder ${intent.reminder_days_before ?? 1} dag(en) van tevoren.`;
+      // Multi-event support: use events[] array if present, else fall back to single fields
+      const eventList = Array.isArray(intent.events) && intent.events.length > 0
+        ? intent.events
+        : [{
+            title:               intent.event_title ?? originalText,
+            date:                intent.event_date,
+            time:                intent.event_time,
+            recurrence:          intent.event_recurrence ?? null,
+            reminder_days_before: intent.reminder_days_before ?? 1,
+          }];
+
+      const lines = [];
+      for (const ev of eventList) {
+        const evTitle = ev.title ?? intent.event_title ?? originalText;
+        const reminderDays = ev.reminder_days_before ?? 1;
+        await db.createEvent(userId, {
+          title: evTitle,
+          date: ev.date,
+          recurrence: ev.recurrence ?? null,
+          reminderDaysBefore: reminderDays,
+        });
+        const timeStr = ev.time ? ` om ${ev.time}` : '';
+        const dateStr = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
+        const recurStr = ev.recurrence === 'yearly' ? ' _(jaarlijks)_' : '';
+        lines.push(`• *${evTitle}*${dateStr}${recurStr}`);
+      }
+
+      // Reminder summary line
+      const allSameDay = eventList.every(e => (e.reminder_days_before ?? 1) === 0);
+      const allOneDayBefore = eventList.every(e => (e.reminder_days_before ?? 1) === 1);
+      const reminderNote = allSameDay
+        ? 'Reminder op het moment zelf.'
+        : allOneDayBefore
+          ? 'Reminder 1 dag van tevoren.'
+          : `Reminder ingesteld per afspraak.`;
+
+      if (lines.length === 1) {
+        return `📅 Ingepland: ${lines[0].slice(2)}.\n_${reminderNote}_`;
+      }
+      return `📅 Ingepland:\n${lines.join('\n')}\n\n_${reminderNote}_`;
     }
 
     // ── Events today ─────────────────────────────────────────────────────────

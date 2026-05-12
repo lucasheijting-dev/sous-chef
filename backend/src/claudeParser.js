@@ -27,7 +27,7 @@ Je taak is om het bericht van de gebruiker te categoriseren, relevante data te e
 - **new_list** — nieuwe lijst aanmaken; alleen als naam NIET in bestaande lijsten staat; vul emoji in
 
 **Agenda:**
-- **calendar** — afspraak vastleggen (bijv. "tandarts dinsdag 14u", "verjaardag Stan 27 juli"); vul event_time in bij tijdsvermelding
+- **calendar** — afspraak(en) vastleggen (bijv. "tandarts dinsdag 14u", "verjaardag Stan 27 juli"); vul event_time in bij tijdsvermelding. Als het bericht meerdere data of tijden noemt, gebruik dan het "events" array (zie onder).
 - **reminder** — losse herinnering (bijv. "herinner me maandag aan belasting")
 - **events_today** — afspraken van vandaag opvragen (bijv. "wat heb ik vandaag?", "agenda vandaag")
 - **events_week** — afspraken van deze week opvragen (bijv. "weekplanning", "wat heb ik deze week?", "wat staat er op de planning?", "planning deze week")
@@ -90,13 +90,33 @@ Bij habit_log/habit_log_multi, als niveau onduidelijk is: habit_level = null
 - good/zilver: solide prestatie
 - elite/goud: topprestatie
 
+## Meerdere agenda-afspraken (events array)
+
+Als het bericht meerdere data of tijden noemt voor dezelfde of verschillende afspraken, gebruik dan het "events" veld als array.
+Elk event object heeft: { "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM" of null, "recurrence": null of "yearly", "reminder_days_before": getal }.
+Laat de losse velden (event_date, event_time, etc.) dan null.
+
+Voorbeeld input: "Work on Medis: donderdagavond 19:30, zaterdagochtend 10:00 en zondag hele dag. Zet een reminder op elk moment."
+Voorbeeld output events:
+[
+  { "title": "Work on Medis", "date": "2026-05-14", "time": "19:30", "recurrence": null, "reminder_days_before": 0 },
+  { "title": "Work on Medis", "date": "2026-05-16", "time": "10:00", "recurrence": null, "reminder_days_before": 0 },
+  { "title": "Work on Medis", "date": "2026-05-17", "time": null, "recurrence": null, "reminder_days_before": 0 }
+]
+
+## Reminder-regels
+
+- reminder_days_before: 1 — standaard: één dag van tevoren
+- reminder_days_before: 0 — op het moment zelf ("reminder op dat moment", "herinner me dan", "zodat ik op dat moment wordt herinnerd")
+- reminder_days_before: N — N dagen van tevoren
+
 ## Datumregels
 
 Vandaag is ${new Date().toLocaleDateString('nl-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
 Gebruik ISO 8601 (YYYY-MM-DD). Relatieve datums: overmorgen, volgende week dinsdag, etc.
 Nederlandse maandnamen: januari t/m december.
 Verjaardagen zijn jaarlijks terugkerend (event_recurrence="yearly").
-Bij tijdsvermelding (bijv. "14u", "14:30", "2 uur"): vul event_time in als "HH:MM".
+Bij tijdsvermelding (bijv. "14u", "14:30", "14;30", "2 uur"): vul event_time in als "HH:MM" (herstel ook typfouten zoals puntkomma).
 
 ## Zekerheid (confidence)
 
@@ -136,6 +156,7 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "event_date": null,
   "event_time": null,
   "event_recurrence": null,
+  "events": null,
   "reminder_text": null,
   "reminder_date": null,
   "reminder_days_before": null,
