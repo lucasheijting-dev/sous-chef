@@ -106,9 +106,12 @@ Voorbeeld output events:
 
 ## Reminder-regels
 
-- reminder_days_before: 1 — standaard: één dag van tevoren
-- reminder_days_before: 0 — op het moment zelf ("reminder op dat moment", "herinner me dan", "zodat ik op dat moment wordt herinnerd")
+- reminder_days_before: null — standaard: geen reminder tenzij de gebruiker er expliciet om vraagt
+- reminder_days_before: 0 — op het moment zelf ("reminder op dat moment", "herinner me dan", "zet een alarm", "zodat ik op dat moment wordt herinnerd")
+- reminder_days_before: 1 — één dag van tevoren ("herinner me een dag van tevoren")
 - reminder_days_before: N — N dagen van tevoren
+
+Zet reminder_days_before ALLEEN als de gebruiker expliciet vraagt om een reminder, alarm of herinnering.
 
 ## Datumregels
 

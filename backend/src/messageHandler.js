@@ -455,13 +455,13 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
             date:                 intent.event_date,
             time:                 intent.event_time ?? null,
             recurrence:           intent.event_recurrence ?? null,
-            reminder_days_before: intent.reminder_days_before ?? 1,
+            reminder_days_before: intent.reminder_days_before ?? null,
           }];
 
       const lines = [];
       for (const ev of eventList) {
         const evTitle = ev.title ?? intent.event_title ?? originalText;
-        const reminderDays = ev.reminder_days_before ?? 1;
+        const reminderDays = ev.reminder_days_before ?? null;
         await db.createEvent(userId, {
           title: evTitle,
           date: ev.date,

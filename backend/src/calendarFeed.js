@@ -49,11 +49,10 @@ router.get('/:userId.ics', async (req, res) => {
       allDay = true;
     }
 
-    // Build alarm: reminder_days_before=0 means at the event time, N means N days before at 09:00
     const alarms = [];
-    if (e.reminder_days_before === 0 && e.time) {
+    if (e.reminder_days_before === 0) {
       alarms.push({ type: 'display', trigger: 0 });
-    } else if ((e.reminder_days_before ?? 1) > 0) {
+    } else if (e.reminder_days_before > 0) {
       alarms.push({ type: 'display', trigger: -e.reminder_days_before * 24 * 60 * 60 });
     }
 
