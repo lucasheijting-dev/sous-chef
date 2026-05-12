@@ -35,18 +35,36 @@ router.get('/:userId.ics', async (req, res) => {
   for (const e of events ?? []) {
     if (!e.date) continue;
 
-    // Parse date parts to avoid timezone shifting
     const [year, month, day] = e.date.split('-').map(Number);
-    const start = new Date(year, month - 1, day);
-    const end   = new Date(year, month - 1, day + 1);
+    let start, end, allDay;
+
+    if (e.time) {
+      const [hour, minute] = e.time.split(':').map(Number);
+      start  = new Date(year, month - 1, day, hour, minute);
+      end    = new Date(year, month - 1, day, hour + 1, minute);
+      allDay = false;
+    } else {
+      start  = new Date(year, month - 1, day);
+      end    = new Date(year, month - 1, day + 1);
+      allDay = true;
+    }
+
+    // Build alarm: reminder_days_before=0 means at the event time, N means N days before at 09:00
+    const alarms = [];
+    if (e.reminder_days_before === 0 && e.time) {
+      alarms.push({ type: 'display', trigger: 0 });
+    } else if ((e.reminder_days_before ?? 1) > 0) {
+      alarms.push({ type: 'display', trigger: -e.reminder_days_before * 24 * 60 * 60 });
+    }
 
     cal.createEvent({
-      id:          e.id,
-      summary:     e.title,
+      id:       e.id,
+      summary:  e.title,
       start,
       end,
-      allDay:      true,
-      timezone:    'Europe/Amsterdam',
+      allDay,
+      timezone: 'Europe/Amsterdam',
+      alarms,
       ...(e.recurrence === 'yearly'  && { repeating: { freq: 'YEARLY'  } }),
       ...(e.recurrence === 'monthly' && { repeating: { freq: 'MONTHLY' } }),
       ...(e.recurrence === 'weekly'  && { repeating: { freq: 'WEEKLY'  } }),
