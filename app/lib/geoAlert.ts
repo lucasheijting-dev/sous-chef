@@ -125,28 +125,33 @@ TaskManager.defineTask(GEO_ALERT_TASK, async ({ data, error }: any) => {
 
 // ── Start / stop ───────────────────────────────────────────────────────────────
 
-export async function startGeoAlertTask(userId: string): Promise<'ok' | 'denied'> {
+export async function startGeoAlertTask(userId: string): Promise<'ok' | 'denied' | 'expo-go'> {
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== 'granted') return 'denied';
 
-  const bgStatus = await Location.requestBackgroundPermissionsAsync();
-  if (bgStatus.status !== 'granted') return 'denied';
-
   await AsyncStorage.setItem('geo_alert_user_id', userId);
 
-  const running = await Location.hasStartedLocationUpdatesAsync(GEO_ALERT_TASK).catch(() => false);
-  if (!running) {
-    await Location.startLocationUpdatesAsync(GEO_ALERT_TASK, {
-      accuracy: Location.Accuracy.Balanced,
-      distanceInterval: 80,
-      deferredUpdatesInterval: 60_000,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: 'Sous-Chef',
-        notificationBody: 'Supermarktherkenning actief',
-        notificationColor: '#FFD60A',
-      },
-    });
+  // Background location doesn't work in Expo Go — degrade gracefully
+  try {
+    const bgStatus = await Location.requestBackgroundPermissionsAsync();
+    if (bgStatus.status !== 'granted') return 'denied';
+
+    const running = await Location.hasStartedLocationUpdatesAsync(GEO_ALERT_TASK).catch(() => false);
+    if (!running) {
+      await Location.startLocationUpdatesAsync(GEO_ALERT_TASK, {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 80,
+        deferredUpdatesInterval: 60_000,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: 'Sous-Chef',
+          notificationBody: 'Supermarktherkenning actief',
+          notificationColor: '#FCC10C',
+        },
+      });
+    }
+  } catch {
+    return 'expo-go';
   }
 
   return 'ok';

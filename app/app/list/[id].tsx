@@ -199,6 +199,9 @@ export default function ListDetailScreen() {
           'Ga naar Instellingen → Sous-Chef → Locatie en kies "Tijdens gebruik van app".',
         );
         setGeoEnabled(false);
+      } else if (result === 'expo-go') {
+        setGeoEnabled(true);
+        showToast('Werkt volledig in de echte app — achtergrond tracking actief na installatie', 'info');
       } else {
         setGeoEnabled(true);
         showToast('Supermarktherkenning ingeschakeld', 'success');
