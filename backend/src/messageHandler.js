@@ -3,6 +3,7 @@
 const { parseIntent }          = require('./claudeParser');
 const { sendMessage, sendTyping } = require('./whatsapp');
 const db                  = require('./supabase');
+const caldav              = require('./caldav');
 const session             = require('./sessionMemory');
 const undo                = require('./undoManager');
 const confirm             = require('./pendingConfirmations');
@@ -151,6 +152,16 @@ async function executePendingAction(pending, userId) {
         return `✅ Alle items op *${pending.listName}* afgevinkt!`;
       }
       case 'event_delete': {
+        if (caldav.isConfigured() && pending.caldavUid) {
+          const creds = await db.getCalDAVCredentials(userId);
+          if (creds) {
+            try {
+              await caldav.deleteEvent(creds.username, creds.password, pending.calendarStream ?? 'personal', pending.caldavUid);
+            } catch (err) {
+              console.error('CalDAV delete failed (continuing):', err.message);
+            }
+          }
+        }
         await db.deleteEventById(userId, pending.eventId);
         return `🗑️ *${pending.eventTitle}* verwijderd uit je agenda.`;
       }
@@ -456,38 +467,68 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
             time:                 intent.event_time ?? null,
             recurrence:           intent.event_recurrence ?? null,
             reminder_days_before: intent.reminder_days_before ?? null,
+            calendar_stream:      intent.calendar_stream ?? 'personal',
           }];
+
+      // Ensure CalDAV user is provisioned (lazy)
+      let caldavCreds = null;
+      let isNewCalDAVUser = false;
+      if (caldav.isConfigured()) {
+        caldavCreds = await db.getCalDAVCredentials(userId);
+        if (!caldavCreds) {
+          const { username, password } = caldav.generateCredentials(userId);
+          await caldav.provisionUser(username, password);
+          await db.storeCalDAVCredentials(userId, username, password);
+          caldavCreds = { username, password };
+          isNewCalDAVUser = true;
+        }
+      }
 
       const lines = [];
       for (const ev of eventList) {
-        const evTitle = ev.title ?? intent.event_title ?? originalText;
+        const evTitle      = ev.title ?? intent.event_title ?? originalText;
         const reminderDays = ev.reminder_days_before ?? null;
+        const stream       = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
+
+        let caldavUid = null;
+        if (caldavCreds) {
+          try {
+            caldavUid = await caldav.createEvent(
+              caldavCreds.username,
+              caldavCreds.password,
+              stream,
+              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays },
+            );
+          } catch (err) {
+            console.error('CalDAV event creation failed (continuing):', err.message);
+          }
+        }
+
         await db.createEvent(userId, {
           title: evTitle,
           date: ev.date,
           time: ev.time ?? null,
           recurrence: ev.recurrence ?? null,
           reminderDaysBefore: reminderDays,
+          caldavUid,
+          calendarStream: stream,
         });
-        const timeStr = ev.time ? ` om ${ev.time}` : '';
-        const dateStr = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
+
+        const timeStr  = ev.time ? ` om ${ev.time}` : '';
+        const dateStr  = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
         const recurStr = ev.recurrence === 'yearly' ? ' _(jaarlijks)_' : '';
         lines.push(`• *${evTitle}*${dateStr}${recurStr}`);
       }
 
-      // Reminder summary line
-      const allSameDay = eventList.every(e => (e.reminder_days_before ?? 1) === 0);
-      const allOneDayBefore = eventList.every(e => (e.reminder_days_before ?? 1) === 1);
-      const reminderNote = allSameDay
-        ? 'Reminder op het moment zelf.'
-        : allOneDayBefore
-          ? 'Reminder 1 dag van tevoren.'
-          : `Reminder ingesteld per afspraak.`;
+      // Send CalDAV onboarding as a follow-up message on first provisioning
+      if (isNewCalDAVUser && caldavCreds) {
+        setTimeout(() => sendMessage(from, buildCalDAVOnboardingMessage(caldavCreds.username, caldavCreds.password)), 800);
+      }
 
       if (lines.length === 1) {
-        return `📅 Ingepland: ${lines[0].slice(2)}.\n_${reminderNote}_`;
+        return `📅 Ingepland: ${lines[0].slice(2)}.`;
       }
-      return `📅 Ingepland:\n${lines.join('\n')}\n\n_${reminderNote}_`;
+      return `📅 Ingepland:\n${lines.join('\n')}`;
     }
 
     // ── Events today ─────────────────────────────────────────────────────────
@@ -521,7 +562,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (matches.length === 0) return `Geen afspraak gevonden met "${title}".`;
 
       const event = matches[0];
-      confirm.set(userId, { type: 'event_delete', eventId: event.id, eventTitle: event.title });
+      confirm.set(userId, { type: 'event_delete', eventId: event.id, eventTitle: event.title, caldavUid: event.caldav_uid ?? null, calendarStream: event.calendar_stream ?? 'personal' });
       return `⚠️ *${event.title}* verwijderen uit je agenda?\n\nStuur *ja* om te bevestigen.`;
     }
 
@@ -861,6 +902,24 @@ function buildHelpMessage() {
 • Corrigeren: _"ik bedoelde koffie"_
 
 Via de app zie je alles visueel. 📱`;
+}
+
+function buildCalDAVOnboardingMessage(username, password) {
+  const server = (process.env.CALDAV_URL ?? '').replace(/^https?:\/\//, '');
+  return `📅 *Je persoonlijke agenda is aangemaakt!*
+
+Voeg hem toe aan je iPhone:
+
+1. Ga naar *Instellingen → Agenda → Accounts*
+2. Tik op *Voeg account toe → Overige*
+3. Kies *Voeg CalDAV-account toe*
+4. Vul in:
+   • Server: ${server}
+   • Gebruikersnaam: ${username}
+   • Wachtwoord: ${password}
+   • Beschrijving: Sous-Chef
+
+Je agenda's (Afspraken, Verjaardagen, Werk, Persoonlijk) verschijnen automatisch. Alle afspraken die je via WhatsApp instuurt komen er direct in.`;
 }
 
 function formatDate(isoDate) {
