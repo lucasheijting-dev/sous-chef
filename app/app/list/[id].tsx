@@ -13,6 +13,7 @@ import {
   Platform,
   Switch,
   Alert,
+  Modal,
 } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -126,6 +127,7 @@ export default function ListDetailScreen() {
   const isGroceryList = isBoodschappenlijst(name ?? '');
   const [geoEnabled, setGeoEnabled] = useState(false);
   const [geoToggling, setGeoToggling] = useState(false);
+  const [geoPermModal, setGeoPermModal] = useState(false);
 
   useEffect(() => {
     if (!isGroceryList) return;
@@ -177,27 +179,41 @@ export default function ListDetailScreen() {
     fetchItems();
   }
 
-  async function toggleGeoAlert(value: boolean) {
+  function toggleGeoAlert(value: boolean) {
     if (geoToggling) return;
+    if (value) {
+      setGeoPermModal(true); // show explanation first
+    } else {
+      doDisableGeo();
+    }
+  }
+
+  async function doEnableGeo() {
+    setGeoPermModal(false);
     setGeoToggling(true);
     try {
-      if (value) {
-        const result = await startGeoAlertTask(user?.id ?? '');
-        if (result === 'denied') {
-          Alert.alert(
-            'Locatietoegang geweigerd',
-            'Geef Sous-Chef toegang tot je locatie in Instellingen om supermarktherkenning te gebruiken.',
-          );
-          setGeoEnabled(false);
-        } else {
-          setGeoEnabled(true);
-          showToast('Supermarktherkenning ingeschakeld', 'success');
-        }
-      } else {
-        await stopGeoAlertTask();
+      const result = await startGeoAlertTask(user?.id ?? '');
+      if (result === 'denied') {
+        Alert.alert(
+          'Locatietoegang geweigerd',
+          'Ga naar Instellingen → Sous-Chef → Locatie en kies "Tijdens gebruik van app".',
+        );
         setGeoEnabled(false);
-        showToast('Supermarktherkenning uitgeschakeld', 'info');
+      } else {
+        setGeoEnabled(true);
+        showToast('Supermarktherkenning ingeschakeld', 'success');
       }
+    } finally {
+      setGeoToggling(false);
+    }
+  }
+
+  async function doDisableGeo() {
+    setGeoToggling(true);
+    try {
+      await stopGeoAlertTask();
+      setGeoEnabled(false);
+      showToast('Supermarktherkenning uitgeschakeld', 'info');
     } finally {
       setGeoToggling(false);
     }
@@ -305,6 +321,26 @@ export default function ListDetailScreen() {
         </View>
 
         <Toast {...toastProps} />
+
+        <Modal visible={geoPermModal} transparent animationType="fade" onRequestClose={() => setGeoPermModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.permModal, { backgroundColor: colors.white }]}>
+              <Text style={styles.permIcon}>📍</Text>
+              <Text style={[styles.permTitle, { color: colors.black }]}>Locatietoegang nodig</Text>
+              <Text style={[styles.permBody, { color: colors.gray600 }]}>
+                Sous-Chef gebruikt je locatie om te detecteren wanneer je bij de supermarkt bent. Je krijgt dan automatisch een WhatsApp-bericht met je open boodschappen.{'\n\n'}De locatie wordt nooit opgeslagen of gedeeld.
+              </Text>
+              <TouchableOpacity style={styles.permBtn} onPress={doEnableGeo} activeOpacity={0.85}>
+                <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.permBtnGrad}>
+                  <Text style={styles.permBtnText}>Locatie toestaan</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.permCancel} onPress={() => setGeoPermModal(false)}>
+                <Text style={[styles.permCancelText, { color: colors.gray400 }]}>Niet nu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
     </GestureHandlerRootView>
   );
@@ -313,6 +349,25 @@ export default function ListDetailScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1, backgroundColor: Colors.offWhite },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  permModal: {
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: 28, paddingBottom: 44, alignItems: 'center', gap: 12,
+  },
+  permIcon: { fontSize: 40, marginBottom: 4 },
+  permTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, textAlign: 'center' },
+  permBody: { fontFamily: 'Inter_300Light', fontSize: 14, lineHeight: 22, textAlign: 'center' },
+  permBtn: { width: '100%', marginTop: 8 },
+  permBtnGrad: {
+    borderRadius: Radius.pill, paddingVertical: 16,
+    alignItems: 'center',
+  },
+  permBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black },
+  permCancel: { paddingVertical: 12 },
+  permCancelText: { fontFamily: 'Inter_400Regular', fontSize: 15 },
   geoBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 14,
