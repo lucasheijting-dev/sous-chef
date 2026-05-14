@@ -96,9 +96,9 @@ export default function SetupScreen() {
         <View style={styles.stepsBox}>
           <Text style={styles.stepsTitle}>Hoe werkt het?</Text>
           {[
-            { n: '1', t: 'Stuur een bericht via WhatsApp naar het bot-nummer' },
-            { n: '2', t: 'Vul hier je WhatsApp-nummer in (met landcode)' },
-            { n: '3', t: 'Klaar — de app synct automatisch' },
+            { n: '1', t: 'Vul je WhatsApp-nummer in met landcode (bijv. +31 6 12345678)' },
+            { n: '2', t: 'Je ontvangt een welkomstbericht via WhatsApp' },
+            { n: '3', t: 'Klaar — stuur berichten en de app synct automatisch' },
           ].map(({ n, t }) => (
             <View key={n} style={styles.step}>
               <View style={styles.stepNum}>
