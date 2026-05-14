@@ -294,7 +294,7 @@ export default function ListDetailScreen() {
           />
           <TouchableOpacity onPress={addItem} disabled={!newItemText.trim() || adding} activeOpacity={0.8}>
             <LinearGradient
-              colors={newItemText.trim() ? ['#FFD60A', '#FFAA00'] : [Colors.gray100, Colors.gray100]}
+              colors={newItemText.trim() ? ['#FCC10C', '#E5A800'] : [Colors.gray100, Colors.gray100]}
               style={styles.addButton}
             >
               {adding

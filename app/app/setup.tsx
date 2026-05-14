@@ -44,7 +44,7 @@ export default function SetupScreen() {
         <View style={styles.inner}>
           <View style={styles.logoRow}>
             <LinearGradient
-              colors={['#FFD60A', '#FFAA00']}
+              colors={['#FCC10C', '#E5A800']}
               style={styles.logoBox}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -77,7 +77,7 @@ export default function SetupScreen() {
             activeOpacity={0.85}
           >
             <LinearGradient
-              colors={value.trim() ? ['#FFD60A', '#FFAA00'] : ['#333', '#333']}
+              colors={value.trim() ? ['#FCC10C', '#E5A800'] : ['#333', '#333']}
               style={styles.button}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
