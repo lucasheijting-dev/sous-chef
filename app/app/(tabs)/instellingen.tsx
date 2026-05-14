@@ -10,6 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -107,9 +108,7 @@ export default function InstellingenTab() {
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
         <View style={styles.avatarBox}>
-          <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.avatar}>
-            <Text style={styles.avatarEmoji}>🍳</Text>
-          </LinearGradient>
+          <Image source={require('@/assets/images/logo.jpg')} style={styles.avatar} />
         </View>
         <Text style={styles.bannerName}>Sous-Chef</Text>
         <Text style={styles.bannerNumber}>{user?.whatsapp_number ?? '—'}</Text>
@@ -281,8 +280,7 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 120 },
   banner: { alignItems: 'center', paddingTop: 24, paddingBottom: 36, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
   avatarBox: { marginBottom: 14 },
-  avatar: { width: 72, height: 72, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  avatarEmoji: { fontSize: 36 },
+  avatar: { width: 72, height: 72, borderRadius: 22 },
   bannerName: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.white, letterSpacing: -0.3, marginBottom: 4 },
   bannerNumber: { fontFamily: 'Inter_300Light', fontSize: 14, color: '#666' },
   sectionLabel: {

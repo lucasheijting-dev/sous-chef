@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
+import { Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useUser } from '@/context/UserContext';
 import { Colors, Radius } from '@/constants/Design';
@@ -43,14 +44,7 @@ export default function SetupScreen() {
       >
         <View style={styles.inner}>
           <View style={styles.logoRow}>
-            <LinearGradient
-              colors={['#FCC10C', '#E5A800']}
-              style={styles.logoBox}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Text style={styles.logoEmoji}>🍳</Text>
-            </LinearGradient>
+            <Image source={require('@/assets/images/logo.jpg')} style={styles.logoBox} />
           </View>
 
           <Text style={styles.title}>Sous-Chef</Text>
@@ -128,10 +122,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  logoEmoji: { fontSize: 40 },
   title: {
     fontFamily: 'Inter_700Bold',
     fontSize: 36,

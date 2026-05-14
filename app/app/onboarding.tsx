@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
@@ -77,9 +78,7 @@ export default function OnboardingScreen() {
 
         {step === 'welcome' && (
           <View style={styles.center}>
-            <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.logoBox}>
-              <Text style={styles.logoEmoji}>🍳</Text>
-            </LinearGradient>
+            <Image source={require('@/assets/images/logo.jpg')} style={styles.logoBox} />
             <Text style={styles.title}>Welkom bij{'\n'}Sous-Chef</Text>
             <Text style={styles.subtitle}>
               Jouw persoonlijke assistent voor lijsten, agenda, notities en habits.
@@ -222,10 +221,8 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   logoBox: {
-    width: 88, height: 88, borderRadius: 26,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 8,
+    width: 88, height: 88, borderRadius: 26, marginBottom: 8,
   },
-  logoEmoji: { fontSize: 44 },
   title: {
     fontFamily: 'Inter_700Bold', fontSize: 36, color: Colors.white,
     textAlign: 'center', letterSpacing: -1, lineHeight: 42,
