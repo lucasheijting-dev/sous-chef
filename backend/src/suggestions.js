@@ -45,8 +45,14 @@ Wees direct en vriendelijk. Geen aanspreking met "je" meer dan nodig.`;
   const tip = response.content[0]?.text?.trim();
   if (!tip) return;
 
+  // Claim the slot atomically — skip if another instance already sent it
+  const claimed = await db.claimSuggestionSlot(user.id);
+  if (!claimed) {
+    console.log(`[Suggestions] Already sent to ${user.whatsapp_number}, skipping.`);
+    return;
+  }
+
   await sendMessage(user.whatsapp_number, `💡 *Tip van Sous-Chef*\n\n${tip}`);
-  await db.markSuggestionSent(user.id);
   console.log(`[Suggestions] Sent to ${user.whatsapp_number}`);
 }
 

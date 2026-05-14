@@ -228,10 +228,33 @@ async function deleteNote(noteId) {
 
 // ── Events ─────────────────────────────────────────────────────────────────────
 
-async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore }) {
+async function getCalDAVCredentials(userId) {
+  const { data } = await supabase
+    .from('users')
+    .select('caldav_username, caldav_password')
+    .eq('id', userId)
+    .single();
+  if (!data?.caldav_username) return null;
+  return { username: data.caldav_username, password: data.caldav_password };
+}
+
+async function storeCalDAVCredentials(userId, username, password) {
+  await supabase.from('users').update({ caldav_username: username, caldav_password: password }).eq('id', userId);
+}
+
+async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore, caldavUid, calendarStream }) {
   const { data, error } = await supabase
     .from('events')
-    .insert({ user_id: userId, title, date, time: time ?? null, recurrence: recurrence ?? null, reminder_days_before: reminderDaysBefore ?? 1 })
+    .insert({
+      user_id: userId,
+      title,
+      date,
+      time: time ?? null,
+      recurrence: recurrence ?? null,
+      reminder_days_before: reminderDaysBefore ?? null,
+      caldav_uid: caldavUid ?? null,
+      calendar_stream: calendarStream ?? 'personal',
+    })
     .select('id')
     .single();
 
@@ -246,7 +269,7 @@ async function getUpcomingEvents(userId, days = 7) {
 
   const { data } = await supabase
     .from('events')
-    .select('id, title, date, recurrence')
+    .select('id, title, date, time, recurrence')
     .eq('user_id', userId)
     .gte('date', today)
     .lte('date', future.toISOString().split('T')[0])
@@ -277,18 +300,27 @@ async function markEventReminderSent(eventId) {
 }
 
 async function getHabitReminderUsers(currentHour) {
+  const today = new Date().toISOString().split('T')[0];
+
   const { data: prefs } = await supabase
     .from('user_prefs')
-    .select('user_id, habits_reminder_time')
+    .select('user_id, habits_reminder_time, habit_reminder_sent_date')
     .eq('habits_enabled', true)
     .not('habits_reminder_time', 'is', null);
 
   const matched = (prefs ?? []).filter(p => {
     const hour = parseInt((p.habits_reminder_time ?? '20:00').split(':')[0], 10);
-    return hour === currentHour;
+    return hour === currentHour && p.habit_reminder_sent_date !== today;
   });
 
   if (!matched.length) return [];
+
+  // Mark as sent before fetching users (race-condition safe)
+  await supabase
+    .from('user_prefs')
+    .update({ habit_reminder_sent_date: today })
+    .in('user_id', matched.map(p => p.user_id))
+    .neq('habit_reminder_sent_date', today);
 
   const { data: users } = await supabase
     .from('users')
@@ -318,10 +350,19 @@ async function getUsersForSuggestions() {
   return users ?? [];
 }
 
-async function markSuggestionSent(userId) {
-  await supabase.from('user_prefs')
+async function claimSuggestionSlot(userId) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 7);
+
+  // Atomically claim the slot: only succeeds if still eligible (race-condition safe)
+  const { count } = await supabase
+    .from('user_prefs')
     .update({ suggestion_last_sent_at: new Date().toISOString() })
-    .eq('user_id', userId);
+    .eq('user_id', userId)
+    .or(`suggestion_last_sent_at.is.null,suggestion_last_sent_at.lt.${cutoff.toISOString()}`)
+    .select('user_id', { count: 'exact', head: true });
+
+  return (count ?? 0) > 0;
 }
 
 async function getUsersForContextBuilding() {
@@ -442,16 +483,17 @@ async function getTodayEvents(userId) {
   const today = new Date().toISOString().split('T')[0];
   const { data } = await supabase
     .from('events')
-    .select('id, title, date, recurrence')
+    .select('id, title, date, time, recurrence')
     .eq('user_id', userId)
-    .eq('date', today);
+    .eq('date', today)
+    .order('time', { ascending: true, nullsFirst: false });
   return data ?? [];
 }
 
 async function getEventsByTitle(userId, title) {
   const { data } = await supabase
     .from('events')
-    .select('id, title, date, recurrence')
+    .select('id, title, date, recurrence, caldav_uid, calendar_stream')
     .eq('user_id', userId)
     .ilike('title', `%${title}%`);
   return data ?? [];
@@ -459,6 +501,10 @@ async function getEventsByTitle(userId, title) {
 
 async function deleteEventById(userId, eventId) {
   await supabase.from('events').delete().eq('id', eventId).eq('user_id', userId);
+}
+
+async function updateEventCalDAVUid(eventId, caldavUid) {
+  await supabase.from('events').update({ caldav_uid: caldavUid }).eq('id', eventId);
 }
 
 // ── Extended Note Operations ───────────────────────────────────────────────────
@@ -512,6 +558,37 @@ async function getHabitStreak(userId, habitId) {
   return streak;
 }
 
+// ── CalDAV Sync Queue ──────────────────────────────────────────────────────────
+
+async function enqueueCalDAVOperation(userId, operation, payload) {
+  await supabase.from('caldav_sync_queue').insert({ user_id: userId, operation, payload });
+}
+
+async function getDueCalDAVOperations() {
+  const { data } = await supabase
+    .from('caldav_sync_queue')
+    .select('*')
+    .lt('attempts', 5)
+    .lte('next_retry_at', new Date().toISOString())
+    .order('created_at', { ascending: true })
+    .limit(50);
+  return data ?? [];
+}
+
+async function markCalDAVOperationDone(id) {
+  await supabase.from('caldav_sync_queue').delete().eq('id', id);
+}
+
+async function markCalDAVOperationFailed(id, error, attempts) {
+  const backoffMinutes = Math.pow(2, attempts); // 2, 4, 8, 16, 32 min
+  const nextRetry = new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString();
+  await supabase.from('caldav_sync_queue').update({
+    attempts: attempts + 1,
+    last_error: error,
+    next_retry_at: nextRetry,
+  }).eq('id', id);
+}
+
 // ── Message Log ────────────────────────────────────────────────────────────────
 
 async function logMessage(userId, rawText, category) {
@@ -539,6 +616,8 @@ module.exports = {
   getDueRecurringItems,
   updateRecurringItemNextDue,
   deleteRecurringItem,
+  getCalDAVCredentials,
+  storeCalDAVCredentials,
   createNote,
   deleteNote,
   createEvent,
@@ -547,7 +626,7 @@ module.exports = {
   markEventReminderSent,
   getHabitReminderUsers,
   getUsersForSuggestions,
-  markSuggestionSent,
+  claimSuggestionSlot,
   getUsersForContextBuilding,
   updateUserContext,
   getActiveHabits,
@@ -567,4 +646,9 @@ module.exports = {
   appendToNote,
   getHabitStreak,
   logMessage,
+  enqueueCalDAVOperation,
+  getDueCalDAVOperations,
+  markCalDAVOperationDone,
+  markCalDAVOperationFailed,
+  updateEventCalDAVUid,
 };
