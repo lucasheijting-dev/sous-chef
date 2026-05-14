@@ -2,6 +2,7 @@
 
 const cron         = require('node-cron');
 const db           = require('./supabase');
+const caldav       = require('./caldav');
 const { sendMessage } = require('./whatsapp');
 const { sendWeeklySuggestions } = require('./suggestions');
 const { buildContextForAllUsers } = require('./contextBuilder');
@@ -175,8 +176,99 @@ cron.schedule('0 2 * * *', async () => {
   await buildContextForAllUsers();
 });
 
+// ── CalDAV Sync Queue — every 15 minutes ─────────────────────────────────────
+
+cron.schedule('*/15 * * * *', async () => {
+  if (!caldav.isConfigured()) return;
+
+  const ops = await db.getDueCalDAVOperations();
+  if (!ops.length) return;
+
+  console.log(`[CalDAV] Retrying ${ops.length} failed operation(s)...`);
+
+  for (const op of ops) {
+    try {
+      const creds = await db.getCalDAVCredentials(op.user_id);
+      if (!creds) {
+        await db.markCalDAVOperationFailed(op.id, 'No credentials found', op.attempts);
+        continue;
+      }
+
+      if (op.operation === 'create_event') {
+        const uid = await caldav.createEvent(creds.username, creds.password, op.payload.stream, op.payload);
+        if (uid && op.payload.event_id) {
+          await db.updateEventCalDAVUid(op.payload.event_id, uid);
+        }
+      } else if (op.operation === 'delete_event') {
+        await caldav.deleteEvent(creds.username, creds.password, op.payload.stream, op.payload.uid);
+      }
+
+      await db.markCalDAVOperationDone(op.id);
+      console.log(`[CalDAV] Retry succeeded: ${op.operation} (${op.id})`);
+    } catch (err) {
+      console.error(`[CalDAV] Retry failed: ${op.operation} (${op.id}):`, err.message);
+      await db.markCalDAVOperationFailed(op.id, err.message, op.attempts);
+    }
+  }
+});
+
+// ── CalDAV Inbound Sync — every 15 minutes ───────────────────────────────────
+// Polls Radicale for events added directly in iPhone Calendar and imports them
+
+cron.schedule('*/15 * * * *', async () => {
+  if (!caldav.isConfigured()) return;
+
+  let users;
+  try {
+    users = await db.getUsersWithCalDAV();
+  } catch (err) {
+    console.error('[CalDAV Inbound] Failed to fetch users:', err.message);
+    return;
+  }
+
+  for (const user of users) {
+    try {
+      const knownUids = await db.getCalDAVUidsByUser(user.id);
+      let imported = 0;
+
+      for (const cal of caldav.CALENDARS) {
+        const events = await caldav.listCalendarEvents(user.caldav_username, user.caldav_password, cal.id);
+
+        for (const { href, uid } of events) {
+          if (knownUids.has(uid)) continue; // already in Supabase
+
+          const ics = await caldav.getEventIcal(user.caldav_username, user.caldav_password, href);
+          const parsed = caldav.parseIcal(ics);
+          if (!parsed || !parsed.date) continue;
+
+          await db.createEventFromCalDAV(user.id, { ...parsed, calendar_stream: cal.stream });
+          knownUids.add(uid); // prevent duplicate import across cals
+          imported++;
+        }
+      }
+
+      if (imported > 0) {
+        console.log(`[CalDAV Inbound] Imported ${imported} new event(s) for user ${user.id}`);
+      }
+    } catch (err) {
+      console.error(`[CalDAV Inbound] Failed for user ${user.id}:`, err.message);
+    }
+  }
+});
+
+// ── Render Keepalive — every 13 minutes ──────────────────────────────────────
+// Prevents Render free tier from spinning down (15 min inactivity threshold)
+
+cron.schedule('*/13 * * * *', async () => {
+  const url = process.env.RENDER_EXTERNAL_URL;
+  if (!url) return; // not running on Render (local dev), skip
+  try {
+    await fetch(`${url}/health`);
+  } catch {}
+});
+
 function start() {
-  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit reminders hourly | event reminders daily 08:00 | suggestions Thu 10:00 | context build daily 02:00');
+  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit reminders hourly | event reminders daily 08:00 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | keepalive every 13min');
 }
 
 module.exports = { start };

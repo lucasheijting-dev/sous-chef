@@ -589,6 +589,39 @@ async function markCalDAVOperationFailed(id, error, attempts) {
   }).eq('id', id);
 }
 
+// ── CalDAV Inbound Sync ────────────────────────────────────────────────────────
+
+async function getUsersWithCalDAV() {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number, caldav_username, caldav_password')
+    .not('caldav_username', 'is', null)
+    .not('caldav_password', 'is', null);
+  return data ?? [];
+}
+
+async function getCalDAVUidsByUser(userId) {
+  const { data } = await supabase
+    .from('events')
+    .select('caldav_uid')
+    .eq('user_id', userId)
+    .not('caldav_uid', 'is', null);
+  return new Set((data ?? []).map(e => e.caldav_uid));
+}
+
+async function createEventFromCalDAV(userId, { uid, title, date, time, calendar_stream }) {
+  const { error } = await supabase.from('events').insert({
+    user_id: userId,
+    title,
+    date,
+    time: time ?? null,
+    calendar_stream: calendar_stream ?? 'personal',
+    caldav_uid: uid,
+    reminder_days_before: null,
+  });
+  if (error) throw new Error(`createEventFromCalDAV: ${error.message}`);
+}
+
 // ── Geo Alert ──────────────────────────────────────────────────────────────────
 
 async function getUserById(userId) {
@@ -700,4 +733,7 @@ module.exports = {
   getBoodschappenlijst,
   canSendGeoAlert,
   markGeoAlertSent,
+  getUsersWithCalDAV,
+  getCalDAVUidsByUser,
+  createEventFromCalDAV,
 };
