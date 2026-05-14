@@ -47,7 +47,7 @@ export default function SetupScreen() {
             <Image source={require('@/assets/images/logo.jpg')} style={styles.logoBox} />
           </View>
 
-          <Text style={styles.title}>Sous-Chef</Text>
+          <Image source={require('@/assets/images/tekstsouschef.png')} style={styles.title} resizeMode="contain" />
           <Text style={styles.subtitle}>Jouw persoonlijke assistent via WhatsApp</Text>
 
           <View style={styles.inputWrapper}>
@@ -124,11 +124,9 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   title: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 36,
-    color: '#FFFFFF',
+    width: 200,
+    height: 48,
     marginBottom: 8,
-    letterSpacing: -0.5,
   },
   subtitle: {
     fontFamily: 'Inter_300Light',
