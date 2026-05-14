@@ -126,6 +126,19 @@ async function handleMessage({ from, text }) {
     return;
   }
 
+  // Multi-action: process each sub-action and combine replies
+  if (intent.category === 'multi_action' && Array.isArray(intent.actions) && intent.actions.length > 0) {
+    const replies = [];
+    for (const action of intent.actions) {
+      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from);
+      if (r) replies.push(r);
+    }
+    const combined = replies.join('\n');
+    session.addExchange(userId, text, combined);
+    await sendSplit(from, combined);
+    return;
+  }
+
   const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from);
   if (!baseReply) return;
 
@@ -277,6 +290,19 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const addedLine = newTexts.map(t => `• ${t}`).join('\n');
       const dupeLine  = dupeTexts.length ? `\n_Al aanwezig: ${dupeTexts.join(', ')}_` : '';
       return `✅ ${newTexts.length} item(s) toegevoegd aan ${list.emoji ?? '📝'} ${list.name}:\n${addedLine}${dupeLine}`;
+    }
+
+    // ── Check if item exists on list ─────────────────────────────────────────
+
+    case 'list_contains': {
+      if (!intent.item_text) return 'Welk item wil je controleren?';
+      const list = intent.list_id ? lists.find(l => l.id === intent.list_id) : lists[0];
+      if (!list) return 'Je hebt nog geen lijsten.';
+      const items = await db.getListItems(list.id);
+      const found = fuzzyFindItem(items, intent.item_text);
+      if (!found) return `_${intent.item_text}_ staat niet op ${list.emoji ?? '📝'} ${list.name}.`;
+      const status = found.checked ? '✅ al afgevinkt' : '▫️ nog open';
+      return `Ja, *${found.text}* staat op ${list.emoji ?? '📝'} ${list.name} (${status}).`;
     }
 
     // ── Query list ───────────────────────────────────────────────────────────
@@ -500,7 +526,11 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
               { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays },
             );
           } catch (err) {
-            console.error('CalDAV event creation failed (continuing):', err.message);
+            console.error('CalDAV event creation failed, queuing retry:', err.message);
+            await db.enqueueCalDAVOperation(userId, 'create_event', {
+              stream, title: evTitle, date: ev.date, time: ev.time ?? null,
+              recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays,
+            }).catch(() => {});
           }
         }
 
@@ -516,7 +546,10 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
         const timeStr  = ev.time ? ` om ${ev.time}` : '';
         const dateStr  = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
-        const recurStr = ev.recurrence === 'yearly' ? ' _(jaarlijks)_' : '';
+        const recurStr = ev.recurrence === 'yearly' ? ' _(jaarlijks)_'
+          : ev.recurrence?.startsWith('weekly:') ? ' _(wekelijks)_'
+          : ev.recurrence?.startsWith('monthly:') ? ' _(maandelijks)_'
+          : '';
         lines.push(`• *${evTitle}*${dateStr}${recurStr}`);
       }
 
@@ -536,7 +569,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     case 'events_today': {
       const todayEvents = await db.getTodayEvents(userId);
       if (todayEvents.length === 0) return '📅 Je hebt vandaag geen afspraken.';
-      const lines = todayEvents.map(e => `• *${e.title}*`).join('\n');
+      const lines = todayEvents.map(e => `• *${e.title}*${e.time ? ` — ${e.time}` : ''}`).join('\n');
       return `📅 *Vandaag*\n\n${lines}`;
     }
 
@@ -546,8 +579,8 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const weekEvents = await db.getUpcomingEvents(userId, 7);
       if (weekEvents.length === 0) return '📅 Je hebt deze week geen afspraken.';
       const lines = weekEvents.map(e => {
-        const dateStr = formatDate(e.date);
-        return `• *${e.title}* — ${dateStr}`;
+        const timeStr = e.time ? ` ${e.time}` : '';
+        return `• *${e.title}* — ${formatDate(e.date)}${timeStr}`;
       }).join('\n');
       return `📅 *Planning deze week*\n\n${lines}`;
     }
@@ -630,11 +663,18 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         return `🏅 *${habit?.name}*: Brons (${habit?.mini_goal}), Zilver (${habit?.good_goal}) of Goud (${habit?.elite_goal})?`;
       }
 
+      const badge = { mini: '🥉', good: '🥈', elite: '🥇' }[intent.habit_level] ?? '✅';
+
+      // Multi-day logging
+      if (Array.isArray(intent.log_dates) && intent.log_dates.length > 1) {
+        for (const d of intent.log_dates) await db.logHabit(userId, intent.habit_id, intent.habit_level, d);
+        return `${badge} *${habit?.name ?? 'Habit'}* gelogd voor ${intent.log_dates.length} dagen!`;
+      }
+
       const logDate = resolveLogDate(intent.log_date);
       await db.logHabit(userId, intent.habit_id, intent.habit_level, logDate);
 
       const streak = await db.getHabitStreak(userId, intent.habit_id);
-      const badge  = { mini: '🥉', good: '🥈', elite: '🥇' }[intent.habit_level] ?? '✅';
       const streakLine = streak > 1 ? `\n🔥 *${streak} dagen op rij!*` : '';
       return `${badge} *${habit?.name ?? 'Habit'}* gelogd als ${levelLabel(intent.habit_level)}!${streakLine}`;
     }
@@ -645,14 +685,16 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const ids = Array.isArray(intent.habit_ids) ? intent.habit_ids : [];
       if (ids.length === 0) return 'Welke habits wil je loggen?';
 
-      const logDate = resolveLogDate(intent.log_date);
+      const dates = Array.isArray(intent.log_dates) && intent.log_dates.length > 1
+        ? intent.log_dates
+        : [resolveLogDate(intent.log_date)];
       const level   = intent.habit_level ?? 'good';
       const results = [];
 
       for (const hId of ids) {
         const habit = activeHabits.find(h => h.id === hId);
         if (!habit) continue;
-        await db.logHabit(userId, hId, level, logDate);
+        for (const d of dates) await db.logHabit(userId, hId, level, d);
         results.push(habit.name);
       }
 
