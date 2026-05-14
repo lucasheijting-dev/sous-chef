@@ -589,6 +589,51 @@ async function markCalDAVOperationFailed(id, error, attempts) {
   }).eq('id', id);
 }
 
+// ── Geo Alert ──────────────────────────────────────────────────────────────────
+
+async function getUserById(userId) {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number')
+    .eq('id', userId)
+    .single();
+  return data ?? null;
+}
+
+async function getBoodschappenlijst(userId) {
+  const { data } = await supabase
+    .from('lists')
+    .select('id, name, emoji')
+    .eq('user_id', userId);
+  if (!data) return null;
+  const keywords = ['boodschappen', 'supermarkt', 'groceries', 'ah', 'jumbo', 'lidl', 'albert heijn', 'plus', 'aldi'];
+  return data.find(l => keywords.some(k => l.name.toLowerCase().includes(k))) ?? null;
+}
+
+const GEO_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+async function canSendGeoAlert(userId) {
+  const { data } = await supabase
+    .from('user_prefs')
+    .select('geo_alert_last_sent_at')
+    .eq('user_id', userId)
+    .single();
+  if (!data?.geo_alert_last_sent_at) return true;
+  return Date.now() - new Date(data.geo_alert_last_sent_at).getTime() >= GEO_COOLDOWN_MS;
+}
+
+async function markGeoAlertSent(userId) {
+  const now = new Date().toISOString();
+  const cutoff = new Date(Date.now() - GEO_COOLDOWN_MS).toISOString();
+  // Atomic update: only succeeds if cooldown has passed (race-safe)
+  const { data, error } = await supabase
+    .from('user_prefs')
+    .upsert({ user_id: userId, geo_alert_last_sent_at: now }, { onConflict: 'user_id' })
+    .select('user_id')
+    .single();
+  return !error && !!data;
+}
+
 // ── Message Log ────────────────────────────────────────────────────────────────
 
 async function logMessage(userId, rawText, category) {
@@ -651,4 +696,8 @@ module.exports = {
   markCalDAVOperationDone,
   markCalDAVOperationFailed,
   updateEventCalDAVUid,
+  getUserById,
+  getBoodschappenlijst,
+  canSendGeoAlert,
+  markGeoAlertSent,
 };
