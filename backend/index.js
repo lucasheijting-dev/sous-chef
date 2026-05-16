@@ -1,9 +1,10 @@
 require('dotenv').config();
 const express       = require('express');
-const webhookRouter      = require('./src/webhook');
-const calendarFeedRouter = require('./src/calendarFeed');
-const geoAlertRouter     = require('./src/geoAlert');
-const registerRouter     = require('./src/register');
+const webhookRouter           = require('./src/webhook');
+const calendarFeedRouter      = require('./src/calendarFeed');
+const calendarProfileRouter   = require('./src/calendarProfile');
+const geoAlertRouter          = require('./src/geoAlert');
+const registerRouter          = require('./src/register');
 const cronJobs           = require('./src/cronJobs');
 
 const app = express();
@@ -11,6 +12,7 @@ app.use(express.json());
 
 app.use('/webhook', webhookRouter);
 app.use('/calendar', calendarFeedRouter);
+app.use('/calendar-profile', calendarProfileRouter);
 app.use('/geo-alert', geoAlertRouter);
 app.use('/register', registerRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));

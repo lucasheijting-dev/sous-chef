@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Platform,
   Image,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -92,6 +93,14 @@ export default function InstellingenTab() {
     await supabase.from('user_prefs').upsert({ user_id: user.id, habits_reminder_time: `${reminderTime}:00` }, { onConflict: 'user_id' });
     await refreshPrefs();
     Alert.alert('✓ Opgeslagen', `Reminder ingesteld op ${reminderTime}`);
+  }
+
+  const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+
+  function openCalendarProfile() {
+    if (!user || user.id === 'dev') return;
+    const url = `${API_BASE}/calendar-profile?userId=${user.id}`;
+    Linking.openURL(url);
   }
 
   function confirmLogout() {
@@ -258,6 +267,17 @@ export default function InstellingenTab() {
               thumbColor={Colors.white}
             />
           }
+        />
+      </View>
+
+      {/* Agenda koppelen */}
+      <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>iPhone Agenda</Text>
+      <View style={[styles.card, { backgroundColor: colors.white }]}>
+        <SettingsRow
+          icon="calendar-outline"
+          label="Koppel iPhone Agenda"
+          value="Installeer profiel"
+          onPress={openCalendarProfile}
         />
       </View>
 
