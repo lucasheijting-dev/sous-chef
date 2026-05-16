@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -85,6 +86,20 @@ function SettingsRow({
   return inner;
 }
 
+function CredRow({ label, value, colors, onCopy }: { label: string; value: string; colors: any; onCopy: (v: string) => void }) {
+  return (
+    <TouchableOpacity
+      style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }}
+      onPress={() => onCopy(value)}
+      activeOpacity={0.6}
+    >
+      <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, flex: 1 }}>{label}</Text>
+      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, flex: 2, textAlign: 'right' }} numberOfLines={1}>{value}</Text>
+      <Ionicons name="copy-outline" size={13} color={colors.gray400} style={{ marginLeft: 6 }} />
+    </TouchableOpacity>
+  );
+}
+
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
   { mode: 'system', label: 'Systeem', icon: 'phone-portrait-outline' },
   { mode: 'light',  label: 'Licht',   icon: 'sunny-outline' },
@@ -133,6 +148,8 @@ export default function InstellingenTab() {
   // User data fetched from Supabase
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [caldavConnected, setCaldavConnected] = useState(false);
+  const [caldavCreds, setCaldavCreds] = useState<{ username: string; password: string } | null>(null);
+  const [showCaldavCreds, setShowCaldavCreds] = useState(false);
   const [messageCount, setMessageCount] = useState<number | null>(null);
   const [listsCount, setListsCount] = useState<number | null>(null);
   const [eventsCount, setEventsCount] = useState<number | null>(null);
@@ -152,7 +169,7 @@ export default function InstellingenTab() {
     const [userRow, listsResult, eventsResult] = await Promise.all([
       supabase
         .from('users')
-        .select('caldav_username, created_at, message_count')
+        .select('caldav_username, caldav_password, created_at, message_count')
         .eq('id', user.id)
         .single(),
       supabase
@@ -167,6 +184,9 @@ export default function InstellingenTab() {
 
     if (userRow.data) {
       setCaldavConnected(!!userRow.data.caldav_username);
+        if (userRow.data.caldav_username && userRow.data.caldav_password) {
+          setCaldavCreds({ username: userRow.data.caldav_username, password: userRow.data.caldav_password });
+        }
       setCreatedAt(userRow.data.created_at ?? null);
       setMessageCount(userRow.data.message_count ?? null);
     }
@@ -194,6 +214,12 @@ export default function InstellingenTab() {
   }, [settings.user_name]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  async function copyToClipboard(value: string) {
+    await Clipboard.setStringAsync(value);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast('Gekopieerd');
+  }
 
   async function toggleHabits(value: boolean) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -671,11 +697,37 @@ export default function InstellingenTab() {
             }
             onPress={openCalendarProfile}
           />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
           <View style={styles.calInstructions}>
             <Text style={[styles.calInstructionsText, { color: colors.gray400 }]}>
               Na installatie: Instellingen → Algemeen → VPN en apparaatbeheer
             </Text>
           </View>
+          {caldavCreds && (
+            <>
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <TouchableOpacity
+                style={styles.credRow}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowCaldavCreds(v => !v);
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={showCaldavCreds ? 'eye-off-outline' : 'eye-outline'} size={16} color={colors.gray400} />
+                <Text style={[styles.credToggleText, { color: colors.gray400 }]}>
+                  {showCaldavCreds ? 'Verberg inloggegevens' : 'Toon inloggegevens (voor wachtwoordprompt)'}
+                </Text>
+              </TouchableOpacity>
+              {showCaldavCreds && (
+                <View style={[styles.credBox, { backgroundColor: colors.offWhite }]}>
+                  <CredRow label="Server" value="caldav.sous-chef.nl" colors={colors} onCopy={copyToClipboard} />
+                  <CredRow label="Gebruikersnaam" value={caldavCreds.username} colors={colors} onCopy={copyToClipboard} />
+                  <CredRow label="Wachtwoord" value={caldavCreds.password} colors={colors} onCopy={copyToClipboard} />
+                </View>
+              )}
+            </>
+          )}
         </View>
 
         {/* ── Account ────────────────────────────────────────────────── */}
