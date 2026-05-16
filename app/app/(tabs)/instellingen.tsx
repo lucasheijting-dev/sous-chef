@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -22,7 +22,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Constants from 'expo-constants';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { useTheme, ThemeMode } from '@/context/ThemeContext';
@@ -144,41 +144,49 @@ export default function InstellingenTab() {
 
   // ── Mount fetches ────────────────────────────────────────────────────────────
 
-  useEffect(() => {
+  const fetchUserData = useCallback(async () => {
     if (!user || user.id === 'dev') return;
 
-    // Geo alert state
     isGeoAlertEnabled().then(setGeoAlertEnabled);
 
-    // User row + parallel counts
-    const fetchUserData = async () => {
-      const [userRow, listsResult, eventsResult] = await Promise.all([
-        supabase
-          .from('users')
-          .select('caldav_username, created_at, message_count')
-          .eq('id', user.id)
-          .single(),
-        supabase
-          .from('lists')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id),
-        supabase
-          .from('events')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', user.id),
-      ]);
+    const [userRow, listsResult, eventsResult] = await Promise.all([
+      supabase
+        .from('users')
+        .select('caldav_username, created_at, message_count')
+        .eq('id', user.id)
+        .single(),
+      supabase
+        .from('lists')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id),
+      supabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id),
+    ]);
 
-      if (userRow.data) {
-        setCaldavConnected(!!userRow.data.caldav_username);
-        setCreatedAt(userRow.data.created_at ?? null);
-        setMessageCount(userRow.data.message_count ?? null);
-      }
-      if (listsResult.count !== null) setListsCount(listsResult.count);
-      if (eventsResult.count !== null) setEventsCount(eventsResult.count);
-    };
-
-    fetchUserData();
+    if (userRow.data) {
+      setCaldavConnected(!!userRow.data.caldav_username);
+      setCreatedAt(userRow.data.created_at ?? null);
+      setMessageCount(userRow.data.message_count ?? null);
+    }
+    if (listsResult.count !== null) setListsCount(listsResult.count);
+    if (eventsResult.count !== null) setEventsCount(eventsResult.count);
   }, [user?.id]);
+
+  // Fetch on mount
+  useEffect(() => { fetchUserData(); }, [fetchUserData]);
+
+  // Re-fetch CalDAV status every time this tab gets focus (e.g. after installing profile)
+  useFocusEffect(useCallback(() => {
+    if (!user || user.id === 'dev') return;
+    supabase
+      .from('users')
+      .select('caldav_username')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => { if (data) setCaldavConnected(!!data.caldav_username); });
+  }, [user?.id]));
 
   // Keep name input in sync with settings
   useEffect(() => {
