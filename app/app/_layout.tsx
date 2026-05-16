@@ -33,6 +33,7 @@ function AppStack() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+      <Stack.Screen name="whatsapp-activate" options={{ headerShown: false }} />
       <Stack.Screen name="list/[id]" options={{ headerBackTitle: 'Terug' }} />
     </Stack>
   );
@@ -48,12 +49,14 @@ function AuthGate() {
     if (userLoading || settingsLoading) return;
     const inSetup = segments[0] === 'setup';
     const inOnboarding = segments[0] === 'onboarding';
+    const inWhatsAppActivate = segments[0] === 'whatsapp-activate';
+    const inAuthFlow = inSetup || inOnboarding || inWhatsAppActivate;
 
     if (!user && !inSetup) {
       router.replace('/setup');
-    } else if (user && !settings.onboarding_done && !inOnboarding && !inSetup) {
+    } else if (user && !settings.onboarding_done && !inAuthFlow) {
       router.replace('/onboarding');
-    } else if (user && settings.onboarding_done && (inSetup || inOnboarding)) {
+    } else if (user && settings.onboarding_done && inAuthFlow) {
       router.replace('/(tabs)');
     }
   }, [user, userLoading, settings.onboarding_done, settingsLoading, segments]);

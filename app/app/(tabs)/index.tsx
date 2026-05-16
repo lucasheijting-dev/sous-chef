@@ -13,6 +13,7 @@ import {
   Modal,
   ScrollView,
   SafeAreaView,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +27,9 @@ import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { List, Note } from '@/lib/types';
 import { Colors, Shadow, Radius } from '@/constants/Design';
 import { SkeletonListCard } from '@/components/SkeletonCard';
+
+const BOT_NUMBER = '31684965318';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
 // ── Lists ──────────────────────────────────────────────────────────────────────
 
@@ -114,6 +118,59 @@ function NoteCard({ item, index, onPress, isDark }: { item: Note; index: number;
   );
 }
 
+// ── Getting Started Banner ─────────────────────────────────────────────────────
+
+function GettingStartedBanner({ userId, onDismiss, colors }: { userId: string | null; onDismiss: () => void; colors: any }) {
+  const quickActions = [
+    {
+      icon: 'chatbubble-outline' as const,
+      label: 'Stuur je eerste bericht',
+      action: () => Linking.openURL(`whatsapp://send?phone=${BOT_NUMBER}&text=Hoi`),
+    },
+    {
+      icon: 'calendar-outline' as const,
+      label: 'Koppel iPhone Agenda',
+      action: () => {
+        if (!userId || userId === 'dev') return;
+        Linking.openURL(`${API_BASE}/calendar-profile?userId=${userId}`);
+      },
+    },
+    {
+      icon: 'information-circle-outline' as const,
+      label: "Typ 'help' in WhatsApp voor alle commando's",
+      action: null,
+    },
+  ];
+
+  return (
+    <View style={[styles.gettingStartedCard, { backgroundColor: colors.white }]}>
+      <View style={styles.gettingStartedHeader}>
+        <Text style={[styles.gettingStartedTitle, { color: colors.black }]}>Aan de slag</Text>
+        <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close" size={18} color={colors.gray400} />
+        </TouchableOpacity>
+      </View>
+      {quickActions.map((action, i) => (
+        <TouchableOpacity
+          key={i}
+          onPress={action.action ?? undefined}
+          activeOpacity={action.action ? 0.7 : 1}
+          style={styles.quickActionRow}
+          disabled={!action.action}
+        >
+          <View style={[styles.quickActionIcon, { backgroundColor: colors.gray100 }]}>
+            <Ionicons name={action.icon} size={16} color={action.action ? Colors.yellow : colors.gray400} />
+          </View>
+          <Text style={[styles.quickActionLabel, { color: action.action ? colors.black : colors.gray400 }]}>
+            {action.label}
+          </Text>
+          {action.action && <Ionicons name="chevron-forward" size={14} color={colors.gray400} />}
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 type Tab = 'lists' | 'notes';
@@ -121,7 +178,7 @@ type Tab = 'lists' | 'notes';
 export default function LijstenTab() {
   const { user } = useUser();
   const { colors, isDark } = useTheme();
-  const { settings } = useModuleSettings();
+  const { settings, updateSetting } = useModuleSettings();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -133,6 +190,8 @@ export default function LijstenTab() {
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+
+  const showBanner = settings.onboarding_done && !settings.getting_started_dismissed;
 
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
@@ -175,7 +234,9 @@ export default function LijstenTab() {
       <View style={[styles.banner, { paddingTop: insets.top + 40 }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
-        <Text style={styles.bannerEyebrow}>Goedemorgen 👋</Text>
+        <Text style={styles.bannerEyebrow}>
+          {settings.user_name ? `Goedemorgen, ${settings.user_name} 👋` : 'Goedemorgen 👋'}
+        </Text>
         <Text style={styles.bannerTitle}>{activeTab === 'lists' ? 'Mijn lijsten' : 'Notities'}</Text>
 
         {activeTab === 'lists' && (
@@ -242,23 +303,53 @@ export default function LijstenTab() {
             {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
           </View>
         ) : lists.length === 0 ? (
-          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
-            <LinearGradient colors={['#FCC10C22', '#FCC10C00']} style={styles.emptyGlow} />
-            <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="layers-outline" size={32} color={colors.gray400} />
+          <ScrollView
+            style={{ backgroundColor: colors.offWhite }}
+            contentContainerStyle={styles.emptyScrollContent}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} />}
+          >
+            {showBanner && (
+              <GettingStartedBanner
+                userId={user?.id ?? null}
+                onDismiss={() => updateSetting('getting_started_dismissed', true)}
+                colors={colors}
+              />
+            )}
+            <View style={styles.emptyContainer}>
+              <LinearGradient colors={['#FCC10C22', '#FCC10C00']} style={styles.emptyGlow} />
+              <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
+                <Ionicons name="layers-outline" size={32} color={colors.gray400} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.black }]}>Nog geen lijsten</Text>
+              <Text style={[styles.emptyText, { color: colors.gray400 }]}>
+                Stuur een WhatsApp-bericht zoals:{'\n'}
+                <Text style={styles.exampleMsg}>"maak een lijst"</Text>
+              </Text>
+              <TouchableOpacity
+                onPress={() => Linking.openURL(`whatsapp://send?phone=${BOT_NUMBER}&text=maak een lijst`)}
+                style={styles.emptyActionBtn}
+                activeOpacity={0.8}
+              >
+                <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.emptyActionBtnGrad}>
+                  <Ionicons name="logo-whatsapp" size={16} color={Colors.black} />
+                  <Text style={styles.emptyActionBtnText}>Open WhatsApp</Text>
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.black }]}>Nog geen lijsten</Text>
-            <Text style={[styles.emptyText, { color: colors.gray400 }]}>
-              Stuur een WhatsApp-bericht zoals:{'\n'}
-              <Text style={styles.exampleMsg}>"citroenen kopen"</Text>
-            </Text>
-          </View>
+          </ScrollView>
         ) : (
           <FlatList
             data={lists}
             keyExtractor={(l) => l.id}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, showBanner && { paddingTop: 0 }]}
             style={{ backgroundColor: colors.offWhite }}
+            ListHeaderComponent={showBanner ? (
+              <GettingStartedBanner
+                userId={user?.id ?? null}
+                onDismiss={() => updateSetting('getting_started_dismissed', true)}
+                colors={colors}
+              />
+            ) : null}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} />}
             renderItem={({ item, index }) => (
               <AnimatedCard
@@ -378,12 +469,52 @@ const styles = StyleSheet.create({
   noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   noteCardDate: { fontFamily: 'Inter_300Light', fontSize: 11 },
 
+  emptyScrollContent: { flexGrow: 1, paddingBottom: 60 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyGlow: { position: 'absolute', top: -60, width: 300, height: 300, borderRadius: 150 },
   emptyIcon: { width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginBottom: 8 },
-  emptyText: { fontFamily: 'Inter_300Light', fontSize: 15, textAlign: 'center', lineHeight: 24 },
+  emptyText: { fontFamily: 'Inter_300Light', fontSize: 15, textAlign: 'center', lineHeight: 24, marginBottom: 20 },
   exampleMsg: { fontFamily: 'Inter_400Regular', fontSize: 14, color: Colors.gray600, fontStyle: 'italic' },
+  emptyActionBtn: { marginTop: 4 },
+  emptyActionBtnGrad: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 22,
+  },
+  emptyActionBtnText: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black },
+
+  // Getting started banner
+  gettingStartedCard: {
+    marginHorizontal: 24,
+    marginTop: 16,
+    marginBottom: 4,
+    borderRadius: Radius.lg,
+    padding: 16,
+    ...Shadow.card,
+  },
+  gettingStartedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  gettingStartedTitle: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  quickActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.gray100,
+  },
+  quickActionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickActionLabel: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
 
   modal: { flex: 1 },
   modalHeader: {

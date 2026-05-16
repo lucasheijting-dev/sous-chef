@@ -23,7 +23,7 @@ type UserContextType = {
   user: User | null;
   prefs: UserPrefs | null;
   isLoading: boolean;
-  setWhatsAppNumber: (number: string) => Promise<boolean>;
+  setWhatsAppNumber: (number: string) => Promise<{ success: boolean; isNew: boolean }>;
   logout: () => Promise<void>;
   refreshPrefs: () => Promise<void>;
 };
@@ -78,12 +78,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (data) setPrefs(data);
   }
 
-  async function setWhatsAppNumber(number: string): Promise<boolean> {
+  async function setWhatsAppNumber(number: string): Promise<{ success: boolean; isNew: boolean }> {
     if (number === DEV_PIN) {
       await AsyncStorage.setItem('whatsapp_number', DEV_PIN);
       setUser(DEV_USER);
       setPrefs(DEFAULT_PREFS);
-      return true;
+      return { success: true, isNew: false };
     }
 
     const normalized = number.trim().replace(/^\+/, '').replace(/\s/g, '');
@@ -92,7 +92,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const found = await fetchUser(normalized);
     if (found) {
       await AsyncStorage.setItem('whatsapp_number', normalized);
-      return true;
+      return { success: true, isNew: false };
     }
 
     // New user — register via backend (creates user + sends welcome WhatsApp)
@@ -103,14 +103,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ whatsapp_number: normalized }),
       });
-      if (!res.ok) return false;
-      const { user: newUser } = await res.json();
-      if (!newUser) return false;
+      if (!res.ok) return { success: false, isNew: false };
+      const { user: newUser, isNew } = await res.json();
+      if (!newUser) return { success: false, isNew: false };
       setUser(newUser);
       await AsyncStorage.setItem('whatsapp_number', normalized);
-      return true;
+      return { success: true, isNew: isNew ?? true };
     } catch {
-      return false;
+      return { success: false, isNew: false };
     }
   }
 

@@ -52,6 +52,14 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: 'Could not create user' });
   }
 
+  // Create default boodschappenlijst for new user
+  supabase.from('lists').insert({
+    user_id: created.id,
+    name: 'Boodschappen',
+    emoji: '🛒',
+    sort_order: 0,
+  }).catch(err => console.error('[Register] Boodschappenlijst failed:', err.message));
+
   // Send welcome WhatsApp in background (don't block the response)
   sendMessage(number, WELCOME).catch(err =>
     console.error('[Register] Welcome message failed:', err.message)
