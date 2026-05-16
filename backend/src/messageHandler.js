@@ -182,6 +182,25 @@ async function executePendingAction(pending, userId) {
         await db.deleteNote(pending.noteId);
         return `🗑️ Notitie *${pending.noteTitle}* verwijderd.`;
       }
+      case 'birthday_gift': {
+        const birthdayDate = pending.birthdayDate;
+        const [y, m, d] = birthdayDate.split('-').map(Number);
+        const giftDate = new Date(y, m - 1, d - 7);
+        const pad = n => String(n).padStart(2, '0');
+        const giftDateStr = `${giftDate.getFullYear()}-${pad(giftDate.getMonth() + 1)}-${pad(giftDate.getDate())}`;
+
+        await db.createEvent(userId, {
+          title: `🎁 Cadeau kopen voor ${pending.personName}`,
+          date: giftDateStr,
+          time: null,
+          recurrence: 'yearly',
+          reminderDaysBefore: null,
+          caldavUid: null,
+          calendarStream: 'personal',
+        });
+        return `✅ Toegevoegd: *Cadeau kopen voor ${pending.personName}* op ${formatDate(giftDateStr)} _(jaarlijks)_.`;
+      }
+
       default:
         return 'Kan die actie niet uitvoeren.';
     }
@@ -488,12 +507,13 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const eventList = Array.isArray(intent.events) && intent.events.length > 0
         ? intent.events
         : [{
-            title:                intent.event_title ?? originalText,
-            date:                 intent.event_date,
-            time:                 intent.event_time ?? null,
-            recurrence:           intent.event_recurrence ?? null,
-            reminder_days_before: intent.reminder_days_before ?? null,
-            calendar_stream:      intent.calendar_stream ?? 'personal',
+            title:                  intent.event_title ?? originalText,
+            date:                   intent.event_date,
+            time:                   intent.event_time ?? null,
+            recurrence:             intent.event_recurrence ?? null,
+            reminder_days_before:   intent.reminder_days_before ?? null,
+            reminder_minutes_before: intent.reminder_minutes_before ?? null,
+            calendar_stream:        intent.calendar_stream ?? 'personal',
           }];
 
       // Ensure CalDAV user is provisioned (lazy)
@@ -511,10 +531,24 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       }
 
       const lines = [];
+      let lastSavedEvent = null;
+      let hasBirthday = false;
+      let birthdayInfo = null;
+
       for (const ev of eventList) {
-        const evTitle      = ev.title ?? intent.event_title ?? originalText;
-        const reminderDays = ev.reminder_days_before ?? null;
-        const stream       = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
+        const evTitle         = ev.title ?? intent.event_title ?? originalText;
+        const reminderDays    = ev.reminder_days_before ?? null;
+        const reminderMinutes = ev.reminder_minutes_before ?? null;
+        const stream          = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
+
+        // Conflict check: warn if another timed event exists at same time
+        if (ev.time && ev.date) {
+          const existing = await db.getEventsForDate(userId, ev.date);
+          const conflict = existing.find(e => e.time === ev.time && e.title !== evTitle);
+          if (conflict) {
+            lines.push(`⚠️ Let op: *${conflict.title}* staat ook op ${formatDate(ev.date)} om ${ev.time}.`);
+          }
+        }
 
         let caldavUid = null;
         if (caldavCreds) {
@@ -523,7 +557,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
               caldavCreds.username,
               caldavCreds.password,
               stream,
-              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays },
+              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes },
             );
           } catch (err) {
             console.error('CalDAV event creation failed, queuing retry:', err.message);
@@ -534,7 +568,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           }
         }
 
-        await db.createEvent(userId, {
+        const saved = await db.createEvent(userId, {
           title: evTitle,
           date: ev.date,
           time: ev.time ?? null,
@@ -544,24 +578,75 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           calendarStream: stream,
         });
 
-        const timeStr  = ev.time ? ` om ${ev.time}` : '';
-        const dateStr  = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
-        const recurStr = ev.recurrence === 'yearly' ? ' _(jaarlijks)_'
+        lastSavedEvent = { id: saved.id, title: evTitle, date: ev.date, time: ev.time ?? null, caldavUid, calendarStream: stream };
+
+        if (stream === 'birthdays') {
+          hasBirthday = true;
+          birthdayInfo = { title: evTitle, date: ev.date };
+        }
+
+        const streamLabel = { appointments: 'Afspraak', birthdays: 'Verjaardag', work: 'Werkafspraak', personal: 'Ingepland' }[stream] ?? 'Ingepland';
+        const timeStr     = ev.time ? ` om ${ev.time}` : '';
+        const dateStr     = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
+        const recurStr    = ev.recurrence === 'yearly' ? ' _(jaarlijks)_'
           : ev.recurrence?.startsWith('weekly:') ? ' _(wekelijks)_'
           : ev.recurrence?.startsWith('monthly:') ? ' _(maandelijks)_'
           : '';
-        lines.push(`• *${evTitle}*${dateStr}${recurStr}`);
+        const reminderStr = reminderMinutes ? ` _(reminder ${reminderMinutes} min van tevoren)_` : reminderDays ? ` _(reminder ${reminderDays} dag${reminderDays !== 1 ? 'en' : ''} van tevoren)_` : '';
+        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${reminderStr}`);
       }
+
+      if (lastSavedEvent) session.setLastEvent(userId, lastSavedEvent);
 
       // Send CalDAV onboarding as a follow-up message on first provisioning
       if (isNewCalDAVUser && caldavCreds) {
         setTimeout(() => sendMessage(from, buildCalDAVOnboardingMessage(caldavCreds.username, caldavCreds.password)), 800);
       }
 
+      // Birthday gift follow-up
+      if (hasBirthday && birthdayInfo) {
+        const personName = birthdayInfo.title.replace(/verjaardag\s*/i, '').trim();
+        confirm.set(userId, { type: 'birthday_gift', birthdayTitle: birthdayInfo.title, birthdayDate: birthdayInfo.date, personName });
+        setTimeout(() => sendMessage(from, `🎁 Wil je dat ik ook het kopen van een cadeautje voor *${personName}* 1 week van tevoren in je agenda zet?`), 600);
+      }
+
       if (lines.length === 1) {
-        return `📅 Ingepland: ${lines[0].slice(2)}.`;
+        return `📅 ${lines[0].slice(2)}.`;
       }
       return `📅 Ingepland:\n${lines.join('\n')}`;
+    }
+
+    // ── Add reminder to existing event ───────────────────────────────────────
+
+    case 'event_update_reminder': {
+      const lastEv = session.getLastEvent(userId);
+      const searchTitle = intent.event_title ?? lastEv?.title;
+      if (!searchTitle && !lastEv) return 'Welke afspraak bedoel je?';
+
+      const matches = searchTitle ? await db.getEventsByTitle(userId, searchTitle) : [];
+      const event   = matches[0] ?? lastEv;
+      if (!event) return 'Geen recente afspraak gevonden om een reminder aan toe te voegen.';
+
+      const mins = intent.reminder_minutes_before ?? 30;
+
+      // Update CalDAV: delete old + recreate with reminder
+      const caldavCreds2 = caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null;
+      if (caldavCreds2 && event.caldavUid) {
+        try {
+          await caldav.deleteEvent(caldavCreds2.username, caldavCreds2.password, event.calendarStream ?? 'personal', event.caldavUid);
+          const newUid = await caldav.createEvent(
+            caldavCreds2.username, caldavCreds2.password, event.calendarStream ?? 'personal',
+            { title: event.title, date: event.date, time: event.time ?? null, recurrence: null, reminderMinutesBefore: mins },
+          );
+          await db.updateEventCalDAVUid(event.id, newUid);
+          session.setLastEvent(userId, { ...event, caldavUid: newUid });
+        } catch (err) {
+          console.error('CalDAV reminder update failed:', err.message);
+        }
+      }
+
+      const timeStr = event.date ? ` vóór *${event.title}* op ${formatDate(event.date)}` : ` vóór *${event.title}*`;
+      return `⏰ Ik stuur je ${mins} minuten van tevoren een reminder${timeStr} via de agenda.`;
     }
 
     // ── Events today ─────────────────────────────────────────────────────────

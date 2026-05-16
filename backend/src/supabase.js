@@ -490,6 +490,16 @@ async function getTodayEvents(userId) {
   return data ?? [];
 }
 
+async function getEventsForDate(userId, date) {
+  const { data } = await supabase
+    .from('events')
+    .select('id, title, date, time, calendar_stream')
+    .eq('user_id', userId)
+    .eq('date', date)
+    .not('time', 'is', null);
+  return data ?? [];
+}
+
 async function getEventsByTitle(userId, title) {
   const { data } = await supabase
     .from('events')
@@ -718,6 +728,7 @@ module.exports = {
   updateListItemText,
   getAllUncheckedItems,
   getTodayEvents,
+  getEventsForDate,
   getEventsByTitle,
   deleteEventById,
   getNotes,

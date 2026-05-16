@@ -48,6 +48,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 
 **Agenda:**
 - **calendar** — afspraak(en) vastleggen; vul calendar_stream in
+- **event_update_reminder** — reminder toevoegen aan een al geplande afspraak (bijv. "herinner me eraan", "stuur me een reminder", "remind me" als follow-up op een eerder geplande afspraak); vul event_title, event_date en reminder_minutes_before in
 - **reminder** — losse herinnering (bijv. "herinner me maandag aan de belasting")
 - **events_today** — afspraken vandaag opvragen
 - **events_week** — afspraken deze week opvragen
@@ -214,11 +215,20 @@ Als het bericht meerdere data of tijden noemt, gebruik events[]:
 
 ## Reminder-regels
 
-reminder_days_before: null = geen reminder (standaard)
-reminder_days_before: 0 = op het moment zelf
-reminder_days_before: N = N dagen van tevoren
+reminder_minutes_before: null = geen reminder (standaard)
+reminder_minutes_before: 30 = 30 minuten van tevoren (standaard bij "herinner me", "remind me", "stuur een reminder")
+reminder_minutes_before: N = N minuten van tevoren
 
-Zet ALLEEN bij expliciete vraag om reminder/alarm/herinnering.
+reminder_days_before: null = geen reminder (standaard)
+reminder_days_before: N = N dagen van tevoren (alleen bij expliciete "N dagen van tevoren"-verzoeken)
+
+**Wanneer de gebruiker "herinner me eraan", "stuur me een reminder", "remind me" zegt TEGELIJK met een nieuwe afspraak:**
+→ Gebruik category "calendar" en vul reminder_minutes_before: 30 in.
+
+**Wanneer de gebruiker "herinner me eraan", "stuur me een reminder", "remind me" zegt als FOLLOW-UP op een eerder geplande afspraak (zie conversatiegeschiedenis):**
+→ Gebruik category "event_update_reminder", vul event_title en event_date in vanuit de conversatiegeschiedenis, en reminder_minutes_before: 30.
+
+Zet reminder_minutes_before ALLEEN bij expliciete vraag om reminder/alarm/herinnering.
 
 ## Correcties en annuleringen
 
@@ -281,6 +291,7 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "reminder_text": null,
   "reminder_date": null,
   "reminder_days_before": null,
+  "reminder_minutes_before": null,
   "habit_id": null,
   "habit_ids": null,
   "habit_level": null,

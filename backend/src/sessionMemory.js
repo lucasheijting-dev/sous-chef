@@ -8,7 +8,9 @@
 const TTL_MS = 10 * 60 * 1000;
 const MAX_MESSAGES = 8;
 
-const store = new Map(); // Map<userId, { messages: [], lastSeen: number }>
+const store    = new Map(); // Map<userId, { messages: [], lastSeen: number }>
+const lastEvent = new Map(); // Map<userId, { id, title, date, time, caldavUid, calendarStream, savedAt }>
+
 
 function _live(userId) {
   const entry = store.get(userId);
@@ -37,4 +39,18 @@ function addExchange(userId, userText, assistantText) {
   });
 }
 
-module.exports = { getHistory, addExchange };
+function setLastEvent(userId, eventData) {
+  lastEvent.set(userId, { ...eventData, savedAt: Date.now() });
+}
+
+function getLastEvent(userId) {
+  const ev = lastEvent.get(userId);
+  if (!ev) return null;
+  if (Date.now() - ev.savedAt > TTL_MS) {
+    lastEvent.delete(userId);
+    return null;
+  }
+  return ev;
+}
+
+module.exports = { getHistory, addExchange, setLastEvent, getLastEvent };

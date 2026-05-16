@@ -76,7 +76,7 @@ async function mkcalendar(username, password, calendarId, displayName) {
 async function createEvent(username, password, calendarStream, event) {
   const uid = crypto.randomUUID();
   const calendarId = streamToCalendarId(calendarStream);
-  const ical = buildIcal(event, uid);
+  const ical = buildIcal(event, uid, event.reminderMinutesBefore ?? null);
   const url = `${CALDAV_URL}/${username}/${calendarId}/${uid}.ics`;
 
   const res = await fetchWithRetry(url, {
@@ -113,7 +113,7 @@ function streamToCalendarId(stream) {
   return cal?.id ?? 'personal';
 }
 
-function buildIcal(event, uid) {
+function buildIcal(event, uid, reminderMinutesBefore = null) {
   const now = toUtcStamp(new Date());
   let dtstart, dtend;
 
@@ -145,7 +145,15 @@ function buildIcal(event, uid) {
     lines.push('RRULE:FREQ=YEARLY');
   }
 
-  if (event.reminderDaysBefore !== null && event.reminderDaysBefore !== undefined) {
+  if (reminderMinutesBefore !== null && reminderMinutesBefore !== undefined) {
+    lines.push(
+      'BEGIN:VALARM',
+      'ACTION:DISPLAY',
+      `DESCRIPTION:${event.title}`,
+      `TRIGGER:-PT${reminderMinutesBefore}M`,
+      'END:VALARM',
+    );
+  } else if (event.reminderDaysBefore !== null && event.reminderDaysBefore !== undefined) {
     lines.push(
       'BEGIN:VALARM',
       'ACTION:DISPLAY',
