@@ -478,35 +478,57 @@ export default function InstellingenTab() {
 
           <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
 
-          {/* Habits mode */}
-          <View style={styles.moduleRow}>
-            <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="trophy-outline" size={18} color={colors.black} />
-            </View>
-            <View style={styles.moduleRowInner}>
-              <View style={styles.moduleRowTop}>
-                <Text style={[styles.rowLabel, { color: colors.black }]}>Habits</Text>
-                <View style={styles.modeToggle}>
-                  {(['lite', 'full'] as const).map(m => (
-                    <TouchableOpacity
-                      key={m}
-                      style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.habits_mode === m && styles.modeBtnActive]}
-                      onPress={() => handleHabitsMode(m)}
-                    >
-                      <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.habits_mode === m && styles.modeBtnTextActive]}>
-                        {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+          {/* Habits tab toggle */}
+          <SettingsRow
+            icon="trophy-outline"
+            label="Habits tab"
+            right={
+              saving ? (
+                <ActivityIndicator size="small" color={Colors.yellow} />
+              ) : (
+                <Switch
+                  value={prefs?.habits_enabled ?? false}
+                  onValueChange={toggleHabits}
+                  trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                  thumbColor={Colors.white}
+                />
+              )
+            }
+          />
+
+          {prefs?.habits_enabled && (
+            <>
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <View style={styles.moduleRow}>
+                <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                  <Ionicons name="trophy-outline" size={18} color={colors.black} />
+                </View>
+                <View style={styles.moduleRowInner}>
+                  <View style={styles.moduleRowTop}>
+                    <Text style={[styles.rowLabel, { color: colors.black }]}>Habits stijl</Text>
+                    <View style={styles.modeToggle}>
+                      {(['lite', 'full'] as const).map(m => (
+                        <TouchableOpacity
+                          key={m}
+                          style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.habits_mode === m && styles.modeBtnActive]}
+                          onPress={() => handleHabitsMode(m)}
+                        >
+                          <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.habits_mode === m && styles.modeBtnTextActive]}>
+                            {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
+                    {settings.habits_mode === 'lite'
+                      ? 'Snel afvinken'
+                      : 'Streaks, statistieken, week-strip'}
+                  </Text>
                 </View>
               </View>
-              <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
-                {settings.habits_mode === 'lite'
-                  ? 'Snel afvinken'
-                  : 'Streaks, statistieken, week-strip'}
-              </Text>
-            </View>
-          </View>
+            </>
+          )}
 
           <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
 
@@ -529,33 +551,13 @@ export default function InstellingenTab() {
         {/* ── Meldingen ──────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Meldingen</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
-          {/* Habits tab toggle */}
-          <SettingsRow
-            icon="trophy-outline"
-            label="Habits tab"
-            right={
-              saving ? (
-                <ActivityIndicator size="small" color={Colors.yellow} />
-              ) : (
-                <Switch
-                  value={prefs?.habits_enabled ?? false}
-                  onValueChange={toggleHabits}
-                  trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                  thumbColor={Colors.white}
-                />
-              )
-            }
-          />
-
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-
-          {/* Habits reminder (or disabled state) */}
+          {/* Habits reminder */}
           {prefs?.habits_enabled ? (
             <View style={styles.row}>
               <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
                 <Ionicons name="notifications-outline" size={18} color={colors.black} />
               </View>
-              <Text style={[styles.rowLabel, { color: colors.black }]}>Reminder</Text>
+              <Text style={[styles.rowLabel, { color: colors.black }]}>Habits reminder</Text>
               <TextInput
                 style={[styles.timeInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
                 value={reminderTime}
@@ -570,15 +572,9 @@ export default function InstellingenTab() {
                 </LinearGradient>
               </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.disabledHintRow}>
-              <Text style={[styles.disabledHint, { color: colors.gray400 }]}>
-                Activeer habits om een reminder in te stellen.
-              </Text>
-            </View>
-          )}
+          ) : null}
 
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          {prefs?.habits_enabled && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
 
           {/* Geo-alert toggle */}
           <SettingsRow
@@ -683,7 +679,6 @@ export default function InstellingenTab() {
           <SettingsRow
             icon="calendar-outline"
             label="iPhone Agenda koppelen"
-            value={caldavConnected ? 'Opnieuw verbinden' : 'Verbinden'}
             right={
               caldavConnected ? (
                 <View style={styles.connectedBadge}>
