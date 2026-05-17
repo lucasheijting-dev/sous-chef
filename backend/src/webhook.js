@@ -38,6 +38,14 @@ router.post('/', async (req, res) => {
       return;
     }
 
+    if (message.type === 'image') {
+      const { handleImageMessage } = require('./imageHandler');
+      const { getOrCreateUserFull } = require('./supabase');
+      const user = await getOrCreateUserFull(from);
+      await handleImageMessage({ from, mediaId: message.image.id, userId: user.id });
+      return;
+    }
+
     if (message.type !== 'text') return;
 
     const text = message.text?.body?.trim();

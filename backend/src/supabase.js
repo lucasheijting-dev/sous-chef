@@ -798,4 +798,43 @@ module.exports = {
   createCalendarStream,
   updateCalendarStream,
   deleteCalendarStream,
+  uploadReceiptImage,
+  createReceipt,
+  getReceipts,
+  deleteReceipt,
 };
+
+// ── Receipts ────────────────────────────────────────────────────────────────────
+
+async function uploadReceiptImage(userId, buffer, mimeType) {
+  const ext      = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+  const path     = `${userId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('receipt-images').upload(path, buffer, {
+    contentType: mimeType,
+    upsert: false,
+  });
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  const { data } = supabase.storage.from('receipt-images').getPublicUrl(path);
+  return data.publicUrl;
+}
+
+async function createReceipt(userId, { store, date, total, currency, items, category, description, imageUrl }) {
+  const { data, error } = await supabase.from('receipts').insert({
+    user_id: userId, store, date, total, currency,
+    items, category, description, image_url: imageUrl,
+  }).select('*').single();
+  if (error) throw new Error(`createReceipt failed: ${error.message}`);
+  return data;
+}
+
+async function getReceipts(userId, { limit = 50, offset = 0 } = {}) {
+  const { data, error } = await supabase
+    .from('receipts').select('*').eq('user_id', userId)
+    .order('created_at', { ascending: false }).range(offset, offset + limit - 1);
+  if (error) throw new Error(`getReceipts failed: ${error.message}`);
+  return data ?? [];
+}
+
+async function deleteReceipt(receiptId) {
+  await supabase.from('receipts').delete().eq('id', receiptId);
+}
