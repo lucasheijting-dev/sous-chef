@@ -6,8 +6,8 @@ import * as TaskManager from 'expo-task-manager';
 
 export const GEO_ALERT_TASK = 'SOUS_CHEF_GEO_ALERT';
 
-const SUPERMARKET_RADIUS_M = 200;
-const DWELL_MS = 4 * 60 * 1000; // 4 minutes
+const SUPERMARKET_RADIUS_M = 100;
+const DWELL_MS = 6 * 60 * 1000; // 6 minutes
 const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 const KEY_ARRIVAL = 'geo_arrival_at';

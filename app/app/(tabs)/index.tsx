@@ -121,24 +121,40 @@ function NoteCard({ item, index, onPress, isDark }: { item: Note; index: number;
 // ── Getting Started Banner ─────────────────────────────────────────────────────
 
 function GettingStartedBanner({ userId, onDismiss, colors }: { userId: string | null; onDismiss: () => void; colors: any }) {
+  const [messageSent, setMessageSent] = useState(false);
+  const [caldavConnected, setCaldavConnected] = useState(false);
+
+  useEffect(() => {
+    if (!userId || userId === 'dev') return;
+    supabase
+      .from('users')
+      .select('caldav_username, message_count')
+      .eq('id', userId)
+      .single()
+      .then(({ data }) => {
+        if (!data) return;
+        setMessageSent((data.message_count ?? 0) > 0);
+        setCaldavConnected(!!data.caldav_username);
+      });
+  }, [userId]);
+
+  const allDone = messageSent && caldavConnected;
+
   const quickActions = [
     {
       icon: 'chatbubble-outline' as const,
       label: 'Stuur je eerste bericht',
+      done: messageSent,
       action: () => Linking.openURL(`whatsapp://send?phone=${BOT_NUMBER}&text=Hoi`),
     },
     {
       icon: 'calendar-outline' as const,
       label: 'Koppel iPhone Agenda',
+      done: caldavConnected,
       action: () => {
         if (!userId || userId === 'dev') return;
         Linking.openURL(`${API_BASE}/calendar-profile?userId=${userId}`);
       },
-    },
-    {
-      icon: 'information-circle-outline' as const,
-      label: "Typ 'help' in WhatsApp voor alle commando's",
-      action: null,
     },
   ];
 
@@ -153,20 +169,29 @@ function GettingStartedBanner({ userId, onDismiss, colors }: { userId: string | 
       {quickActions.map((action, i) => (
         <TouchableOpacity
           key={i}
-          onPress={action.action ?? undefined}
-          activeOpacity={action.action ? 0.7 : 1}
-          style={styles.quickActionRow}
-          disabled={!action.action}
+          onPress={action.done ? undefined : action.action}
+          activeOpacity={action.done ? 1 : 0.7}
+          style={[styles.quickActionRow, action.done && { opacity: 0.5 }]}
+          disabled={action.done}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: colors.gray100 }]}>
-            <Ionicons name={action.icon} size={16} color={action.action ? Colors.yellow : colors.gray400} />
+          <View style={[styles.quickActionIcon, { backgroundColor: action.done ? colors.gray100 : colors.gray100 }]}>
+            <Ionicons
+              name={action.done ? 'checkmark-circle' : action.icon}
+              size={16}
+              color={action.done ? '#4CAF50' : Colors.yellow}
+            />
           </View>
-          <Text style={[styles.quickActionLabel, { color: action.action ? colors.black : colors.gray400 }]}>
+          <Text style={[styles.quickActionLabel, { color: colors.black, textDecorationLine: action.done ? 'line-through' : 'none' }]}>
             {action.label}
           </Text>
-          {action.action && <Ionicons name="chevron-forward" size={14} color={colors.gray400} />}
+          {!action.done && <Ionicons name="chevron-forward" size={14} color={colors.gray400} />}
         </TouchableOpacity>
       ))}
+      {allDone && (
+        <TouchableOpacity onPress={onDismiss} style={styles.allDoneRow}>
+          <Text style={[styles.allDoneText, { color: colors.gray400 }]}>Alles klaar — sluiten</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -515,6 +540,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quickActionLabel: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, lineHeight: 20 },
+  allDoneRow: { marginTop: 8, alignItems: 'center', paddingVertical: 6 },
+  allDoneText: { fontFamily: 'Inter_400Regular', fontSize: 13 },
 
   modal: { flex: 1 },
   modalHeader: {
