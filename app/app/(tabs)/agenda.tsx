@@ -231,12 +231,12 @@ function AgendaLite() {
       {/* Stream chips */}
       {streams.length > 0 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: colors.offWhite }} contentContainerStyle={[s.filterRow, { paddingTop: 0, marginTop: -4 }]}>
-          <TouchableOpacity style={[s.chip, { backgroundColor: colors.white, borderColor: colors.gray200 }, streamFilter === null && s.pillActive]} onPress={() => setStreamFilter(null)}>
-            <Text style={[s.pillText, { color: colors.gray400 }, streamFilter === null && s.pillTextActive]}>Alles</Text>
+          <TouchableOpacity style={[s.chip, streamFilter === null && s.pillActive]} onPress={() => setStreamFilter(null)}>
+            <Text style={[s.pillText, streamFilter === null && s.pillTextActive]}>Alles</Text>
           </TouchableOpacity>
           {streams.map(st => (
-            <TouchableOpacity key={st.id} style={[s.chip, { backgroundColor: colors.white, borderColor: streamFilter === st.claude_key ? st.color : colors.gray200, borderWidth: 1.5 }, streamFilter === st.claude_key && { backgroundColor: st.color + '22' }]} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}>
-              <Text style={[s.pillText, { color: streamFilter === st.claude_key ? st.color : colors.gray400 }]}>{st.emoji} {st.name}</Text>
+            <TouchableOpacity key={st.id} style={[s.chip, streamFilter === st.claude_key ? { backgroundColor: st.color } : {}]} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}>
+              <Text style={[s.pillText, streamFilter === st.claude_key && { color: '#fff' }]}>{st.emoji} {st.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -650,11 +650,11 @@ const s = StyleSheet.create({
   icalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow },
 
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
-  pill:      { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200 },
-  chip:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200 },
-  pillActive:     { backgroundColor: Colors.black, borderColor: Colors.black },
-  pillText:       { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.gray400 },
-  pillTextActive: { color: Colors.white },
+  pill:           { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: 'rgba(0,0,0,0.06)', borderWidth: 0 },
+  chip:           { paddingHorizontal: 13, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: 'rgba(0,0,0,0.06)', borderWidth: 0 },
+  pillActive:     { backgroundColor: Colors.yellow },
+  pillText:       { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: Colors.black },
+  pillTextActive: { color: Colors.black },
   unlinkBtn: { padding: 7 },
 
   toggleWrap: { flexDirection: 'row', paddingHorizontal: 24, paddingBottom: 12, gap: 20 },

@@ -230,6 +230,15 @@ const RECEIPT_EMOJI: Record<string, string> = {
 
 const CAT_COLORS = ['#4A90D8','#E8734A','#4ECDC4','#9B59B6','#E74C3C','#27AE60','#F39C12','#1A1A1A'];
 
+const CURRENCY_SYMBOLS: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', SEK: 'kr', NOK: 'kr', DKK: 'kr', CHF: 'CHF', JPY: '¥', CNY: '¥', AUD: 'A$', CAD: 'C$' };
+function formatAmount(total: number | null, currency = 'EUR') {
+  if (total == null) return 'onbekend';
+  const cur = (currency ?? 'EUR').toUpperCase();
+  const sym = CURRENCY_SYMBOLS[cur] ?? cur;
+  const after = ['SEK', 'NOK', 'DKK'].includes(cur);
+  return after ? `${total.toFixed(2)} ${sym}` : `${sym}${total.toFixed(2)}`;
+}
+
 function formatReceiptDate(iso: string | null) {
   if (!iso) return '';
   try { return new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -577,7 +586,7 @@ export default function LijstenTab() {
               {selectedCatId && (
                 <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
                   <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400 }}>
-                    {filteredReceipts.length} bonnetjes · totaal <Text style={{ fontFamily: 'Inter_700Bold', color: colors.black }}>€{catTotal.toFixed(2)}</Text>
+                    {filteredReceipts.length} bonnetjes · totaal <Text style={{ fontFamily: 'Inter_700Bold', color: colors.black }}>{formatAmount(catTotal, filteredReceipts[0]?.currency)}</Text>
                   </Text>
                 </View>
               )}
@@ -634,7 +643,7 @@ export default function LijstenTab() {
                           </View>
                           {item.total != null && (
                             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>
-                              €{Number(item.total).toFixed(2)}
+                              {formatAmount(item.total, item.currency)}
                             </Text>
                           )}
                         </View>
@@ -687,7 +696,7 @@ export default function LijstenTab() {
                     </View>
                     {detailReceipt.total != null && (
                       <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 32, color: colors.black, marginTop: 4 }}>
-                        €{Number(detailReceipt.total).toFixed(2)}
+                        {formatAmount(detailReceipt.total, detailReceipt.currency)}
                       </Text>
                     )}
                   </View>
@@ -708,7 +717,7 @@ export default function LijstenTab() {
                           </Text>
                           {item.price != null && (
                             <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.black }}>
-                              €{Number(item.price).toFixed(2)}
+                              {formatAmount(item.price, detailReceipt.currency)}
                             </Text>
                           )}
                         </View>

@@ -28,8 +28,12 @@ async function downloadMetaImage(mediaId) {
 }
 
 // Ask Claude what's in the image and extract structured data
-async function analyzeImage(buffer, mimeType) {
+async function analyzeImage(buffer, mimeType, userCategories = []) {
   const base64 = buffer.toString('base64');
+
+  const catBlock = userCategories.length > 0
+    ? `\n\nDe gebruiker heeft deze eigen categorieën:\n${userCategories.map(c => `- id: "${c.id}", naam: "${c.name}", emoji: "${c.emoji}"`).join('\n')}\n\nKies de best passende categorie-id uit die lijst en zet die in "user_category_id". Als geen categorie past, zet null.`
+    : '';
 
   const response = await client.messages.create({
     model: 'claude-opus-4-7',
@@ -55,6 +59,7 @@ Als het een bonnetje/kassabon is, vul dan in:
   "currency": "EUR",
   "items": [{"name": "product", "price": 1.99, "quantity": 1}],
   "category": "supermarkt|restaurant|kleding|benzine|apotheek|overig",
+  "user_category_id": null,
   "description": "korte samenvatting in het Nederlands"
 }
 
@@ -62,7 +67,7 @@ Als het GEEN bonnetje is:
 {
   "type": "other",
   "description": "wat zie je in het Nederlands, max 2 zinnen"
-}
+}${catBlock}
 
 Geef ALLEEN geldige JSON terug.`,
           },
@@ -96,25 +101,33 @@ async function handleImageMessage({ from, mediaId, userId }) {
       console.error('[ImageHandler] Storage upload failed (continuing without image):', uploadErr.message);
     }
 
+    // Load user's receipt categories for auto-assignment
+    let userCategories = [];
+    try { userCategories = await db.getReceiptCategories(userId); } catch {}
+
     // Analyze with Claude Vision
     console.log('[ImageHandler] Sending to Claude Vision...');
-    const analysis = await analyzeImage(buffer, mimeType);
+    const analysis = await analyzeImage(buffer, mimeType, userCategories);
     console.log('[ImageHandler] Claude analysis:', JSON.stringify(analysis));
 
     if (analysis.type === 'receipt') {
+      // Validate user_category_id against actual user categories
+      const validCatId = userCategories.find(c => c.id === analysis.user_category_id)?.id ?? null;
+
       await db.createReceipt(userId, {
-        store:       analysis.store ?? 'Onbekend',
-        date:        analysis.date ?? null,
-        total:       analysis.total ?? null,
-        currency:    analysis.currency ?? 'EUR',
-        items:       analysis.items ?? [],
-        category:    analysis.category ?? 'overig',
-        description: analysis.description ?? '',
+        store:              analysis.store ?? 'Onbekend',
+        date:               analysis.date ?? null,
+        total:              analysis.total ?? null,
+        currency:           analysis.currency ?? 'EUR',
+        items:              analysis.items ?? [],
+        category:           analysis.category ?? 'overig',
+        description:        analysis.description ?? '',
         imageUrl,
+        receiptCategoryId:  validCatId,
       });
 
       const totalStr = analysis.total != null
-        ? `€${Number(analysis.total).toFixed(2)}`
+        ? formatAmount(analysis.total, analysis.currency)
         : 'bedrag onbekend';
       const dateStr  = analysis.date ? ` van ${formatDate(analysis.date)}` : '';
       const items    = Array.isArray(analysis.items) && analysis.items.length > 0
@@ -131,6 +144,15 @@ async function handleImageMessage({ from, mediaId, userId }) {
     console.error('[ImageHandler] Error:', err);
     await sendMessage(from, 'Sorry, kon de afbeelding niet verwerken. Probeer het opnieuw.');
   }
+}
+
+const CURRENCY_SYMBOLS = { EUR: '€', USD: '$', GBP: '£', SEK: 'kr', NOK: 'kr', DKK: 'kr', CHF: 'CHF', JPY: '¥', CNY: '¥', AUD: 'A$', CAD: 'C$' };
+
+function formatAmount(total, currency = 'EUR') {
+  const amount = Number(total).toFixed(2);
+  const sym = CURRENCY_SYMBOLS[currency?.toUpperCase()] ?? currency ?? '€';
+  const after = ['SEK', 'NOK', 'DKK'].includes(currency?.toUpperCase());
+  return after ? `${amount} ${sym}` : `${sym}${amount}`;
 }
 
 function formatDate(iso) {
