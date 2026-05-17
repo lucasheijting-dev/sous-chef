@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Calendar from 'expo-calendar';
 import { supabase } from '@/lib/supabase';
@@ -220,24 +221,24 @@ function AgendaLite() {
       </View>
 
       {/* Period pills */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
         {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['week', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
           <TouchableOpacity
             key={p}
             onPress={() => { setTimePeriod(p); setStreamFilter(null); }}
-            style={{ paddingHorizontal: 18, paddingVertical: 9, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DEDEDE' }}
+            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
           >
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
 
       {/* Stream chips */}
       {streams.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 4 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
           <TouchableOpacity
             onPress={() => setStreamFilter(null)}
-            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DEDEDE' }}
+            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
           >
             <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#111' }}>Alles</Text>
           </TouchableOpacity>
@@ -245,7 +246,7 @@ function AgendaLite() {
             <TouchableOpacity
               key={st.id}
               onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}
-              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === st.claude_key ? st.color : '#DEDEDE' }}
+              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
             >
               <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
             </TouchableOpacity>
@@ -254,7 +255,7 @@ function AgendaLite() {
       )}
 
       {/* Events */}
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 140 }}>
         {loading ? (
           <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />
         ) : visibleEvents.length === 0 ? (
@@ -287,6 +288,12 @@ function AgendaLite() {
           );
         })}
       </ScrollView>
+
+      {/* Bottom fade */}
+      <LinearGradient
+        colors={[`${colors.offWhite}00`, colors.offWhite]}
+        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, pointerEvents: 'none' }}
+      />
     </View>
   );
 }
@@ -554,6 +561,14 @@ export default function AgendaTab() {
       )}
 
       {/* ── Calendar view ──────────────────────────────────────────────────── */}
+      {/* Bottom fade — only in list mode; calendar has its own panel */}
+      {viewMode === 'list' && (
+        <LinearGradient
+          colors={[`${colors.offWhite}00`, colors.offWhite]}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, pointerEvents: 'none' }}
+        />
+      )}
+
       {viewMode === 'calendar' && (
         <>
           <FlatList
