@@ -13,10 +13,12 @@ import * as Updates from 'expo-updates';
 import 'react-native-reanimated';
 
 import '@/lib/geoAlert'; // registers background task before any component renders
+import '@/lib/pushNotifications'; // registers background push task + notification handler
 
 import { UserProvider, useUser } from '@/context/UserContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { ModuleSettingsProvider, useModuleSettings } from '@/context/ModuleSettingsContext';
+import { registerForPushNotifications } from '@/lib/pushNotifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -62,6 +64,13 @@ function AuthGate() {
       router.replace('/(tabs)');
     }
   }, [user, userLoading, settings.onboarding_done, settingsLoading, segments]);
+
+  // Register for push notifications once the real user is loaded
+  useEffect(() => {
+    if (user && user.id !== 'dev') {
+      registerForPushNotifications(user.id);
+    }
+  }, [user?.id]);
 
   return null;
 }

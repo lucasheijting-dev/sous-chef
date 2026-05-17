@@ -32,6 +32,15 @@ async function markOnboardingComplete(userId) {
   await supabase.from('users').update({ onboarding_completed: true }).eq('id', userId);
 }
 
+async function getUserPushToken(userId) {
+  const { data } = await supabase
+    .from('users')
+    .select('push_token')
+    .eq('id', userId)
+    .single();
+  return data?.push_token ?? null;
+}
+
 async function incrementMessageCount(userId) {
   await supabase.rpc('increment_user_message_count', { uid: userId });
 }
@@ -778,6 +787,7 @@ module.exports = {
   markCalDAVOperationFailed,
   updateEventCalDAVUid,
   getUserById,
+  getUserPushToken,
   getBoodschappenlijst,
   canSendGeoAlert,
   markGeoAlertSent,
