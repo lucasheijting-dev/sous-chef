@@ -85,12 +85,21 @@ Geef ALLEEN geldige JSON terug.`,
 async function handleImageMessage({ from, mediaId, userId }) {
   try {
     const { buffer, mimeType } = await downloadMetaImage(mediaId);
+    console.log(`[ImageHandler] Downloaded image: ${buffer.length} bytes, ${mimeType}`);
 
-    // Upload to Supabase Storage
-    const imageUrl = await db.uploadReceiptImage(userId, buffer, mimeType);
+    // Upload to Supabase Storage (non-fatal — receipt is still saved without image)
+    let imageUrl = null;
+    try {
+      imageUrl = await db.uploadReceiptImage(userId, buffer, mimeType);
+      console.log(`[ImageHandler] Uploaded to storage: ${imageUrl}`);
+    } catch (uploadErr) {
+      console.error('[ImageHandler] Storage upload failed (continuing without image):', uploadErr.message);
+    }
 
     // Analyze with Claude Vision
+    console.log('[ImageHandler] Sending to Claude Vision...');
     const analysis = await analyzeImage(buffer, mimeType);
+    console.log('[ImageHandler] Claude analysis:', JSON.stringify(analysis));
 
     if (analysis.type === 'receipt') {
       await db.createReceipt(userId, {
