@@ -33,41 +33,50 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onre
 
 // ── Lists ──────────────────────────────────────────────────────────────────────
 
-const CARD_COLORS = [Colors.yellow, Colors.black, '#F0F0F0', Colors.yellow, Colors.black];
+// Alternating accent colors per card — yellow, near-black, warm slate, deep indigo
+const TILE_ACCENTS = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
+const TILE_EMOJI_COLORS = ['#0A0A0A', '#FCC10C', '#FFFFFF', '#FFFFFF'];
 
 function AnimatedCard({ item, index, onPress, colors }: { item: List & { item_count: number }; index: number; onPress: () => void; colors: any }) {
   const scale = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const accent = TILE_ACCENTS[index % TILE_ACCENTS.length];
+  const emojiTint = TILE_EMOJI_COLORS[index % TILE_EMOJI_COLORS.length];
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 350, delay: index * 60, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, delay: index * 60, tension: 80, friction: 12, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 320, delay: index * 55, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, delay: index * 55, tension: 90, friction: 13, useNativeDriver: true }),
     ]).start();
   }, []);
 
+  const typeLabel = item.list_type === 'links' ? 'Links' : item.list_type === 'tips' ? 'Tips' : null;
+
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }}>
+    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }]}>
       <Pressable
         onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.card, { backgroundColor: colors.white }]}
+        style={[styles.tile, { backgroundColor: colors.white }]}
       >
-        <View style={[styles.emojiBox, { backgroundColor: CARD_COLORS[index % CARD_COLORS.length] }]}>
-          <Text style={styles.cardEmoji}>{item.emoji || '📝'}</Text>
+        {/* Colored top section */}
+        <View style={[styles.tileTop, { backgroundColor: accent }]}>
+          <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
+          {typeLabel && (
+            <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.18)' }]}>
+              <Text style={[styles.typeBadgeText, { color: emojiTint === '#FCC10C' ? '#FCC10C' : 'rgba(255,255,255,0.85)' }]}>{typeLabel}</Text>
+            </View>
+          )}
         </View>
-        <View style={styles.cardBody}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={[styles.cardName, { color: colors.black }]}>{item.name}</Text>
-            {item.list_type === 'links' && <Text style={{ fontSize: 13 }}>🔗</Text>}
-            {item.list_type === 'tips'  && <Text style={{ fontSize: 13 }}>💡</Text>}
-          </View>
-          <Text style={[styles.cardCount, { color: colors.gray400 }]}>{item.item_count} {item.item_count === 1 ? 'item' : 'items'}</Text>
-        </View>
-        <View style={[styles.chevronBox, { backgroundColor: colors.gray100 }]}>
-          <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
+        {/* Bottom info */}
+        <View style={styles.tileBottom}>
+          <Text style={[styles.tileName, { color: colors.black }]} numberOfLines={2}>{item.name}</Text>
+          <Text style={[styles.tileCount, { color: colors.gray400 }]}>
+            {item.item_count} {item.item_count === 1 ? 'item' : 'items'}
+          </Text>
         </View>
       </Pressable>
     </Animated.View>
@@ -270,13 +279,13 @@ export default function LijstenTab() {
 
         {activeTab === 'lists' && (
           <View style={styles.bannerStats}>
-            <View style={styles.statPill}>
+            <View style={styles.statTile}>
               <Text style={styles.statNum}>{lists.length}</Text>
               <Text style={styles.statLabel}>{lists.length === 1 ? 'lijst' : 'lijsten'}</Text>
             </View>
-            <View style={styles.statPill}>
-              <Text style={styles.statNum}>{lists.reduce((s, l) => s + l.item_count, 0)}</Text>
-              <Text style={styles.statLabel}>items totaal</Text>
+            <View style={[styles.statTile, styles.statTileAccent]}>
+              <Text style={[styles.statNum, { color: Colors.black }]}>{lists.reduce((s, l) => s + l.item_count, 0)}</Text>
+              <Text style={[styles.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>items totaal</Text>
             </View>
           </View>
         )}
@@ -306,22 +315,14 @@ export default function LijstenTab() {
       {/* Toggle (only if notes enabled) */}
       {showNotesTab && (
         <View style={[styles.tabToggleWrap, { backgroundColor: colors.offWhite }]}>
-          <View style={[styles.tabToggle, { backgroundColor: colors.gray100 }]}>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'lists' && styles.tabBtnActive]}
-              onPress={() => setActiveTab('lists')}
-            >
-              <Ionicons name={activeTab === 'lists' ? 'layers' : 'layers-outline'} size={15} color={activeTab === 'lists' ? Colors.white : colors.gray400} />
-              <Text style={[styles.tabBtnLabel, { color: colors.gray400 }, activeTab === 'lists' && styles.tabBtnLabelActive]}>Lijsten</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'notes' && styles.tabBtnActive]}
-              onPress={() => setActiveTab('notes')}
-            >
-              <Ionicons name={activeTab === 'notes' ? 'document-text' : 'document-text-outline'} size={15} color={activeTab === 'notes' ? Colors.white : colors.gray400} />
-              <Text style={[styles.tabBtnLabel, { color: colors.gray400 }, activeTab === 'notes' && styles.tabBtnLabelActive]}>Notities</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('lists')}>
+            <Text style={[styles.tabTextLabel, { color: activeTab === 'lists' ? colors.black : colors.gray400 }]}>Lijsten</Text>
+            {activeTab === 'lists' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('notes')}>
+            <Text style={[styles.tabTextLabel, { color: activeTab === 'notes' ? colors.black : colors.gray400 }]}>Notities</Text>
+            {activeTab === 'notes' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
+          </TouchableOpacity>
         </View>
       )}
 
@@ -370,7 +371,9 @@ export default function LijstenTab() {
           <FlatList
             data={lists}
             keyExtractor={(l) => l.id}
-            contentContainerStyle={[styles.list, showBanner && { paddingTop: 0 }]}
+            numColumns={2}
+            columnWrapperStyle={styles.tileRow}
+            contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }]}
             style={{ backgroundColor: colors.offWhite }}
             ListHeaderComponent={showBanner ? (
               <GettingStartedBanner
@@ -448,15 +451,15 @@ const styles = StyleSheet.create({
   banner: { paddingHorizontal: 32, paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
   bannerEyebrow: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 6 },
   bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 32, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 },
-  bannerStats: { flexDirection: 'row', gap: 10 },
-  statPill: {
-    flexDirection: 'row', alignItems: 'baseline', gap: 5,
-    backgroundColor: '#FFFFFF10', borderRadius: Radius.pill,
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderWidth: 1, borderColor: '#FFFFFF18',
+  bannerStats: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  statTile: {
+    paddingHorizontal: 18, paddingVertical: 12,
+    backgroundColor: '#FFFFFF12', borderRadius: Radius.md,
+    borderWidth: 1, borderColor: '#FFFFFF18', minWidth: 90,
   },
-  statNum: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.white },
-  statLabel: { fontFamily: 'Inter_300Light', fontSize: 12, color: '#888' },
+  statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
+  statNum: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.white, letterSpacing: -0.5 },
+  statLabel: { fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 1 },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -467,28 +470,26 @@ const styles = StyleSheet.create({
   searchBarFocused: { borderColor: Colors.yellow + '60' },
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: Colors.white },
 
-  tabToggleWrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  tabToggle: { flexDirection: 'row', borderRadius: 12, padding: 4 },
-  tabBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 9, borderRadius: 10,
-  },
-  tabBtnActive: { backgroundColor: Colors.black },
-  tabBtnLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-  tabBtnLabelActive: { color: Colors.white },
+  tabToggleWrap: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 4, gap: 20 },
+  tabTextBtn: { alignItems: 'center', paddingBottom: 8 },
+  tabTextLabel: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3 },
+  tabTextUnderline: { height: 3, width: '80%', borderRadius: 2, marginTop: 4 },
 
   skeletonList: { padding: 16 },
-  list: { padding: 24, gap: 12, paddingBottom: 120 },
-  card: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: Radius.lg, padding: 14, ...Shadow.card,
+  tileGrid: { padding: 16, paddingBottom: 120 },
+  tileRow: { gap: 12, marginBottom: 12 },
+  tileWrap: { flex: 1 },
+  tile: { flex: 1, borderRadius: Radius.xl, overflow: 'hidden', ...Shadow.card },
+  tileTop: { height: 110, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  tileEmoji: { fontSize: 40 },
+  typeBadge: {
+    position: 'absolute', bottom: 10, right: 10,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill,
   },
-  emojiBox: { width: 52, height: 52, borderRadius: Radius.md, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  cardEmoji: { fontSize: 24 },
-  cardBody: { flex: 1 },
-  cardName: { fontFamily: 'Inter_700Bold', fontSize: 16, marginBottom: 3, letterSpacing: -0.2 },
-  cardCount: { fontFamily: 'Inter_300Light', fontSize: 13 },
-  chevronBox: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.3 },
+  tileBottom: { padding: 14, paddingTop: 12 },
+  tileName: { fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: -0.2, marginBottom: 4 },
+  tileCount: { fontFamily: 'Inter_300Light', fontSize: 12 },
 
   noteGrid: { padding: 20, paddingBottom: 120 },
   noteRow: { gap: 10, marginBottom: 10 },
