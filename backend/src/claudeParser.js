@@ -49,10 +49,16 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 **Agenda:**
 - **calendar** — afspraak(en) vastleggen; vul calendar_stream in
 - **event_update_reminder** — reminder toevoegen aan een al geplande afspraak (bijv. "herinner me eraan", "stuur me een reminder", "remind me" als follow-up op een eerder geplande afspraak); vul event_title, event_date en reminder_minutes_before in
+- **event_reschedule** — afspraak verplaatsen naar andere datum/tijd (bijv. "verplaats tandarts naar donderdag", "zet mijn vergadering een uur later"); vul event_title, event_date_new, event_time_new in
+- **event_search** — controleren of een afspraak ingepland staat (bijv. "is mijn tandarts al ingepland?", "wanneer is mijn vergadering?"); vul event_search_query in
+- **events_summary** — samenvatting opvragen voor andere periode dan vandaag/week (bijv. "wat heb ik volgende week?", "wat staat er in juni?"); vul summary_start en summary_end in als YYYY-MM-DD
 - **reminder** — losse herinnering (bijv. "herinner me maandag aan de belasting")
 - **events_today** — afspraken vandaag opvragen
 - **events_week** — afspraken deze week opvragen
 - **event_delete** — afspraak verwijderen; DESTRUCTIEF
+
+**Bonnetjes:**
+- **receipt_query** — vragen over uitgaven (bijv. "hoeveel heb ik deze maand uitgegeven?", "wat was mijn duurste aankoop?"); vul query_period in: "this_month", "last_month", "this_week", of "all"
 
 **Notities:**
 - **note** — notitie opslaan
@@ -109,6 +115,8 @@ Gebruik list_items bij duidelijke opsomming:
 - Vaste combinaties: "pindakaas en jam", "brood en beleg", "ham en kaas", "zout en peper" → één item
 - Hoeveelheid + product: "2 pakken melk", "een fles wijn", "een zak chips" → één item
 - Product + merk/type: "melk halfvol", "bier Heineken" → één item
+
+**Item hoeveelheden:** "2 pakken melk" → item_text: "2 pakken melk", item_quantity: 2. Vul item_quantity in als er een duidelijke hoeveelheid bij staat.
 
 LET OP: berichten met Mini:/Goed:/Elite: zijn habit_manage, GEEN list_items.
 
@@ -192,6 +200,13 @@ Bij "elke [dag] [activiteit]" of "wekelijks [activiteit]" → calendar met event
 - "elke vrijdag 10u standup" → event_recurrence="weekly:5"
 - "elke eerste van de maand" → event_recurrence="monthly:1"
 - "jaarlijks" / verjaardag → event_recurrence="yearly"
+- "elke eerste maandag van de maand" → event_recurrence="monthly:first:1" (format: monthly:first/second/third/fourth/last:weekday_number)
+
+## Agenda — verplaatsen en zoeken
+
+**Verplaatsen:** "verplaats X naar donderdag" → event_reschedule. "zet het een uur later" → event_reschedule met relatieve tijd (event_time_new: "relatief:+1h").
+
+**Weekend als twee afspraken:** "dit weekend sporten" → gebruik events[] met twee entries: zaterdag én zondag.
 
 ## Impliciete voortzetting
 
@@ -209,6 +224,14 @@ Standaard fallback als geen aangepaste kalenders beschikbaar zijn:
 - **birthdays** — verjaardagen, jubilea (+ event_recurrence="yearly")
 - **work** — vergadering, meeting, deadline, werkafspraak, zakelijk
 - **personal** — sport, hobby, reizen, privé — standaard
+
+## Auto-categorisatie kalenderstream
+Als geen aangepaste kalenders zijn maar het bericht bevat:
+- sport/gym/fitness/hardlopen/zwemmen/yoga/mediteren → calendar_stream: "personal"
+- vergadering/meeting/deadline/klant/werk/presentatie → calendar_stream: "work"
+- tandarts/dokter/huisarts/apotheek/ziekenhuis/fysiotherapeut → calendar_stream: "appointments"
+- verjaardag/jubileum → calendar_stream: "birthdays" + event_recurrence: "yearly"
+- vrienden/borrel/feest/etentje/afspreken met → calendar_stream: "personal"
 
 **Kies de best passende kalender op basis van de naam, emoji en beschrijving.** Bijv. als er een "Vrienden" kalender is met claude_key "friends", gebruik die voor afspraken met vrienden. Bij twijfel: gebruik de meest voor de hand liggende of val terug op "personal".
 
@@ -329,7 +352,14 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "setting_value": null,
   "context_fact": null,
   "reply_text": null,
-  "clarification_question": null
+  "clarification_question": null,
+  "event_date_new": null,
+  "event_time_new": null,
+  "event_search_query": null,
+  "summary_start": null,
+  "summary_end": null,
+  "query_period": null,
+  "item_quantity": null
 }
 
 Vul alleen de relevante velden in en laat de rest null.`;

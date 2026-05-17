@@ -692,6 +692,118 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       return `⏰ Ik stuur je ${mins} minuten van tevoren een reminder${timeStr} via de agenda.`;
     }
 
+    // ── Reschedule event ─────────────────────────────────────────────────────
+
+    case 'event_reschedule': {
+      const title = intent.event_title;
+      if (!title) return 'Welke afspraak wil je verplaatsen?';
+      const matches = await db.getEventsByTitle(userId, title);
+      if (matches.length === 0) return `Geen afspraak gevonden met "${title}".`;
+      const event = matches[0];
+
+      const newDate = intent.event_date_new ?? event.date;
+      let newTime = intent.event_time_new ?? event.time;
+
+      // Handle relative time: "relatief:+1h"
+      if (newTime?.startsWith('relatief:')) {
+        const offset = newTime.replace('relatief:', '');
+        if (offset.startsWith('+') && offset.endsWith('h') && event.time) {
+          const [h, m] = event.time.split(':').map(Number);
+          const addH = parseInt(offset.slice(1));
+          const newH = (h + addH) % 24;
+          newTime = `${String(newH).padStart(2, '0')}:${String(m ?? 0).padStart(2, '0')}`;
+        } else {
+          newTime = event.time;
+        }
+      }
+
+      await db.updateEvent(userId, event.id, { date: newDate, time: newTime });
+      const dateStr = newDate ? ` naar ${formatDate(newDate)}` : '';
+      const timeStr = newTime ? ` om ${newTime}` : '';
+      return `📅 *${event.title}* verplaatst${dateStr}${timeStr}.`;
+    }
+
+    // ── Search event ─────────────────────────────────────────────────────────
+
+    case 'event_search': {
+      const query = intent.event_search_query ?? intent.event_title;
+      if (!query) return 'Welke afspraak zoek je?';
+      const matches = await db.getEventsByTitle(userId, query);
+      if (matches.length === 0) return `Geen afspraak gevonden voor "${query}".`;
+      const lines = matches.slice(0, 3).map(e => {
+        const timeStr = e.time ? ` om ${e.time}` : '';
+        return `• *${e.title}* — ${formatDate(e.date)}${timeStr}`;
+      });
+      return `📅 Gevonden:\n${lines.join('\n')}`;
+    }
+
+    // ── Events summary (other period) ────────────────────────────────────────
+
+    case 'events_summary': {
+      const start = intent.summary_start;
+      const end   = intent.summary_end;
+      if (!start || !end) return 'Voor welke periode wil je een overzicht?';
+      const events = await db.getUpcomingEvents(userId, 365);
+      const filtered = events.filter(e => e.date && e.date >= start && e.date <= end);
+      if (filtered.length === 0) return `📅 Geen afspraken gevonden tussen ${formatDate(start)} en ${formatDate(end)}.`;
+      const lines = filtered.map(e => {
+        const timeStr = e.time ? ` om ${e.time}` : '';
+        return `• *${e.title}* — ${formatDate(e.date)}${timeStr}`;
+      });
+      return `📅 *Planning ${formatDate(start)} t/m ${formatDate(end)}*\n\n${lines.join('\n')}`;
+    }
+
+    // ── Receipt query ─────────────────────────────────────────────────────────
+
+    case 'receipt_query': {
+      const period = intent.query_period ?? 'this_month';
+      const now = new Date();
+      let startDate, endDate;
+
+      if (period === 'this_month') {
+        startDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        endDate = now.toISOString().split('T')[0];
+      } else if (period === 'last_month') {
+        const lm  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lme = new Date(now.getFullYear(), now.getMonth(), 0);
+        startDate = lm.toISOString().split('T')[0];
+        endDate   = lme.toISOString().split('T')[0];
+      } else if (period === 'this_week') {
+        const d = new Date(); d.setHours(0, 0, 0, 0);
+        const dow = d.getDay() === 0 ? 6 : d.getDay() - 1;
+        d.setDate(d.getDate() - dow);
+        startDate = d.toISOString().split('T')[0];
+        endDate   = now.toISOString().split('T')[0];
+      } else {
+        startDate = null; endDate = null;
+      }
+
+      const receipts = await db.getReceipts(userId);
+      const filtered = startDate
+        ? receipts.filter(r => r.date && r.date >= startDate && r.date <= endDate)
+        : receipts;
+
+      if (filtered.length === 0) return '🧾 Geen bonnetjes gevonden voor die periode.';
+
+      const total = filtered.reduce((s, r) => s + (r.total ?? 0), 0);
+      const byStore = {};
+      for (const r of filtered) {
+        const store = r.store ?? 'Onbekend';
+        byStore[store] = (byStore[store] ?? 0) + (r.total ?? 0);
+      }
+      const topStores = Object.entries(byStore)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 3)
+        .map(([store, amt]) => `• ${store}: €${Number(amt).toFixed(2)}`)
+        .join('\n');
+
+      const periodLabel = period === 'this_month' ? 'deze maand'
+        : period === 'last_month' ? 'vorige maand'
+        : period === 'this_week' ? 'deze week'
+        : 'totaal';
+      return `🧾 *Uitgaven ${periodLabel}*\n\n💶 *€${total.toFixed(2)}* bij ${filtered.length} aankopen\n\nTop winkels:\n${topStores}`;
+    }
+
     // ── Events today ─────────────────────────────────────────────────────────
 
     case 'events_today': {

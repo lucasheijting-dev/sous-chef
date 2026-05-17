@@ -63,6 +63,10 @@ Als het een bonnetje/kassabon is, vul dan in:
   "description": "korte samenvatting in het Nederlands"
 }
 
+Regels voor bon-analyse:
+- Bedragen in Nederlandse notatie (€12,50 of 12.50) zijn beide geldig — zet altijd als getal (12.50)
+- Herken winkelketens: 'AH', 'Albert Heijn', 'AH Bezorgd' → store: 'Albert Heijn'; 'JMB', 'Jumbo' → store: 'Jumbo'; 'Lidl', 'Aldi', 'Plus', 'Dirk', 'Spar', 'Coop', 'Picnic' → exact die naam
+
 Als het GEEN bonnetje is:
 {
   "type": "other",
@@ -111,6 +115,20 @@ async function handleImageMessage({ from, mediaId, userId }) {
     console.log('[ImageHandler] Claude analysis:', JSON.stringify(analysis));
 
     if (analysis.type === 'receipt') {
+      // Duplicate detection
+      if (analysis.date && analysis.total != null) {
+        const existing = await db.getReceipts(userId);
+        const dupe = existing.find(r =>
+          r.date === analysis.date &&
+          r.store?.toLowerCase() === (analysis.store ?? '').toLowerCase() &&
+          Math.abs((r.total ?? 0) - (analysis.total ?? 0)) < 0.01
+        );
+        if (dupe) {
+          await sendMessage(from, `⚠️ Dit bonnetje lijkt al eerder ingescand (${analysis.store}, ${analysis.date}). Al toegevoegd op ${new Date(dupe.created_at).toLocaleDateString('nl-NL')}.`);
+          return;
+        }
+      }
+
       // Validate user_category_id against actual user categories
       const validCatId = userCategories.find(c => c.id === analysis.user_category_id)?.id ?? null;
 

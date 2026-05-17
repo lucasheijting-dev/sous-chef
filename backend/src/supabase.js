@@ -512,10 +512,19 @@ async function getEventsForDate(userId, date) {
 async function getEventsByTitle(userId, title) {
   const { data } = await supabase
     .from('events')
-    .select('id, title, date, recurrence, caldav_uid, calendar_stream')
+    .select('id, title, date, time, recurrence, caldav_uid, calendar_stream')
     .eq('user_id', userId)
     .ilike('title', `%${title}%`);
   return data ?? [];
+}
+
+async function updateEvent(userId, eventId, { date, time }) {
+  const { error } = await supabase
+    .from('events')
+    .update({ date, time, updated_at: new Date().toISOString() })
+    .eq('id', eventId)
+    .eq('user_id', userId);
+  if (error) throw new Error(error.message);
 }
 
 async function deleteEventById(userId, eventId) {
@@ -776,6 +785,7 @@ module.exports = {
   getTodayEvents,
   getEventsForDate,
   getEventsByTitle,
+  updateEvent,
   deleteEventById,
   getNotes,
   appendToNote,
@@ -823,10 +833,11 @@ async function uploadReceiptImage(userId, buffer, mimeType) {
   return data.publicUrl;
 }
 
-async function createReceipt(userId, { store, date, total, currency, items, category, description, imageUrl }) {
+async function createReceipt(userId, { store, date, total, currency, items, category, description, imageUrl, receiptCategoryId = null }) {
   const { data, error } = await supabase.from('receipts').insert({
     user_id: userId, store, date, total, currency,
     items, category, description, image_url: imageUrl,
+    receipt_category_id: receiptCategoryId,
   }).select('*').single();
   if (error) throw new Error(`createReceipt failed: ${error.message}`);
   return data;
