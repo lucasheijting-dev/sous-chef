@@ -217,7 +217,7 @@ function AgendaLite() {
       </View>
 
       {/* Period pills — ScrollView so pills stay content-width */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
         {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
           <TouchableOpacity
             key={p}
@@ -231,7 +231,7 @@ function AgendaLite() {
 
       {/* Stream chips */}
       {streams.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
           <TouchableOpacity
             onPress={() => setStreamFilter(null)}
             style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
@@ -452,7 +452,7 @@ export default function AgendaTab() {
 
         {/* Stream category chips */}
         {streams.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 4 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 4 }}>
             <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DEDEDE' }}>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
             </TouchableOpacity>
