@@ -161,59 +161,117 @@ function MonthGrid({ year, month, eventDates, selectedDate, onDayPress }: {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────────
+// ── AgendaLite (period pills + stream chips) ──────────────────────────────────
 
 function AgendaLite() {
   const { user }   = useUser();
   const { colors } = useTheme();
   const insets     = useSafeAreaInsets();
-  const [events, setEvents] = useState<MergedEvent[]>([]);
-  const [streams, setStreams] = useState<CalendarStream[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const [allEvents, setAllEvents]       = useState<MergedEvent[]>([]);
+  const [streams, setStreams]           = useState<CalendarStream[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [timePeriod, setTimePeriod]     = useState<TimePeriod>('today');
+  const [streamFilter, setStreamFilter] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const end = new Date(now); end.setDate(end.getDate() + 9);
+    const endKey = toKey(end);
     Promise.all([
-      supabase.from('events').select('*').eq('user_id', user.id).eq('date', TODAY),
+      supabase.from('events').select('*').eq('user_id', user.id).gte('date', TODAY).lte('date', endKey),
       supabase.from('calendar_streams').select('*').eq('user_id', user.id),
     ]).then(([evtRes, streamRes]) => {
-      setEvents((evtRes.data ?? []).map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const })));
+      setAllEvents((evtRes.data ?? []).map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const })));
       if (streamRes.data) setStreams(streamRes.data);
       setLoading(false);
     });
   }, [user]);
 
-  const todayLabel = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+  const visibleEvents = useMemo(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
+    const ranges: Record<TimePeriod, [string, string]> = {
+      today:    [offsetDay(0), offsetDay(0)],
+      tomorrow: [offsetDay(1), offsetDay(1)],
+      week:     [offsetDay(2), offsetDay(8)],
+    };
+    const [start, end] = ranges[timePeriod];
+    let evts = allEvents.filter(e => e.date && e.date >= start && e.date <= end);
+    if (streamFilter) evts = evts.filter(e => e.calendar_stream === streamFilter);
+    return evts;
+  }, [allEvents, timePeriod, streamFilter]);
+
+  const periodLabel = timePeriod === 'today' ? 'Vandaag' : timePeriod === 'tomorrow' ? 'Morgen' : 'Volgende week';
 
   return (
-    <View style={[{ flex: 1, backgroundColor: colors.offWhite }]}>
-      <View style={[s.banner, { paddingTop: insets.top + 36 }]}>
+    <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
+      {/* Header */}
+      <View style={[s.banner, { paddingTop: insets.top + 24, paddingBottom: 20 }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
-        <Text style={s.bannerTitle}>Vandaag</Text>
-        <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: '#888', marginTop: 2 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
+        <View style={[s.bannerRow, { marginBottom: 0 }]}>
+          <Text style={s.bannerTitle}>Agenda</Text>
+          <TouchableOpacity style={s.icalBtn} onPress={() => Linking.openURL(`webcal://sous-chef-pckg.onrender.com/calendar/${user?.id}.ics`)}>
+            <Text style={s.icalBtnText}>Abonneren</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
+
+      {/* Period pills */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: colors.offWhite }} contentContainerStyle={s.filterRow}>
+        {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['week', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
+          <TouchableOpacity key={p} style={[s.pill, { backgroundColor: colors.white, borderColor: colors.gray200 }, timePeriod === p && s.pillActive]} onPress={() => { setTimePeriod(p); setStreamFilter(null); }}>
+            <Text style={[s.pillText, { color: colors.gray400 }, timePeriod === p && s.pillTextActive]}>{label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Stream chips */}
+      {streams.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: colors.offWhite }} contentContainerStyle={[s.filterRow, { paddingTop: 0, marginTop: -4 }]}>
+          <TouchableOpacity style={[s.chip, { backgroundColor: colors.white, borderColor: colors.gray200 }, streamFilter === null && s.pillActive]} onPress={() => setStreamFilter(null)}>
+            <Text style={[s.pillText, { color: colors.gray400 }, streamFilter === null && s.pillTextActive]}>Alles</Text>
+          </TouchableOpacity>
+          {streams.map(st => (
+            <TouchableOpacity key={st.id} style={[s.chip, { backgroundColor: colors.white, borderColor: streamFilter === st.claude_key ? st.color : colors.gray200, borderWidth: 1.5 }, streamFilter === st.claude_key && { backgroundColor: st.color + '22' }]} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}>
+              <Text style={[s.pillText, { color: streamFilter === st.claude_key ? st.color : colors.gray400 }]}>{st.emoji} {st.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Events */}
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
         {loading ? (
           <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />
-        ) : events.length === 0 ? (
+        ) : visibleEvents.length === 0 ? (
           <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
             <Text style={{ fontSize: 40 }}>📅</Text>
-            <Text style={[s.bannerTitle, { color: colors.black, fontSize: 18 }]}>Niets gepland vandaag</Text>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Niets gepland</Text>
             <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, textAlign: 'center' }}>
               Stuur "tandarts vrijdag 14u" via WhatsApp.
             </Text>
           </View>
-        ) : events.map(e => {
-          const streamColor = streams.find(s => s.claude_key === e.calendar_stream)?.color;
+        ) : visibleEvents.map(e => {
+          const stream = streams.find(st => st.claude_key === e.calendar_stream);
           return (
             <View key={e.id} style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden' }, Shadow.card]}>
-              {streamColor && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: streamColor }} />}
-              <Text style={{ fontSize: 24, marginLeft: streamColor ? 8 : 0 }}>{eventEmoji(e.title)}</Text>
+              {stream?.color && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: stream.color }} />}
+              <Text style={{ fontSize: 24, marginLeft: stream?.color ? 8 : 0 }}>{eventEmoji(e.title)}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.black }}>{e.title}</Text>
                 {e.time && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>{e.time}</Text>}
+                {timePeriod === 'week' && e.date && (
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginTop: 1 }}>{sectionLabel(e.date)}</Text>
+                )}
               </View>
+              {stream && (
+                <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: stream.color + '22' }}>
+                  <Text style={{ fontSize: 11, color: stream.color, fontFamily: 'Inter_600SemiBold' }}>{stream.emoji}</Text>
+                </View>
+              )}
             </View>
           );
         })}
