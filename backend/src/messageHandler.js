@@ -157,7 +157,7 @@ async function handleMessage({ from, text }) {
   if (intent.category === 'multi_action' && Array.isArray(intent.actions) && intent.actions.length > 0) {
     const replies = [];
     for (const action of intent.actions) {
-      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from);
+      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from, calendarStreams);
       if (r) replies.push(r);
     }
     const combined = replies.join('\n');
@@ -176,7 +176,7 @@ async function handleMessage({ from, text }) {
     }
   }
 
-  const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from);
+  const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from, calendarStreams);
   if (!baseReply) return;
 
   const confidenceSuffix = intent.confidence === 'medium'
@@ -291,7 +291,7 @@ async function handleUndo(userId) {
 
 // ── Intent processing ──────────────────────────────────────────────────────────
 
-async function processIntent(intent, userId, lists, activeHabits, originalText, from) {
+async function processIntent(intent, userId, lists, activeHabits, originalText, from, calendarStreams = []) {
   const { category } = intent;
 
   switch (category) {
