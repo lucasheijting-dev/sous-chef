@@ -169,24 +169,54 @@ function AgendaLite() {
   const { colors } = useTheme();
   const insets     = useSafeAreaInsets();
 
-  const [allEvents, setAllEvents]       = useState<MergedEvent[]>([]);
-  const [streams, setStreams]           = useState<CalendarStream[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [timePeriod, setTimePeriod]     = useState<TimePeriod>('today');
-  const [streamFilter, setStreamFilter] = useState<string | null>(null);
+  const [allEvents, setAllEvents]         = useState<MergedEvent[]>([]);
+  const [streams, setStreams]             = useState<CalendarStream[]>([]);
+  const [nativeCals, setNativeCals]       = useState<{ id: string; name: string; color: string }[]>([]);
+  const [loading, setLoading]             = useState(true);
+  const [timePeriod, setTimePeriod]       = useState<TimePeriod>('today');
+  const [streamFilter, setStreamFilter]   = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const end = new Date(now); end.setDate(end.getDate() + 14);
     const endKey = toKey(end);
+
     Promise.all([
       supabase.from('events').select('*').eq('user_id', user.id).gte('date', TODAY).lte('date', endKey),
       supabase.from('calendar_streams').select('*').eq('user_id', user.id),
     ]).then(([evtRes, streamRes]) => {
-      setAllEvents((evtRes.data ?? []).map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const })));
+      const scEvents: MergedEvent[] = (evtRes.data ?? []).map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const }));
       if (streamRes.data) setStreams(streamRes.data);
-      setLoading(false);
+
+      if (Platform.OS !== 'web') {
+        Calendar.getCalendarPermissionsAsync().then(({ status }) => {
+          if (status !== 'granted') { setAllEvents(scEvents); setLoading(false); return; }
+          Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT).then(cals => {
+            const visibleCals = cals.filter(c => c.allowsModifications !== false || c.source?.type !== 'com.apple.reminder');
+            setNativeCals(visibleCals.map(c => ({ id: c.id, name: c.title, color: c.color ?? '#888' })));
+            const start2 = new Date(now); start2.setHours(0, 0, 0, 0);
+            const end2   = new Date(now); end2.setDate(end2.getDate() + 14);
+            Calendar.getEventsAsync(visibleCals.map(c => c.id), start2, end2).then(phoneEvts => {
+              const scKeys = new Set(scEvents.map(e => `${e.title?.toLowerCase()}|${e.date}`));
+              const merged: MergedEvent[] = phoneEvts
+                .filter(e => !scKeys.has(`${e.title?.toLowerCase()}|${e.startDate ? new Date(e.startDate).toISOString().split('T')[0] : ''}`))
+                .map(e => ({
+                  id: `phone-${e.id}`, title: e.title,
+                  date: e.startDate ? toKey(new Date(e.startDate)) : null,
+                  time: e.startDate && !e.allDay ? new Date(e.startDate).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null,
+                  source: 'phone' as const,
+                  calendar_stream: `cal_${e.calendarId}`,
+                }));
+              setAllEvents([...scEvents, ...merged]);
+              setLoading(false);
+            });
+          });
+        });
+      } else {
+        setAllEvents(scEvents);
+        setLoading(false);
+      }
     });
   }, [user]);
 
@@ -205,8 +235,6 @@ function AgendaLite() {
     return evts;
   }, [allEvents, timePeriod, streamFilter]);
 
-  const periodLabel = timePeriod === 'today' ? 'Vandaag' : timePeriod === 'tomorrow' ? 'Morgen' : 'Volgende week';
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
       {/* Header */}
@@ -217,8 +245,8 @@ function AgendaLite() {
       </View>
 
       {/* Period pills */}
-      <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
-        <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Periode</Text>
+      <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
+        <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Periode</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
             <TouchableOpacity
@@ -233,28 +261,30 @@ function AgendaLite() {
       </View>
 
       {/* Separator */}
-      <View style={{ height: 1, backgroundColor: '#E0E0E0', marginHorizontal: 16, marginBottom: 6 }} />
+      <View style={{ height: 1, backgroundColor: '#E0E0E0', marginHorizontal: 16, marginVertical: 8 }} />
 
-      {/* Stream chips */}
-      {streams.length > 0 && (
-        <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingBottom: 8 }}>
-          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Categorie</Text>
+      {/* Category chips: sous-chef streams + native calendars */}
+      {(streams.length > 0 || nativeCals.length > 0) && (
+        <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingBottom: 10 }}>
+          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Categorie</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity
-              onPress={() => setStreamFilter(null)}
-              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
-            >
+            <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
             </TouchableOpacity>
             {streams.map(st => (
-              <TouchableOpacity
-                key={st.id}
-                onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}
-                style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
-              >
+              <TouchableOpacity key={st.id} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}>
                 <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
               </TouchableOpacity>
             ))}
+            {nativeCals.map(cal => {
+              const key = `cal_${cal.id}`;
+              const active = streamFilter === key;
+              return (
+                <TouchableOpacity key={cal.id} onPress={() => setStreamFilter(active ? null : key)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: active ? cal.color : '#DDDCDC' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: active ? '#fff' : '#111', lineHeight: 18 }}>{cal.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
       )}
