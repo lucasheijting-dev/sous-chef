@@ -216,38 +216,47 @@ function AgendaLite() {
         <Text style={s.bannerTitle}>Agenda</Text>
       </View>
 
-      {/* Period pills — ScrollView so pills stay content-width */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
-        {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-          <TouchableOpacity
-            key={p}
-            onPress={() => { setTimePeriod(p); setStreamFilter(null); }}
-            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
-          >
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Stream chips */}
-      {streams.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}>
-          <TouchableOpacity
-            onPress={() => setStreamFilter(null)}
-            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
-          >
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
-          </TouchableOpacity>
-          {streams.map(st => (
+      {/* Period pills */}
+      <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
+        <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Periode</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
             <TouchableOpacity
-              key={st.id}
-              onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}
-              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
+              key={p}
+              onPress={() => { setTimePeriod(p); setStreamFilter(null); }}
+              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
             >
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>{label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
+      </View>
+
+      {/* Separator */}
+      <View style={{ height: 1, backgroundColor: '#E0E0E0', marginHorizontal: 16, marginBottom: 6 }} />
+
+      {/* Stream chips */}
+      {streams.length > 0 && (
+        <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingBottom: 8 }}>
+          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Categorie</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <TouchableOpacity
+              onPress={() => setStreamFilter(null)}
+              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
+            >
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
+            </TouchableOpacity>
+            {streams.map(st => (
+              <TouchableOpacity
+                key={st.id}
+                onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}
+                style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
+              >
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {/* Events */}
@@ -442,31 +451,40 @@ export default function AgendaTab() {
         </View>
 
         {/* Time period pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
-          {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-            <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
+          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Periode</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
+              <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Separator */}
+        <View style={{ height: 1, backgroundColor: '#E0E0E0', marginHorizontal: 16, marginBottom: 6 }} />
 
         {/* Stream category chips */}
         {streams.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}>
-            <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DEDEDE' }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
-            </TouchableOpacity>
-            {streams.map(st => (
-              <TouchableOpacity key={st.id} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === st.claude_key ? st.color : '#DEDEDE' }}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
+          <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingBottom: 8 }}>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Categorie</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
               </TouchableOpacity>
-            ))}
-            {phoneConnected && (
-              <TouchableOpacity style={[s.chip, { backgroundColor: colors.white, borderColor: streamFilter === '__phone' ? colors.black : colors.gray200 }, streamFilter === '__phone' && { backgroundColor: colors.gray100 }]} onPress={() => setStreamFilter(streamFilter === '__phone' ? null : '__phone')}>
-                <Text style={[s.pillText, { color: streamFilter === '__phone' ? colors.black : colors.gray400 }]}>📱 iPhone</Text>
-              </TouchableOpacity>
-            )}
-          </ScrollView>
+              {streams.map(st => (
+                <TouchableOpacity key={st.id} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
+                </TouchableOpacity>
+              ))}
+              {phoneConnected && (
+                <TouchableOpacity onPress={() => setStreamFilter(streamFilter === '__phone' ? null : '__phone')} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === '__phone' ? '#333' : '#DDDCDC' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === '__phone' ? '#fff' : '#111', lineHeight: 18 }}>📱 iPhone</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+          </View>
         )}
 
         {/* View mode toggle */}
