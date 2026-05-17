@@ -251,7 +251,7 @@ function AgendaLite() {
       )}
 
       {/* Events */}
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 140 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 140 }}>
         {loading ? (
           <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />
         ) : visibleEvents.length === 0 ? (
