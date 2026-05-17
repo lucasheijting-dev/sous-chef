@@ -238,17 +238,17 @@ function AgendaLite() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 }}>
           <TouchableOpacity
             onPress={() => setStreamFilter(null)}
-            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
+            style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
           >
-            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#111' }}>Alles</Text>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
           </TouchableOpacity>
           {streams.map(st => (
             <TouchableOpacity
               key={st.id}
               onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}
-              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
+              style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
             >
-              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -460,11 +460,11 @@ export default function AgendaTab() {
         {streams.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 4 }}>
             <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DEDEDE' }}>
-              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#111' }}>Alles</Text>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
             </TouchableOpacity>
             {streams.map(st => (
               <TouchableOpacity key={st.id} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === st.claude_key ? st.color : '#DEDEDE' }}>
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
               </TouchableOpacity>
             ))}
             {phoneConnected && (
