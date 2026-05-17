@@ -802,6 +802,11 @@ module.exports = {
   createReceipt,
   getReceipts,
   deleteReceipt,
+  getReceiptCategories,
+  createReceiptCategory,
+  updateReceiptCategory,
+  deleteReceiptCategory,
+  assignReceiptCategory,
 };
 
 // ── Receipts ────────────────────────────────────────────────────────────────────
@@ -837,4 +842,36 @@ async function getReceipts(userId, { limit = 50, offset = 0 } = {}) {
 
 async function deleteReceipt(receiptId) {
   await supabase.from('receipts').delete().eq('id', receiptId);
+}
+
+async function getReceiptCategories(userId) {
+  const { data, error } = await supabase.from('receipt_categories').select('*').eq('user_id', userId).order('created_at');
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+async function createReceiptCategory(userId, { name, emoji, color }) {
+  const { data, error } = await supabase.from('receipt_categories').insert({ user_id: userId, name, emoji, color }).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function updateReceiptCategory(catId, updates) {
+  const patch = {};
+  if (updates.name  !== undefined) patch.name  = updates.name;
+  if (updates.emoji !== undefined) patch.emoji = updates.emoji;
+  if (updates.color !== undefined) patch.color = updates.color;
+  const { data, error } = await supabase.from('receipt_categories').update(patch).eq('id', catId).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function deleteReceiptCategory(catId) {
+  await supabase.from('receipt_categories').delete().eq('id', catId);
+}
+
+async function assignReceiptCategory(receiptId, categoryId) {
+  const { data, error } = await supabase.from('receipts').update({ receipt_category_id: categoryId }).eq('id', receiptId).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
 }

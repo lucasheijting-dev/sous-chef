@@ -7,6 +7,7 @@ export type ModuleSettings = {
   calendar_mode: ModuleMode;
   habits_mode: ModuleMode;
   notes_enabled: boolean;
+  receipts_enabled: boolean;
   onboarding_done: boolean;
   user_name: string;
   habits_onboarding_done: boolean;
@@ -17,6 +18,7 @@ const DEFAULTS: ModuleSettings = {
   calendar_mode: 'full',
   habits_mode: 'full',
   notes_enabled: true,
+  receipts_enabled: false,
   onboarding_done: false,
   user_name: '',
   habits_onboarding_done: false,

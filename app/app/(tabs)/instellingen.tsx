@@ -606,6 +606,21 @@ export default function InstellingenTab() {
               />
             }
           />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          {/* Receipts toggle */}
+          <SettingsRow
+            icon="receipt-outline"
+            label="Bonnetjes tab"
+            subtitle="Scan kassabonnen via WhatsApp. Claude leest ze automatisch."
+            right={
+              <Switch
+                value={settings.receipts_enabled}
+                onValueChange={v => updateSetting('receipts_enabled', v)}
+                trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                thumbColor={Colors.white}
+              />
+            }
+          />
         </View>
 
         {/* ── Meldingen ──────────────────────────────────────────────── */}
@@ -999,11 +1014,13 @@ export default function InstellingenTab() {
               <TextInput
                 style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
                 value={streamEmoji}
-                onChangeText={t => setStreamEmoji(t.slice(-2) || t)}
+                onChangeText={t => {
+                  const chars = [...t];
+                  setStreamEmoji(chars[chars.length - 1] ?? '');
+                }}
                 placeholder="📅"
                 placeholderTextColor={colors.gray400}
                 selectionColor={Colors.yellow}
-                maxLength={2}
               />
             </View>
             <View style={{ gap: 8 }}>

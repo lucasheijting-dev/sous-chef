@@ -8,10 +8,10 @@ import { Colors } from '@/constants/Design';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const TABS = [
-  { name: 'index',        label: 'Lijsten', icon: 'layers',        iconOff: 'layers-outline' },
-  { name: 'agenda',       label: 'Agenda',  icon: 'calendar',      iconOff: 'calendar-outline' },
-  { name: 'habits',       label: 'Habits',  icon: 'trophy',        iconOff: 'trophy-outline' },
+const ALL_TABS = [
+  { name: 'index',        label: 'Lijsten', icon: 'layers',        iconOff: 'layers-outline'        },
+  { name: 'agenda',       label: 'Agenda',  icon: 'calendar',      iconOff: 'calendar-outline'      },
+  { name: 'habits',       label: 'Habits',  icon: 'trophy',        iconOff: 'trophy-outline'        },
   { name: 'instellingen', label: 'Profiel', icon: 'person-circle', iconOff: 'person-circle-outline' },
 ] as const;
 
@@ -48,26 +48,29 @@ export default function TabLayout() {
         tabBarBackground: () => <GlassBar />,
       }}
     >
-      {TABS.map(({ name, label, icon, iconOff }) => (
-        <Tabs.Screen
-          key={name}
-          name={name}
-          options={{
-            title: label,
-            href: name === 'habits' ? (prefs?.habits_enabled ? '/habits' : null) : undefined,
-            tabBarItemStyle: styles.tabBarItem,
-            tabBarIcon: ({ focused }) => (
-              <TabIcon
-                name={(focused ? icon : iconOff) as IoniconName}
-                focused={focused}
-                label={label}
-              />
-            ),
-          }}
-        />
-      ))}
-      {/* Notities is now inside the Lijsten tab — hidden from tab bar */}
-      <Tabs.Screen name="notities" options={{ href: null }} />
+      {ALL_TABS.map(({ name, label, icon, iconOff }) => {
+        const href = name === 'habits' ? (prefs?.habits_enabled ? '/habits' : null) : undefined;
+        return (
+          <Tabs.Screen
+            key={name}
+            name={name}
+            options={{
+              title: label,
+              href,
+              tabBarItemStyle: styles.tabBarItem,
+              tabBarIcon: ({ focused }) => (
+                <TabIcon
+                  name={(focused ? icon : iconOff) as IoniconName}
+                  focused={focused}
+                  label={label}
+                />
+              ),
+            }}
+          />
+        );
+      })}
+      <Tabs.Screen name="notities"   options={{ href: null }} />
+      <Tabs.Screen name="bonnetjes"  options={{ href: null }} />
     </Tabs>
   );
 }

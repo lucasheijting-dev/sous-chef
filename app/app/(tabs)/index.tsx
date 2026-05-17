@@ -14,6 +14,8 @@ import {
   ScrollView,
   SafeAreaView,
   Linking,
+  Image,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -209,7 +211,23 @@ function GettingStartedBanner({ userId, onDismiss, colors }: { userId: string | 
 
 // ── Main ───────────────────────────────────────────────────────────────────────
 
-type Tab = 'lists' | 'notes';
+type Tab = 'lists' | 'notes' | 'receipts';
+
+type Receipt = {
+  id: string; store: string | null; date: string | null; total: number | null;
+  currency: string; items: any[]; category: string | null;
+  description: string | null; image_url: string | null; created_at: string;
+};
+
+const RECEIPT_EMOJI: Record<string, string> = {
+  supermarkt: '🛒', restaurant: '🍽️', kleding: '👕', benzine: '⛽', apotheek: '💊', overig: '🧾',
+};
+
+function formatReceiptDate(iso: string | null) {
+  if (!iso) return '';
+  try { return new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch { return iso; }
+}
 
 export default function LijstenTab() {
   const { user } = useUser();
@@ -221,6 +239,7 @@ export default function LijstenTab() {
   const [activeTab, setActiveTab] = useState<Tab>('lists');
   const [lists, setLists] = useState<(List & { item_count: number })[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -262,7 +281,19 @@ export default function LijstenTab() {
     n.body.toLowerCase().includes(search.toLowerCase())
   );
 
-  const showNotesTab = settings.notes_enabled;
+  const fetchReceipts = useCallback(async () => {
+    if (!user || user.id === 'dev') return;
+    try {
+      const res = await fetch(`${API_BASE}/receipts/${user.id}`);
+      const data = await res.json();
+      if (Array.isArray(data)) setReceipts(data);
+    } catch {}
+  }, [user]);
+
+  useEffect(() => { if (settings.receipts_enabled) fetchReceipts(); }, [fetchReceipts, settings.receipts_enabled]);
+
+  const showNotesTab     = settings.notes_enabled;
+  const showReceiptsTab  = settings.receipts_enabled;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
@@ -273,7 +304,9 @@ export default function LijstenTab() {
         <Text style={styles.bannerEyebrow}>
           {settings.user_name ? `Goedemorgen, ${settings.user_name} 👋` : 'Goedemorgen 👋'}
         </Text>
-        <Text style={styles.bannerTitle}>{activeTab === 'lists' ? 'Mijn lijsten' : 'Notities'}</Text>
+        <Text style={styles.bannerTitle}>
+          {activeTab === 'lists' ? 'Mijn lijsten' : activeTab === 'notes' ? 'Notities' : 'Bonnetjes'}
+        </Text>
 
         {activeTab === 'lists' && (
           <View style={styles.bannerStats}>
@@ -310,17 +343,25 @@ export default function LijstenTab() {
         )}
       </View>
 
-      {/* Toggle (only if notes enabled) */}
-      {showNotesTab && (
+      {/* Toggle */}
+      {(showNotesTab || showReceiptsTab) && (
         <View style={[styles.tabToggleWrap, { backgroundColor: colors.offWhite }]}>
           <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('lists')}>
             <Text style={[styles.tabTextLabel, { color: activeTab === 'lists' ? colors.black : colors.gray400 }]}>Lijsten</Text>
             {activeTab === 'lists' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('notes')}>
-            <Text style={[styles.tabTextLabel, { color: activeTab === 'notes' ? colors.black : colors.gray400 }]}>Notities</Text>
-            {activeTab === 'notes' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
-          </TouchableOpacity>
+          {showNotesTab && (
+            <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('notes')}>
+              <Text style={[styles.tabTextLabel, { color: activeTab === 'notes' ? colors.black : colors.gray400 }]}>Notities</Text>
+              {activeTab === 'notes' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
+            </TouchableOpacity>
+          )}
+          {showReceiptsTab && (
+            <TouchableOpacity style={styles.tabTextBtn} onPress={() => { setActiveTab('receipts'); fetchReceipts(); }}>
+              <Text style={[styles.tabTextLabel, { color: activeTab === 'receipts' ? colors.black : colors.gray400 }]}>Bonnetjes</Text>
+              {activeTab === 'receipts' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -417,6 +458,65 @@ export default function LijstenTab() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} />}
             renderItem={({ item, index }) => (
               <NoteCard item={item} index={index} isDark={isDark} onPress={() => setSelectedNote(item)} />
+            )}
+          />
+        )
+      )}
+
+      {/* Receipts view */}
+      {activeTab === 'receipts' && (
+        receipts.length === 0 ? (
+          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
+            <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
+              <Ionicons name="receipt-outline" size={32} color={colors.gray400} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.black }]}>Geen bonnetjes</Text>
+            <Text style={[styles.emptyText, { color: colors.gray400 }]}>
+              Stuur een foto van een kassabon via WhatsApp.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={receipts}
+            keyExtractor={r => r.id}
+            contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
+            style={{ backgroundColor: colors.offWhite }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReceipts().then(() => setRefreshing(false)); }} tintColor={Colors.yellow} />}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, overflow: 'hidden' }, Shadow.card]}
+                activeOpacity={0.85}
+                onLongPress={() => Alert.alert('Verwijderen?', item.store ?? 'Dit bonnetje', [
+                  { text: 'Annuleer', style: 'cancel' },
+                  { text: 'Verwijder', style: 'destructive', onPress: async () => {
+                    await fetch(`${API_BASE}/receipts/${user?.id}/${item.id}`, { method: 'DELETE' });
+                    setReceipts(prev => prev.filter(r => r.id !== item.id));
+                  }},
+                ])}
+              >
+                {item.image_url && <Image source={{ uri: item.image_url }} style={{ width: '100%', height: 130 }} resizeMode="cover" />}
+                <View style={{ padding: 14 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text style={{ fontSize: 22 }}>{RECEIPT_EMOJI[item.category ?? ''] ?? '🧾'}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }} numberOfLines={1}>
+                        {item.store ?? 'Onbekende winkel'}
+                      </Text>
+                      {item.date && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, marginTop: 1 }}>{formatReceiptDate(item.date)}</Text>}
+                    </View>
+                    {item.total != null && (
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>
+                        €{Number(item.total).toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+                  {item.description && (
+                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, marginTop: 6 }} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
             )}
           />
         )

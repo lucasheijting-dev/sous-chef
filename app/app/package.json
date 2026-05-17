@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "expo-updates": "~29.0.17"
+  }
+}
