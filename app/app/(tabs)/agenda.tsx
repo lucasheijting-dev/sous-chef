@@ -217,7 +217,7 @@ function AgendaLite() {
       </View>
 
       {/* Period pills — ScrollView so pills stay content-width */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
         {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
           <TouchableOpacity
             key={p}
@@ -231,7 +231,7 @@ function AgendaLite() {
 
       {/* Stream chips */}
       {streams.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 6 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}>
           <TouchableOpacity
             onPress={() => setStreamFilter(null)}
             style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
@@ -442,7 +442,7 @@ export default function AgendaTab() {
         </View>
 
         {/* Time period pills */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
           {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
             <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
@@ -452,7 +452,7 @@ export default function AgendaTab() {
 
         {/* Stream category chips */}
         {streams.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 4 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}>
             <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: streamFilter === null ? Colors.yellow : '#DEDEDE' }}>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
             </TouchableOpacity>
