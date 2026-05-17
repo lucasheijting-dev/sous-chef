@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, Alert, Linking, Image,
+  Modal, SafeAreaView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -42,9 +43,10 @@ export default function BonnetjesTab() {
   const { colors } = useTheme();
   const insets     = useSafeAreaInsets();
 
-  const [receipts, setReceipts]   = useState<Receipt[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const [receipts, setReceipts]     = useState<Receipt[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
@@ -135,7 +137,9 @@ export default function BonnetjesTab() {
             onLongPress={() => confirmDelete(item)}
           >
             {item.image_url && (
-              <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="cover" />
+              <TouchableOpacity onPress={() => setFullscreenImage(item.image_url)} activeOpacity={0.9}>
+                <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="cover" />
+              </TouchableOpacity>
             )}
             <View style={styles.cardBody}>
               <View style={styles.cardTop}>
@@ -162,6 +166,24 @@ export default function BonnetjesTab() {
           </TouchableOpacity>
         )}
       />
+
+      {/* Fullscreen receipt image */}
+      <Modal
+        visible={!!fullscreenImage}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setFullscreenImage(null)}
+      >
+        <SafeAreaView style={styles.imgModal}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setFullscreenImage(null)} />
+          {fullscreenImage && (
+            <Image source={{ uri: fullscreenImage }} style={styles.imgFull} resizeMode="contain" />
+          )}
+          <TouchableOpacity style={styles.imgClose} onPress={() => setFullscreenImage(null)}>
+            <Ionicons name="close" size={22} color="#fff" />
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -195,4 +217,13 @@ const styles = StyleSheet.create({
   empty:      { alignItems: 'center', paddingTop: 60, paddingHorizontal: 32 },
   emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginBottom: 8 },
   emptyText:  { fontFamily: 'Inter_300Light', fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+  imgModal:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
+  imgFull:   { width: '100%', height: '85%' },
+  imgClose:  {
+    position: 'absolute', top: 56, right: 20,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center', alignItems: 'center',
+  },
 });

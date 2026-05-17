@@ -140,6 +140,10 @@ export default function InstellingenTab() {
   const [habitsModalVisible, setHabitsModalVisible] = useState(false);
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [nameInputValue, setNameInputValue] = useState(settings.user_name ?? '');
+  const [modulesModalVisible, setModulesModalVisible] = useState(false);
+  const [meldingModalVisible, setMeldingModalVisible] = useState(false);
+  const [suggestiesModalVisible, setSuggestiesModalVisible] = useState(false);
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
 
   // Geo-alert
   const [geoAlertEnabled, setGeoAlertEnabled] = useState(false);
@@ -418,6 +422,48 @@ export default function InstellingenTab() {
     );
   }
 
+  async function handleExportData() {
+    if (!user || user.id === 'dev') {
+      Alert.alert('Komt binnenkort!', 'Data exporteren wordt binnenkort beschikbaar.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/export/${user.id}`);
+      if (!res.ok) throw new Error('not_found');
+      showToast('Export gestart — je ontvangt een bestand', 'success');
+    } catch {
+      Alert.alert('Komt binnenkort!', 'Data exporteren wordt binnenkort beschikbaar.');
+    }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Account verwijderen?',
+      'Weet je zeker dat je je account wilt verwijderen? Dit kan niet ongedaan worden gemaakt.',
+      [
+        { text: 'Annuleer', style: 'cancel' },
+        {
+          text: 'Ja, verwijder',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Neem contact op',
+              'Stuur een WhatsApp-bericht naar +31 6 84 96 53 18 om je account te laten verwijderen.',
+              [
+                {
+                  text: 'WhatsApp openen',
+                  onPress: () =>
+                    Linking.openURL('whatsapp://send?phone=31684965318&text=Ik%20wil%20mijn%20account%20verwijderen'),
+                },
+                { text: 'Sluiten', style: 'cancel' },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  }
+
   // ── Derived display values ───────────────────────────────────────────────────
 
   const displayName = settings.user_name?.trim() || null;
@@ -460,21 +506,26 @@ export default function InstellingenTab() {
             activeOpacity={0.75}
             style={styles.nameTouchable}
           >
-            {displayName ? (
-              <>
-                <Text style={styles.bannerName}>{displayName}</Text>
-                <Text style={styles.bannerSubtitle}>Sous-Chef</Text>
-              </>
-            ) : (
-              <Text style={styles.bannerName}>Sous-Chef</Text>
-            )}
-            <Ionicons name="pencil-outline" size={14} color="rgba(255,255,255,0.45)" style={styles.pencilIcon} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.bannerName}>{displayName || 'Sous-Chef'}</Text>
+              <Ionicons name="pencil-outline" size={13} color="rgba(255,255,255,0.4)" />
+            </View>
+            {displayName ? <Text style={styles.bannerSubtitle}>Sous-Chef</Text> : null}
           </TouchableOpacity>
 
-          {/* Phone */}
-          <Text style={styles.bannerNumber}>
-            {user?.whatsapp_number ? formatPhone(user.whatsapp_number) : '—'}
-          </Text>
+          {/* Phone + copy button */}
+          <TouchableOpacity
+            style={{ alignItems: 'center' }}
+            onPress={() => copyToClipboard('+31684965318')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.bannerNumber}>
+              {user?.whatsapp_number ? formatPhone(user.whatsapp_number) : '—'}
+            </Text>
+            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
+              Tik om te kopiëren
+            </Text>
+          </TouchableOpacity>
 
           {/* Lid sinds */}
           {lidSinds ? (
@@ -503,249 +554,40 @@ export default function InstellingenTab() {
           ) : null}
         </View>
 
-        {/* ── Modules ────────────────────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Modules</Text>
+        {/* ── Voorkeuren ─────────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Voorkeuren</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
-          {/* Calendar mode */}
-          <View style={styles.moduleRow}>
-            <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="calendar-outline" size={18} color={colors.black} />
-            </View>
-            <View style={styles.moduleRowInner}>
-              <View style={styles.moduleRowTop}>
-                <Text style={[styles.rowLabel, { color: colors.black }]}>Agenda</Text>
-                <View style={styles.modeToggle}>
-                  {(['lite', 'full'] as const).map(m => (
-                    <TouchableOpacity
-                      key={m}
-                      style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.calendar_mode === m && styles.modeBtnActive]}
-                      onPress={() => handleCalendarMode(m)}
-                    >
-                      <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.calendar_mode === m && styles.modeBtnTextActive]}>
-                        {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
-                {settings.calendar_mode === 'lite'
-                  ? 'Alleen vandaag\'s afspraken'
-                  : 'Volledige planning + kalenderweergave'}
-              </Text>
-            </View>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-
-          {/* Habits tab toggle */}
           <SettingsRow
-            icon="trophy-outline"
-            label="Habits tab"
-            right={
-              saving ? (
-                <ActivityIndicator size="small" color={Colors.yellow} />
-              ) : (
-                <Switch
-                  value={prefs?.habits_enabled ?? false}
-                  onValueChange={toggleHabits}
-                  trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                  thumbColor={Colors.white}
-                />
-              )
-            }
-          />
-
-          {prefs?.habits_enabled && (
-            <>
-              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-              <View style={styles.moduleRow}>
-                <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-                  <Ionicons name="trophy-outline" size={18} color={colors.black} />
-                </View>
-                <View style={styles.moduleRowInner}>
-                  <View style={styles.moduleRowTop}>
-                    <Text style={[styles.rowLabel, { color: colors.black }]}>Habits stijl</Text>
-                    <View style={styles.modeToggle}>
-                      {(['lite', 'full'] as const).map(m => (
-                        <TouchableOpacity
-                          key={m}
-                          style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.habits_mode === m && styles.modeBtnActive]}
-                          onPress={() => handleHabitsMode(m)}
-                        >
-                          <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.habits_mode === m && styles.modeBtnTextActive]}>
-                            {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
-                    {settings.habits_mode === 'lite'
-                      ? 'Snel afvinken'
-                      : 'Streaks, statistieken, week-strip'}
-                  </Text>
-                </View>
-              </View>
-            </>
-          )}
-
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-
-          {/* Notes toggle */}
-          <SettingsRow
-            icon="document-text-outline"
-            label="Notities tab"
-            subtitle="WhatsApp-notities worden altijd opgeslagen."
-            right={
-              <Switch
-                value={settings.notes_enabled}
-                onValueChange={toggleNotes}
-                trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                thumbColor={Colors.white}
-              />
-            }
+            icon="grid-outline"
+            label="Modules"
+            subtitle="Agenda, habits, notities en bonnetjes"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setModulesModalVisible(true)}
           />
           <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          {/* Receipts toggle */}
           <SettingsRow
-            icon="receipt-outline"
-            label="Bonnetjes tab"
-            subtitle="Scan kassabonnen via WhatsApp. Claude leest ze automatisch."
-            right={
-              <Switch
-                value={settings.receipts_enabled}
-                onValueChange={v => updateSetting('receipts_enabled', v)}
-                trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                thumbColor={Colors.white}
-              />
-            }
+            icon="notifications-outline"
+            label="Meldingen"
+            value={prefs?.habits_enabled ? reminderTime : geoAlertEnabled ? 'Aan' : 'Uit'}
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setMeldingModalVisible(true)}
           />
-        </View>
-
-        {/* ── Meldingen ──────────────────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Meldingen</Text>
-        <View style={[styles.card, { backgroundColor: colors.white }]}>
-          {/* Habits reminder */}
-          {prefs?.habits_enabled ? (
-            <View style={styles.row}>
-              <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-                <Ionicons name="notifications-outline" size={18} color={colors.black} />
-              </View>
-              <Text style={[styles.rowLabel, { color: colors.black }]}>Habits reminder</Text>
-              <TextInput
-                style={[styles.timeInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
-                value={reminderTime}
-                onChangeText={setReminderTime}
-                keyboardType="numbers-and-punctuation"
-                maxLength={5}
-                selectionColor={Colors.yellow}
-              />
-              <TouchableOpacity onPress={saveReminderTime}>
-                <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.saveBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
-                  <Text style={styles.saveBtnText}>Opslaan</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {prefs?.habits_enabled && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
-
-          {/* Geo-alert toggle */}
-          <SettingsRow
-            icon="location-outline"
-            label="Supermarktherinnering"
-            subtitle="Herinnert je aan je boodschappenlijst bij een supermarkt."
-            right={
-              geoAlertLoading ? (
-                <ActivityIndicator size="small" color={Colors.yellow} />
-              ) : (
-                <Switch
-                  value={geoAlertEnabled}
-                  onValueChange={toggleGeoAlert}
-                  trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                  thumbColor={Colors.white}
-                />
-              )
-            }
-          />
-        </View>
-
-        {/* ── Suggesties ─────────────────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Suggesties</Text>
-        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
           <SettingsRow
             icon="bulb-outline"
             label="Suggesties"
-            subtitle="Wekelijkse tips op basis van je gebruik."
-            right={
-              <Switch
-                value={prefs?.suggestions_enabled ?? true}
-                onValueChange={toggleSuggestions}
-                trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                thumbColor={Colors.white}
-              />
-            }
+            value={SUGGESTIONS_FREQ_OPTIONS.find(o => o.value === suggestionsFreq)?.label}
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setSuggestiesModalVisible(true)}
           />
-
-          {(prefs?.suggestions_enabled ?? true) ? (
-            <>
-              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-              <View style={styles.freqRow}>
-                <Text style={[styles.freqLabel, { color: colors.gray400 }]}>Frequentie</Text>
-                <View style={styles.modeToggle}>
-                  {SUGGESTIONS_FREQ_OPTIONS.map(opt => (
-                    <TouchableOpacity
-                      key={opt.value}
-                      style={[
-                        styles.modeBtn,
-                        { backgroundColor: colors.gray100 },
-                        suggestionsFreq === opt.value && styles.modeBtnActive,
-                      ]}
-                      onPress={() => saveSuggestionsFreq(opt.value)}
-                    >
-                      <Text
-                        style={[
-                          styles.modeBtnText,
-                          { color: colors.gray400 },
-                          suggestionsFreq === opt.value && styles.modeBtnTextActive,
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            </>
-          ) : null}
-        </View>
-
-        {/* ── Weergave ───────────────────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Weergave</Text>
-        <View style={[styles.card, { backgroundColor: colors.white }]}>
-          <View style={styles.row}>
-            <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="contrast-outline" size={18} color={colors.black} />
-            </View>
-            <Text style={[styles.rowLabel, { color: colors.black }]}>Thema</Text>
-          </View>
           <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          <View style={styles.themeToggle}>
-            {THEME_OPTIONS.map(opt => (
-              <TouchableOpacity
-                key={opt.mode}
-                style={[styles.themeBtn, { backgroundColor: colors.gray100 }, themeMode === opt.mode && styles.themeBtnActive]}
-                onPress={() => handleThemeChange(opt.mode)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name={opt.icon} size={15} color={themeMode === opt.mode ? Colors.black : colors.gray400} />
-                <Text style={[styles.themeBtnLabel, { color: colors.gray400 }, themeMode === opt.mode && styles.themeBtnLabelActive]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <SettingsRow
+            icon="contrast-outline"
+            label="Thema"
+            value={THEME_OPTIONS.find(o => o.mode === themeMode)?.label}
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setThemeModalVisible(true)}
+          />
         </View>
 
         {/* ── iPhone Agenda ──────────────────────────────────────────── */}
@@ -754,6 +596,7 @@ export default function InstellingenTab() {
           <SettingsRow
             icon="calendar-outline"
             label="iPhone Agenda koppelen"
+            subtitle="Na installatie: Instellingen → Algemeen → VPN en apparaatbeheer"
             right={
               caldavConnected ? (
                 <View style={styles.connectedBadge}>
@@ -767,12 +610,6 @@ export default function InstellingenTab() {
             }
             onPress={openCalendarProfile}
           />
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          <View style={styles.calInstructions}>
-            <Text style={[styles.calInstructionsText, { color: colors.gray400 }]}>
-              Na installatie: Instellingen → Algemeen → VPN en apparaatbeheer
-            </Text>
-          </View>
           {caldavCreds && (
             <>
               <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
@@ -846,12 +683,18 @@ export default function InstellingenTab() {
         <View style={[styles.card, { backgroundColor: colors.white }]}>
           <SettingsRow
             icon="refresh-outline"
-            label="Rondleiding opnieuw"
+            label="Bekijk onboarding opnieuw"
             onPress={confirmResetOnboarding}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          <SettingsRow
+            icon="download-outline"
+            label="Exporteer mijn data"
+            onPress={handleExportData}
           />
         </View>
 
-        {/* Danger card: koppeling verwijderen */}
+        {/* Danger card: koppeling verwijderen + account verwijderen */}
         <View style={[styles.card, styles.dangerCard, { backgroundColor: colors.white }]}>
           <SettingsRow
             icon="log-out-outline"
@@ -862,6 +705,18 @@ export default function InstellingenTab() {
           <View style={styles.dangerCardSubtitleWrap}>
             <Text style={styles.dangerCardSubtitle}>
               Je WhatsApp-koppeling wordt verwijderd. Data blijft bewaard.
+            </Text>
+          </View>
+          <View style={[styles.divider, { backgroundColor: '#FEE2E2' }]} />
+          <SettingsRow
+            icon="trash-outline"
+            label="Account verwijderen"
+            danger
+            onPress={confirmDeleteAccount}
+          />
+          <View style={styles.dangerCardSubtitleWrap}>
+            <Text style={styles.dangerCardSubtitle}>
+              Al je data wordt permanent verwijderd.
             </Text>
           </View>
         </View>
@@ -1043,6 +898,302 @@ export default function InstellingenTab() {
         </SafeAreaView>
       </Modal>
 
+      {/* ── Modules modal ───────────────────────────────────────────── */}
+      <Modal
+        visible={modulesModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setModulesModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity
+              onPress={() => setModulesModalVisible(false)}
+              style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+            >
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Modules</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
+              {/* Calendar mode */}
+              <View style={styles.moduleRow}>
+                <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                  <Ionicons name="calendar-outline" size={18} color={colors.black} />
+                </View>
+                <View style={styles.moduleRowInner}>
+                  <View style={styles.moduleRowTop}>
+                    <Text style={[styles.rowLabel, { color: colors.black }]}>Agenda</Text>
+                    <View style={styles.modeToggle}>
+                      {(['lite', 'full'] as const).map(m => (
+                        <TouchableOpacity
+                          key={m}
+                          style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.calendar_mode === m && styles.modeBtnActive]}
+                          onPress={() => handleCalendarMode(m)}
+                        >
+                          <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.calendar_mode === m && styles.modeBtnTextActive]}>
+                            {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
+                    {settings.calendar_mode === 'lite' ? "Alleen vandaag's afspraken" : 'Volledige planning + kalenderweergave'}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="trophy-outline"
+                label="Habits tab"
+                right={
+                  saving ? (
+                    <ActivityIndicator size="small" color={Colors.yellow} />
+                  ) : (
+                    <Switch
+                      value={prefs?.habits_enabled ?? false}
+                      onValueChange={toggleHabits}
+                      trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                      thumbColor={Colors.white}
+                    />
+                  )
+                }
+              />
+              {prefs?.habits_enabled && (
+                <>
+                  <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+                  <View style={styles.moduleRow}>
+                    <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                      <Ionicons name="trophy-outline" size={18} color={colors.black} />
+                    </View>
+                    <View style={styles.moduleRowInner}>
+                      <View style={styles.moduleRowTop}>
+                        <Text style={[styles.rowLabel, { color: colors.black }]}>Habits stijl</Text>
+                        <View style={styles.modeToggle}>
+                          {(['lite', 'full'] as const).map(m => (
+                            <TouchableOpacity
+                              key={m}
+                              style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.habits_mode === m && styles.modeBtnActive]}
+                              onPress={() => handleHabitsMode(m)}
+                            >
+                              <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.habits_mode === m && styles.modeBtnTextActive]}>
+                                {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                      <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
+                        {settings.habits_mode === 'lite' ? 'Snel afvinken' : 'Streaks, statistieken, week-strip'}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="document-text-outline"
+                label="Notities tab"
+                subtitle="WhatsApp-notities worden altijd opgeslagen."
+                right={
+                  <Switch
+                    value={settings.notes_enabled}
+                    onValueChange={toggleNotes}
+                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                  />
+                }
+              />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="receipt-outline"
+                label="Bonnetjes tab"
+                subtitle="Scan kassabonnen via WhatsApp. Claude leest ze automatisch."
+                right={
+                  <Switch
+                    value={settings.receipts_enabled}
+                    onValueChange={v => updateSetting('receipts_enabled', v)}
+                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                  />
+                }
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Meldingen modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={meldingModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setMeldingModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity
+              onPress={() => setMeldingModalVisible(false)}
+              style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+            >
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Meldingen</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
+              {prefs?.habits_enabled ? (
+                <>
+                  <View style={styles.row}>
+                    <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                      <Ionicons name="notifications-outline" size={18} color={colors.black} />
+                    </View>
+                    <Text style={[styles.rowLabel, { color: colors.black }]}>Habits reminder</Text>
+                    <TextInput
+                      style={[styles.timeInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
+                      value={reminderTime}
+                      onChangeText={setReminderTime}
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={5}
+                      selectionColor={Colors.yellow}
+                    />
+                    <TouchableOpacity onPress={saveReminderTime}>
+                      <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.saveBtn} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                        <Text style={styles.saveBtnText}>Opslaan</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+                </>
+              ) : null}
+              <SettingsRow
+                icon="location-outline"
+                label="Supermarktherinnering"
+                subtitle="Herinnert je aan je boodschappenlijst bij een supermarkt."
+                right={
+                  geoAlertLoading ? (
+                    <ActivityIndicator size="small" color={Colors.yellow} />
+                  ) : (
+                    <Switch
+                      value={geoAlertEnabled}
+                      onValueChange={toggleGeoAlert}
+                      trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                      thumbColor={Colors.white}
+                    />
+                  )
+                }
+              />
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Suggesties modal ────────────────────────────────────────── */}
+      <Modal
+        visible={suggestiesModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSuggestiesModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity
+              onPress={() => setSuggestiesModalVisible(false)}
+              style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+            >
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Suggesties</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
+              <SettingsRow
+                icon="bulb-outline"
+                label="Suggesties"
+                subtitle="Wekelijkse tips op basis van je gebruik."
+                right={
+                  <Switch
+                    value={prefs?.suggestions_enabled ?? true}
+                    onValueChange={toggleSuggestions}
+                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                  />
+                }
+              />
+              {(prefs?.suggestions_enabled ?? true) ? (
+                <>
+                  <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+                  <View style={styles.freqRow}>
+                    <Text style={[styles.freqLabel, { color: colors.gray400 }]}>Frequentie</Text>
+                    <View style={styles.modeToggle}>
+                      {SUGGESTIONS_FREQ_OPTIONS.map(opt => (
+                        <TouchableOpacity
+                          key={opt.value}
+                          style={[styles.modeBtn, { backgroundColor: colors.gray100 }, suggestionsFreq === opt.value && styles.modeBtnActive]}
+                          onPress={() => saveSuggestionsFreq(opt.value)}
+                        >
+                          <Text style={[styles.modeBtnText, { color: colors.gray400 }, suggestionsFreq === opt.value && styles.modeBtnTextActive]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </>
+              ) : null}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Thema modal ─────────────────────────────────────────────── */}
+      <Modal
+        visible={themeModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setThemeModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity
+              onPress={() => setThemeModalVisible(false)}
+              style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+            >
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Thema</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <View style={{ padding: 20 }}>
+            <View style={[styles.card, { backgroundColor: colors.white, marginHorizontal: 0 }]}>
+              {THEME_OPTIONS.map((opt, idx) => (
+                <View key={opt.mode}>
+                  {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
+                  <TouchableOpacity
+                    style={styles.row}
+                    onPress={() => { handleThemeChange(opt.mode); setThemeModalVisible(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                      <Ionicons name={opt.icon} size={18} color={colors.black} />
+                    </View>
+                    <Text style={[styles.rowLabel, { color: colors.black, flex: 1 }]}>{opt.label}</Text>
+                    {themeMode === opt.mode && (
+                      <Ionicons name="checkmark" size={20} color={Colors.yellow} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          </View>
+        </SafeAreaView>
+      </Modal>
+
       {/* ── Name edit modal ──────────────────────────────────────────── */}
       <Modal
         visible={nameModalVisible}
@@ -1105,7 +1256,7 @@ const styles = StyleSheet.create({
   },
   avatarBox: { marginBottom: 14 },
   avatar: { width: 72, height: 72, borderRadius: 22 },
-  nameTouchable: { alignItems: 'center', flexDirection: 'column', gap: 2 },
+  nameTouchable: { alignItems: 'center', gap: 4 },
   bannerName: { fontFamily: 'TitanOne_400Regular', fontSize: 22, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   bannerSubtitle: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 2 },
   pencilIcon: { marginTop: 4 },
@@ -1301,7 +1452,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
   nameInputHint: { fontFamily: 'Inter_300Light', fontSize: 13, color: Colors.gray400 },
-  credRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 8 },
+  credRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, gap: 12 },
   credToggleText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
   credBox: { borderRadius: Radius.md, padding: 12, marginTop: 4, gap: 2 },
 });

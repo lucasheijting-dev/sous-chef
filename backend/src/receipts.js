@@ -73,7 +73,7 @@ router.get('/:userId/export.pdf', async (req, res) => {
 
     // Each receipt
     for (const r of receipts) {
-      const startY = doc.y;
+      if (doc.y > 680) doc.addPage();
 
       doc.font('Helvetica-Bold').fontSize(13).fillColor('#000').text(r.store ?? 'Onbekende winkel');
 
@@ -110,11 +110,24 @@ router.get('/:userId/export.pdf', async (req, res) => {
         }
       }
 
+      // Receipt photo
+      if (r.image_url) {
+        try {
+          const imgRes = await fetch(r.image_url);
+          if (imgRes.ok) {
+            const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+            doc.moveDown(0.5);
+            if (doc.y + 260 > 780) doc.addPage();
+            doc.image(imgBuf, 48, doc.y, { fit: [210, 260] });
+            doc.moveDown(0.5);
+          }
+        } catch {}
+      }
+
       doc.moveDown(0.5);
       doc.moveTo(48, doc.y).lineTo(547, doc.y).strokeColor('#f0f0f0').stroke();
       doc.moveDown(0.5);
 
-      // Page break if needed
       if (doc.y > 720) doc.addPage();
     }
 

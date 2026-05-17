@@ -845,9 +845,20 @@ module.exports = {
 
 // ── Receipts ────────────────────────────────────────────────────────────────────
 
+async function ensureReceiptImagesBucket() {
+  const { data: buckets } = await supabase.storage.listBuckets();
+  if (buckets?.find(b => b.name === 'receipt-images')) return;
+  const { error } = await supabase.storage.createBucket('receipt-images', { public: true });
+  if (error && !error.message?.includes('already exists')) {
+    throw new Error(`Could not create receipt-images bucket: ${error.message}`);
+  }
+}
+
 async function uploadReceiptImage(userId, buffer, mimeType) {
-  const ext      = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
-  const path     = `${userId}/${Date.now()}.${ext}`;
+  await ensureReceiptImagesBucket();
+
+  const ext  = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+  const path = `${userId}/${Date.now()}.${ext}`;
   const { error } = await supabase.storage.from('receipt-images').upload(path, buffer, {
     contentType: mimeType,
     upsert: false,
