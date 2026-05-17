@@ -217,11 +217,18 @@ type Receipt = {
   id: string; store: string | null; date: string | null; total: number | null;
   currency: string; items: any[]; category: string | null;
   description: string | null; image_url: string | null; created_at: string;
+  receipt_category_id: string | null;
+};
+
+type ReceiptCategory = {
+  id: string; name: string; emoji: string; color: string;
 };
 
 const RECEIPT_EMOJI: Record<string, string> = {
   supermarkt: '🛒', restaurant: '🍽️', kleding: '👕', benzine: '⛽', apotheek: '💊', overig: '🧾',
 };
+
+const CAT_COLORS = ['#4A90D8','#E8734A','#4ECDC4','#9B59B6','#E74C3C','#27AE60','#F39C12','#1A1A1A'];
 
 function formatReceiptDate(iso: string | null) {
   if (!iso) return '';
@@ -240,6 +247,13 @@ export default function LijstenTab() {
   const [lists, setLists] = useState<(List & { item_count: number })[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [receiptCats, setReceiptCats] = useState<ReceiptCategory[]>([]);
+  const [selectedCatId, setSelectedCatId] = useState<string | null>(null);
+  const [catModalVisible, setCatModalVisible] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatEmoji, setNewCatEmoji] = useState('📁');
+  const [newCatColor, setNewCatColor] = useState(CAT_COLORS[0]);
+  const [assignModalReceipt, setAssignModalReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
@@ -284,11 +298,41 @@ export default function LijstenTab() {
   const fetchReceipts = useCallback(async () => {
     if (!user || user.id === 'dev') return;
     try {
-      const res = await fetch(`${API_BASE}/receipts/${user.id}`);
-      const data = await res.json();
-      if (Array.isArray(data)) setReceipts(data);
+      const [rRes, cRes] = await Promise.all([
+        fetch(`${API_BASE}/receipts/${user.id}`),
+        fetch(`${API_BASE}/receipt-categories/${user.id}`),
+      ]);
+      const [rData, cData] = await Promise.all([rRes.json(), cRes.json()]);
+      if (Array.isArray(rData)) setReceipts(rData);
+      if (Array.isArray(cData)) setReceiptCats(cData);
     } catch {}
   }, [user]);
+
+  async function createReceiptCat() {
+    if (!newCatName.trim() || !user) return;
+    try {
+      const res = await fetch(`${API_BASE}/receipt-categories/${user.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCatName.trim(), emoji: newCatEmoji, color: newCatColor }),
+      });
+      const cat = await res.json();
+      setReceiptCats(prev => [...prev, cat]);
+      setNewCatName(''); setNewCatEmoji('📁'); setNewCatColor(CAT_COLORS[0]);
+      setCatModalVisible(false);
+    } catch {}
+  }
+
+  async function assignReceiptCat(receiptId: string, categoryId: string | null) {
+    if (!user) return;
+    await fetch(`${API_BASE}/receipt-categories/${user.id}/assign`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receipt_id: receiptId, category_id: categoryId }),
+    });
+    setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, receipt_category_id: categoryId } : r));
+    setAssignModalReceipt(null);
+  }
 
   useEffect(() => { if (settings.receipts_enabled) fetchReceipts(); }, [fetchReceipts, settings.receipts_enabled]);
 
@@ -464,63 +508,223 @@ export default function LijstenTab() {
       )}
 
       {/* Receipts view */}
-      {activeTab === 'receipts' && (
-        receipts.length === 0 ? (
-          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
-            <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="receipt-outline" size={32} color={colors.gray400} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.black }]}>Geen bonnetjes</Text>
-            <Text style={[styles.emptyText, { color: colors.gray400 }]}>
-              Stuur een foto van een kassabon via WhatsApp.
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={receipts}
-            keyExtractor={r => r.id}
-            contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
-            style={{ backgroundColor: colors.offWhite }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReceipts().then(() => setRefreshing(false)); }} tintColor={Colors.yellow} />}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, overflow: 'hidden' }, Shadow.card]}
-                activeOpacity={0.85}
-                onLongPress={() => Alert.alert('Verwijderen?', item.store ?? 'Dit bonnetje', [
-                  { text: 'Annuleer', style: 'cancel' },
-                  { text: 'Verwijder', style: 'destructive', onPress: async () => {
-                    await fetch(`${API_BASE}/receipts/${user?.id}/${item.id}`, { method: 'DELETE' });
-                    setReceipts(prev => prev.filter(r => r.id !== item.id));
-                  }},
-                ])}
-              >
-                {item.image_url && <Image source={{ uri: item.image_url }} style={{ width: '100%', height: 130 }} resizeMode="cover" />}
-                <View style={{ padding: 14 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Text style={{ fontSize: 22 }}>{RECEIPT_EMOJI[item.category ?? ''] ?? '🧾'}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }} numberOfLines={1}>
-                        {item.store ?? 'Onbekende winkel'}
-                      </Text>
-                      {item.date && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, marginTop: 1 }}>{formatReceiptDate(item.date)}</Text>}
-                    </View>
-                    {item.total != null && (
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>
-                        €{Number(item.total).toFixed(2)}
-                      </Text>
-                    )}
-                  </View>
-                  {item.description && (
-                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, marginTop: 6 }} numberOfLines={2}>
-                      {item.description}
-                    </Text>
-                  )}
+      {activeTab === 'receipts' && (() => {
+        const filteredReceipts = selectedCatId
+          ? receipts.filter(r => r.receipt_category_id === selectedCatId)
+          : receipts;
+        const catTotal = filteredReceipts.reduce((s, r) => s + (r.total ?? 0), 0);
+        const activeCat = receiptCats.find(c => c.id === selectedCatId);
+
+        return (
+          <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
+            {/* Category + PDF bar */}
+            <View style={{ paddingVertical: 10, backgroundColor: colors.offWhite }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
+                {/* All chip */}
+                <TouchableOpacity
+                  onPress={() => setSelectedCatId(null)}
+                  style={[rStyles.chip, { backgroundColor: !selectedCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
+                >
+                  <Text style={[rStyles.chipText, { color: !selectedCatId ? colors.white : colors.gray400 }]}>Alle</Text>
+                </TouchableOpacity>
+                {/* Category chips */}
+                {receiptCats.map(cat => (
+                  <TouchableOpacity
+                    key={cat.id}
+                    onPress={() => setSelectedCatId(selectedCatId === cat.id ? null : cat.id)}
+                    onLongPress={() => Alert.alert(`${cat.emoji} ${cat.name}`, 'Categorie verwijderen?', [
+                      { text: 'Annuleer', style: 'cancel' },
+                      { text: 'Verwijder', style: 'destructive', onPress: async () => {
+                        await fetch(`${API_BASE}/receipt-categories/${user?.id}/${cat.id}`, { method: 'DELETE' });
+                        setReceiptCats(prev => prev.filter(c => c.id !== cat.id));
+                        if (selectedCatId === cat.id) setSelectedCatId(null);
+                      }},
+                    ])}
+                    style={[rStyles.chip, { backgroundColor: selectedCatId === cat.id ? cat.color : colors.white, borderColor: selectedCatId === cat.id ? cat.color : colors.gray200 }]}
+                  >
+                    <Text style={{ fontSize: 13 }}>{cat.emoji}</Text>
+                    <Text style={[rStyles.chipText, { color: selectedCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                {/* Add category */}
+                <TouchableOpacity
+                  onPress={() => setCatModalVisible(true)}
+                  style={[rStyles.chip, { backgroundColor: colors.white, borderColor: colors.gray200, borderStyle: 'dashed' }]}
+                >
+                  <Ionicons name="add" size={15} color={colors.gray400} />
+                  <Text style={[rStyles.chipText, { color: colors.gray400 }]}>Nieuw</Text>
+                </TouchableOpacity>
+                {/* PDF export */}
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(`${API_BASE}/receipts/${user?.id}/export.pdf`)}
+                  style={[rStyles.chip, { backgroundColor: Colors.yellow, borderColor: Colors.yellow }]}
+                >
+                  <Ionicons name="download-outline" size={14} color={Colors.black} />
+                  <Text style={[rStyles.chipText, { color: Colors.black }]}>PDF</Text>
+                </TouchableOpacity>
+              </ScrollView>
+              {/* Category total */}
+              {selectedCatId && (
+                <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400 }}>
+                    {filteredReceipts.length} bonnetjes · totaal <Text style={{ fontFamily: 'Inter_700Bold', color: colors.black }}>€{catTotal.toFixed(2)}</Text>
+                  </Text>
                 </View>
-              </TouchableOpacity>
+              )}
+            </View>
+
+            {filteredReceipts.length === 0 ? (
+              <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
+                <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
+                  <Ionicons name="receipt-outline" size={32} color={colors.gray400} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.black }]}>
+                  {selectedCatId ? `Geen bonnetjes in ${activeCat?.name}` : 'Geen bonnetjes'}
+                </Text>
+                <Text style={[styles.emptyText, { color: colors.gray400 }]}>
+                  Stuur een foto van een kassabon via WhatsApp.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredReceipts}
+                keyExtractor={r => r.id}
+                contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
+                style={{ backgroundColor: colors.offWhite }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReceipts().then(() => setRefreshing(false)); }} tintColor={Colors.yellow} />}
+                renderItem={({ item }) => {
+                  const itemCat = receiptCats.find(c => c.id === item.receipt_category_id);
+                  return (
+                    <TouchableOpacity
+                      style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, overflow: 'hidden' }, Shadow.card]}
+                      activeOpacity={0.85}
+                      onPress={() => setAssignModalReceipt(item)}
+                      onLongPress={() => Alert.alert('Verwijderen?', item.store ?? 'Dit bonnetje', [
+                        { text: 'Annuleer', style: 'cancel' },
+                        { text: 'Verwijder', style: 'destructive', onPress: async () => {
+                          await fetch(`${API_BASE}/receipts/${user?.id}/${item.id}`, { method: 'DELETE' });
+                          setReceipts(prev => prev.filter(r => r.id !== item.id));
+                        }},
+                      ])}
+                    >
+                      {itemCat && <View style={{ height: 4, backgroundColor: itemCat.color }} />}
+                      {item.image_url && <Image source={{ uri: item.image_url }} style={{ width: '100%', height: 130 }} resizeMode="cover" />}
+                      <View style={{ padding: 14 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                          <Text style={{ fontSize: 22 }}>{RECEIPT_EMOJI[item.category ?? ''] ?? '🧾'}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }} numberOfLines={1}>
+                              {item.store ?? 'Onbekende winkel'}
+                            </Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              {item.date && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400 }}>{formatReceiptDate(item.date)}</Text>}
+                              {itemCat && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: itemCat.color }}>{itemCat.emoji} {itemCat.name}</Text>}
+                            </View>
+                          </View>
+                          {item.total != null && (
+                            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>
+                              €{Number(item.total).toFixed(2)}
+                            </Text>
+                          )}
+                        </View>
+                        {item.description && (
+                          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, marginTop: 6 }} numberOfLines={2}>
+                            {item.description}
+                          </Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
             )}
-          />
-        )
-      )}
+          </View>
+        );
+      })()}
+
+      {/* Assign category modal */}
+      <Modal visible={!!assignModalReceipt} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAssignModalReceipt(null)}>
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setAssignModalReceipt(null)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Ionicons name="close" size={18} color={colors.black} />
+            </TouchableOpacity>
+            <Text style={[styles.modalDate, { color: colors.black, fontFamily: 'Inter_700Bold', fontSize: 15 }]}>Categorie kiezen</Text>
+            <View style={{ width: 34 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 10 }}>
+            <TouchableOpacity
+              onPress={() => assignReceiptCat(assignModalReceipt!.id, null)}
+              style={[rStyles.assignRow, { backgroundColor: colors.offWhite }, !assignModalReceipt?.receipt_category_id && { borderWidth: 2, borderColor: Colors.yellow }]}
+            >
+              <Text style={{ fontSize: 20 }}>🧾</Text>
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: colors.black, flex: 1 }}>Geen categorie</Text>
+              {!assignModalReceipt?.receipt_category_id && <Ionicons name="checkmark-circle" size={20} color={Colors.yellow} />}
+            </TouchableOpacity>
+            {receiptCats.map(cat => (
+              <TouchableOpacity
+                key={cat.id}
+                onPress={() => assignReceiptCat(assignModalReceipt!.id, cat.id)}
+                style={[rStyles.assignRow, { backgroundColor: colors.offWhite }, assignModalReceipt?.receipt_category_id === cat.id && { borderWidth: 2, borderColor: cat.color }]}
+              >
+                <Text style={{ fontSize: 20 }}>{cat.emoji}</Text>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: colors.black, flex: 1 }}>{cat.name}</Text>
+                {assignModalReceipt?.receipt_category_id === cat.id && <Ionicons name="checkmark-circle" size={20} color={cat.color} />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => { setAssignModalReceipt(null); setCatModalVisible(true); }} style={[rStyles.assignRow, { backgroundColor: colors.offWhite, borderStyle: 'dashed', borderWidth: 1, borderColor: colors.gray200 }]}>
+              <Ionicons name="add-circle-outline" size={20} color={colors.gray400} />
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.gray400 }}>Nieuwe categorie aanmaken</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* New category modal */}
+      <Modal visible={catModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCatModalVisible(false)}>
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setCatModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400 }}>Annuleer</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalDate, { color: colors.black, fontFamily: 'Inter_700Bold', fontSize: 15 }]}>Nieuwe categorie</Text>
+            <TouchableOpacity onPress={createReceiptCat} style={[styles.closeBtn, { backgroundColor: Colors.yellow, opacity: newCatName.trim() ? 1 : 0.4 }]}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black }}>Opslaan</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 24, gap: 20 }}>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Naam</Text>
+              <TextInput
+                style={[styles.modalBody, { borderWidth: 1, borderColor: colors.gray200, borderRadius: Radius.md, padding: 14, color: colors.black, backgroundColor: colors.offWhite, fontFamily: 'Inter_400Regular', fontSize: 16 }]}
+                value={newCatName}
+                onChangeText={setNewCatName}
+                placeholder="Bijv. Zweden, Werk, Thuis..."
+                placeholderTextColor={colors.gray400}
+                autoFocus
+                selectionColor={Colors.yellow}
+              />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Emoji</Text>
+              <TextInput
+                style={[styles.modalBody, { borderWidth: 1, borderColor: colors.gray200, borderRadius: Radius.md, padding: 14, color: colors.black, backgroundColor: colors.offWhite, fontFamily: 'Inter_400Regular', fontSize: 24 }]}
+                value={newCatEmoji}
+                onChangeText={t => { const chars = [...t]; setNewCatEmoji(chars[chars.length - 1] ?? '📁'); }}
+                selectionColor={Colors.yellow}
+              />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Kleur</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {CAT_COLORS.map(c => (
+                  <TouchableOpacity key={c} onPress={() => setNewCatColor(c)} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: c, borderWidth: newCatColor === c ? 3 : 0, borderColor: colors.black }} />
+                ))}
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
       {/* Note detail modal */}
       <Modal visible={!!selectedNote} animationType="slide" presentationStyle="pageSheet">
@@ -543,6 +747,12 @@ export default function LijstenTab() {
     </View>
   );
 }
+
+const rStyles = StyleSheet.create({
+  chip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#E0E0E0' },
+  chipText:  { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  assignRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
