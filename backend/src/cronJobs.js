@@ -6,6 +6,7 @@ const caldav       = require('./caldav');
 const { sendMessage } = require('./whatsapp');
 const { sendWeeklySuggestions } = require('./suggestions');
 const { buildContextForAllUsers } = require('./contextBuilder');
+const { syncUserCalendar } = require('./calendarSyncCore');
 
 // ── Weekly Digest — every Monday at 09:00 ─────────────────────────────────────
 
@@ -212,46 +213,27 @@ cron.schedule('*/15 * * * *', async () => {
   }
 });
 
-// ── CalDAV Inbound Sync — every 15 minutes ───────────────────────────────────
-// Polls Radicale for events added directly in iPhone Calendar and imports them
+// ── CalDAV Bi-directional Sync — every 5 minutes ─────────────────────────────
 
-cron.schedule('*/15 * * * *', async () => {
+cron.schedule('*/5 * * * *', async () => {
   if (!caldav.isConfigured()) return;
 
   let users;
   try {
     users = await db.getUsersWithCalDAV();
   } catch (err) {
-    console.error('[CalDAV Inbound] Failed to fetch users:', err.message);
+    console.error('[CalDAV Sync] Failed to fetch users:', err.message);
     return;
   }
 
   for (const user of users) {
     try {
-      const knownUids = await db.getCalDAVUidsByUser(user.id);
-      let imported = 0;
-
-      for (const cal of caldav.CALENDARS) {
-        const events = await caldav.listCalendarEvents(user.caldav_username, user.caldav_password, cal.id);
-
-        for (const { href, uid } of events) {
-          if (knownUids.has(uid)) continue; // already in Supabase
-
-          const ics = await caldav.getEventIcal(user.caldav_username, user.caldav_password, href);
-          const parsed = caldav.parseIcal(ics);
-          if (!parsed || !parsed.date) continue;
-
-          await db.createEventFromCalDAV(user.id, { ...parsed, calendar_stream: cal.stream });
-          knownUids.add(uid); // prevent duplicate import across cals
-          imported++;
-        }
-      }
-
-      if (imported > 0) {
-        console.log(`[CalDAV Inbound] Imported ${imported} new event(s) for user ${user.id}`);
+      const { imported, deleted, updated } = await syncUserCalendar(user);
+      if (imported > 0 || deleted > 0) {
+        console.log(`[CalDAV Sync] user ${user.id}: +${imported} imported, -${deleted} deleted, ~${updated} checked`);
       }
     } catch (err) {
-      console.error(`[CalDAV Inbound] Failed for user ${user.id}:`, err.message);
+      console.error(`[CalDAV Sync] Failed for user ${user.id}:`, err.message);
     }
   }
 });
@@ -271,4 +253,4 @@ function start() {
   console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit reminders hourly | event reminders daily 08:00 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | keepalive every 13min');
 }
 
-module.exports = { start };
+module.exports = { start, syncUserCalendar };

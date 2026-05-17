@@ -637,6 +637,27 @@ async function getCalDAVUidsByUser(userId) {
   return new Set((data ?? []).map(e => e.caldav_uid));
 }
 
+async function getEventsWithCalDAVUid(userId) {
+  const { data } = await supabase
+    .from('events')
+    .select('id, caldav_uid')
+    .eq('user_id', userId)
+    .not('caldav_uid', 'is', null);
+  return data ?? [];
+}
+
+async function deleteEventsByIds(userId, ids) {
+  if (!ids.length) return;
+  await supabase.from('events').delete().eq('user_id', userId).in('id', ids);
+}
+
+async function updateEventFromCalDAV(userId, caldavUid, { title, date, time }) {
+  await supabase.from('events')
+    .update({ title, date, time: time ?? null })
+    .eq('caldav_uid', caldavUid)
+    .eq('user_id', userId);
+}
+
 async function createEventFromCalDAV(userId, { uid, title, date, time, calendar_stream }) {
   const { error } = await supabase.from('events').insert({
     user_id: userId,
@@ -803,6 +824,9 @@ module.exports = {
   markGeoAlertSent,
   getUsersWithCalDAV,
   getCalDAVUidsByUser,
+  getEventsWithCalDAVUid,
+  deleteEventsByIds,
+  updateEventFromCalDAV,
   createEventFromCalDAV,
   getCalendarStreams,
   createCalendarStream,
