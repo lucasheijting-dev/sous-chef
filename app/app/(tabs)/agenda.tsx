@@ -186,7 +186,7 @@ function AgendaLite() {
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
         <Text style={s.bannerTitle}>Vandaag</Text>
-        <Text style={s.bannerSub}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
+        <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: '#888', marginTop: 2 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
         {loading ? (
@@ -338,18 +338,23 @@ export default function AgendaTab() {
           <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
           <View style={s.bannerRow}>
-            <View>
-              <Text style={s.bannerTitle}>Agenda</Text>
-              <Text style={s.bannerSub}>
-                {viewMode === 'calendar'
-                  ? 'Kalenderoverzicht'
-                  : thisWeekCount > 0 ? `${thisWeekCount} deze week` : upcomingCount > 0 ? `${upcomingCount} aankomend` : 'Niets gepland'}
-              </Text>
-            </View>
+            <Text style={s.bannerTitle}>Agenda</Text>
             <TouchableOpacity style={s.icalBtn} onPress={() => Linking.openURL(`webcal://sous-chef-pckg.onrender.com/calendar/${user?.id}.ics`)}>
               <Text style={s.icalBtnText}>Abonneren</Text>
             </TouchableOpacity>
           </View>
+          {viewMode === 'list' && (
+            <View style={s.bannerStats}>
+              <View style={s.statTile}>
+                <Text style={s.statNum}>{thisWeekCount}</Text>
+                <Text style={s.statLabel}>deze week</Text>
+              </View>
+              <View style={[s.statTile, s.statTileAccent]}>
+                <Text style={[s.statNum, { color: Colors.black }]}>{upcomingCount}</Text>
+                <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>aankomend</Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Filter pills */}
@@ -379,24 +384,22 @@ export default function AgendaTab() {
 
         {/* View mode toggle */}
         <View style={[s.toggleWrap, { backgroundColor: colors.offWhite }]}>
-          <View style={[s.toggle, { backgroundColor: colors.gray100 }]}>
-            <TouchableOpacity style={[s.toggleBtn, viewMode === 'list' && s.toggleBtnActive]} onPress={() => setViewMode('list')}>
-              <Ionicons name="list-outline" size={17} color={viewMode === 'list' ? Colors.white : colors.gray400} />
-              <Text style={[s.toggleLabel, { color: colors.gray400 }, viewMode === 'list' && s.toggleLabelActive]}>Lijst</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.toggleBtn, viewMode === 'calendar' && s.toggleBtnActive]}
-              onPress={() => {
-                setViewMode('calendar');
-                panelCurrent.current = PANEL_COLLAPSED;
-                panelHeight.setValue(PANEL_COLLAPSED);
-                setTimeout(() => monthsRef.current?.scrollToIndex({ index: MONTHS_BEFORE, animated: false }), 80);
-              }}
-            >
-              <Ionicons name="calendar-outline" size={17} color={viewMode === 'calendar' ? Colors.white : colors.gray400} />
-              <Text style={[s.toggleLabel, { color: colors.gray400 }, viewMode === 'calendar' && s.toggleLabelActive]}>Kalender</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={s.tabTextBtn} onPress={() => setViewMode('list')}>
+            <Text style={[s.tabTextLabel, { color: viewMode === 'list' ? colors.black : colors.gray400 }]}>Lijst</Text>
+            {viewMode === 'list' && <View style={[s.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.tabTextBtn}
+            onPress={() => {
+              setViewMode('calendar');
+              panelCurrent.current = PANEL_COLLAPSED;
+              panelHeight.setValue(PANEL_COLLAPSED);
+              setTimeout(() => monthsRef.current?.scrollToIndex({ index: MONTHS_BEFORE, animated: false }), 80);
+            }}
+          >
+            <Text style={[s.tabTextLabel, { color: viewMode === 'calendar' ? colors.black : colors.gray400 }]}>Kalender</Text>
+            {viewMode === 'calendar' && <View style={[s.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -566,11 +569,15 @@ const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.offWhite },
   center:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  banner:      { paddingHorizontal: 24, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', marginBottom: 12 },
-  bannerRow:   { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  banner:      { paddingHorizontal: 24, paddingBottom: 24, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', marginBottom: 12 },
+  bannerRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 32, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
-  bannerSub:   { fontFamily: 'Inter_300Light', fontSize: 13, color: '#888', marginTop: 2 },
-  icalBtn:     { paddingHorizontal: 14, paddingVertical: 8, marginTop: 6, backgroundColor: '#FFFFFF12', borderRadius: Radius.pill, borderWidth: 1, borderColor: '#FFFFFF20' },
+  bannerStats: { flexDirection: 'row', gap: 10 },
+  statTile: { paddingHorizontal: 18, paddingVertical: 12, backgroundColor: '#FFFFFF12', borderRadius: Radius.md, borderWidth: 1, borderColor: '#FFFFFF18', minWidth: 90 },
+  statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
+  statNum: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.white, letterSpacing: -0.5 },
+  statLabel: { fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 1 },
+  icalBtn:     { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#FFFFFF12', borderRadius: Radius.pill, borderWidth: 1, borderColor: '#FFFFFF20' },
   icalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow },
 
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' },
@@ -580,18 +587,10 @@ const s = StyleSheet.create({
   pillTextActive: { color: Colors.white },
   unlinkBtn: { padding: 7 },
 
-  toggleWrap: { paddingHorizontal: 16, paddingBottom: 12 },
-  toggle: {
-    flexDirection: 'row', backgroundColor: Colors.gray100,
-    borderRadius: 12, padding: 4, alignSelf: 'stretch',
-  },
-  toggleBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 9, borderRadius: 10,
-  },
-  toggleBtnActive: { backgroundColor: Colors.black },
-  toggleLabel:     { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: Colors.gray400 },
-  toggleLabelActive: { color: Colors.white },
+  toggleWrap: { flexDirection: 'row', paddingHorizontal: 24, paddingBottom: 12, gap: 20 },
+  tabTextBtn: { alignItems: 'center', paddingBottom: 8 },
+  tabTextLabel: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3 },
+  tabTextUnderline: { height: 3, width: '100%', borderRadius: 2, marginTop: 4 },
 
   permBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: Colors.yellowLight, marginHorizontal: 16, marginBottom: 8, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 11 },
   permText:   { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 13, color: Colors.black },

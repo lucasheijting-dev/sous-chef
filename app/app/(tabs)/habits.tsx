@@ -617,16 +617,22 @@ export default function HabitsTab() {
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
 
           <View style={s.bannerTop}>
-            <View style={{ flex: 1 }}>
-              {/* Improvement #4: trophy emoji when all done */}
-              <Text style={s.bannerTitle}>{allDoneToday ? '🏆 Habits' : 'Habits'}</Text>
-              {/* Improvement #1: motivational subtitle */}
-              {bannerSubtitle ? <Text style={s.bannerSubtitle}>{bannerSubtitle}</Text> : null}
+            <Text style={s.bannerTitle}>{allDoneToday ? '🏆 Habits' : 'Habits'}</Text>
+          </View>
+          <View style={s.bannerStats}>
+            <View style={s.statTile}>
+              <Text style={s.statNum}>{habits.length}</Text>
+              <Text style={s.statLabel}>{habits.length === 1 ? 'habit' : 'habits'}</Text>
             </View>
-            {/* Improvement #3: weekly score pill */}
             {weekScore > 0 && (
-              <View style={s.scorePill}>
-                <Text style={s.scorePillText}>⭐ {weekScore} pts</Text>
+              <View style={[s.statTile, s.statTileAccent]}>
+                <Text style={[s.statNum, { color: Colors.black }]}>⭐ {weekScore}</Text>
+                <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>punten deze week</Text>
+              </View>
+            )}
+            {bannerSubtitle && weekScore === 0 && (
+              <View style={s.statTile}>
+                <Text style={[s.statLabel, { color: Colors.yellow, fontSize: 13 }]}>{bannerSubtitle}</Text>
               </View>
             )}
           </View>
@@ -844,13 +850,13 @@ const s = StyleSheet.create({
 
   // Banner
   banner: { paddingHorizontal: 20, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
-  bannerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
+  bannerTop: { marginBottom: 10 },
   bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 28, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
-  bannerSubtitle: { fontFamily: 'Inter_300Light', fontSize: 13, color: Colors.yellow, marginTop: 3 },
-
-  // Improvement #3: score pill
-  scorePill: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', marginTop: 4 },
-  scorePillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow },
+  bannerStats: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  statTile: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#FFFFFF12', borderRadius: Radius.md, borderWidth: 1, borderColor: '#FFFFFF18', minWidth: 80 },
+  statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
+  statNum: { fontFamily: 'Inter_700Bold', fontSize: 20, color: Colors.white, letterSpacing: -0.5 },
+  statLabel: { fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 1 },
 
   // Improvement #2: progress bar
   progressBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
