@@ -8,6 +8,7 @@ import {
 } from '@expo-google-fonts/inter';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Updates from 'expo-updates';
 import 'react-native-reanimated';
 
 import '@/lib/geoAlert'; // registers background task before any component renders
@@ -64,6 +65,19 @@ function AuthGate() {
   return null;
 }
 
+async function checkForOTAUpdate() {
+  if (__DEV__) return;
+  try {
+    const update = await Updates.checkForUpdateAsync();
+    if (update.isAvailable) {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    }
+  } catch {
+    // silent — no network or not an EAS build
+  }
+}
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     Inter_300Light,
@@ -72,6 +86,7 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  useEffect(() => { checkForOTAUpdate(); }, []);
   useEffect(() => { if (error) throw error; }, [error]);
   useEffect(() => { if (loaded) SplashScreen.hideAsync(); }, [loaded]);
 
