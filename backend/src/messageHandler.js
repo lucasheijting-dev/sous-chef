@@ -612,7 +612,9 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           birthdayInfo = { title: evTitle, date: ev.date };
         }
 
-        const streamLabel = { appointments: 'Afspraak', birthdays: 'Verjaardag', work: 'Werkafspraak', personal: 'Ingepland' }[stream] ?? 'Ingepland';
+        const builtinLabel = { appointments: 'Afspraak', birthdays: 'Verjaardag', work: 'Werkafspraak', personal: 'Ingepland' }[stream];
+        const customStream = !builtinLabel ? calendarStreams.find(s => s.claude_key === stream) : null;
+        const streamLabel  = builtinLabel ?? customStream?.name ?? 'Ingepland';
         const timeStr     = ev.time ? ` om ${ev.time}` : '';
         const dateStr     = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
         const recurStr    = ev.recurrence === 'yearly' ? ' _(jaarlijks)_'

@@ -130,7 +130,7 @@ async function deleteEvent(username, password, calendarStream, uid) {
 
 function streamToCalendarId(stream) {
   const cal = CALENDARS.find(c => c.stream === stream);
-  return cal?.id ?? 'personal';
+  return cal?.id ?? stream; // custom streams: caldav_id === claude_key, pass through directly
 }
 
 function buildIcal(event, uid, reminderMinutesBefore = null) {
