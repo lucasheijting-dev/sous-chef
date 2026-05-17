@@ -33,17 +33,17 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onre
 
 // ── Lists ──────────────────────────────────────────────────────────────────────
 
-// Alternating accent colors per card — yellow, near-black, warm slate, deep indigo
-const TILE_ACCENTS = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
-const TILE_EMOJI_COLORS = ['#0A0A0A', '#FCC10C', '#FFFFFF', '#FFFFFF'];
+// Full-card solid colors — text color adapts per background
+const TILE_ACCENTS  = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
+const TILE_TEXT_FG  = ['#0A0A0A', '#FFFFFF',  '#FFFFFF',  '#FFFFFF'];
 
-function AnimatedCard({ item, index, onPress, colors }: { item: List & { item_count: number }; index: number; onPress: () => void; colors: any }) {
+function AnimatedCard({ item, index, onPress }: { item: List & { item_count: number }; index: number; onPress: () => void; colors: any }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const accent = TILE_ACCENTS[index % TILE_ACCENTS.length];
-  const emojiTint = TILE_EMOJI_COLORS[index % TILE_EMOJI_COLORS.length];
+  const bg  = TILE_ACCENTS[index % TILE_ACCENTS.length];
+  const fg  = TILE_TEXT_FG[index % TILE_TEXT_FG.length];
 
   useEffect(() => {
     Animated.parallel([
@@ -60,23 +60,21 @@ function AnimatedCard({ item, index, onPress, colors }: { item: List & { item_co
         onPress={onPress}
         onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.tile, { backgroundColor: colors.white }]}
+        style={[styles.tile, { backgroundColor: bg }]}
       >
-        {/* Colored top section */}
-        <View style={[styles.tileTop, { backgroundColor: accent }]}>
-          <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
-          {typeLabel && (
-            <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.18)' }]}>
-              <Text style={[styles.typeBadgeText, { color: emojiTint === '#FCC10C' ? '#FCC10C' : 'rgba(255,255,255,0.85)' }]}>{typeLabel}</Text>
-            </View>
-          )}
-        </View>
-        {/* Bottom info */}
+        <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
         <View style={styles.tileBottom}>
-          <Text style={[styles.tileName, { color: colors.black }]} numberOfLines={2}>{item.name}</Text>
-          <Text style={[styles.tileCount, { color: colors.gray400 }]}>
-            {item.item_count} {item.item_count === 1 ? 'item' : 'items'}
-          </Text>
+          <Text style={[styles.tileName, { color: fg }]} numberOfLines={2}>{item.name}</Text>
+          <View style={styles.tileCountRow}>
+            <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>
+              {item.item_count} {item.item_count === 1 ? 'item' : 'items'}
+            </Text>
+            {typeLabel && (
+              <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
+                <Text style={[styles.typeBadgeText, { color: fg }]}>{typeLabel}</Text>
+              </View>
+            )}
+          </View>
         </View>
       </Pressable>
     </Animated.View>
@@ -479,17 +477,14 @@ const styles = StyleSheet.create({
   tileGrid: { padding: 16, paddingBottom: 120 },
   tileRow: { gap: 12, marginBottom: 12 },
   tileWrap: { flex: 1 },
-  tile: { flex: 1, borderRadius: Radius.xl, overflow: 'hidden', ...Shadow.card },
-  tileTop: { height: 110, justifyContent: 'center', alignItems: 'center', position: 'relative' },
-  tileEmoji: { fontSize: 40 },
-  typeBadge: {
-    position: 'absolute', bottom: 10, right: 10,
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill,
-  },
+  tile: { flex: 1, borderRadius: Radius.xl, overflow: 'hidden', padding: 18, minHeight: 150, justifyContent: 'space-between', ...Shadow.card },
+  tileEmoji: { fontSize: 26, marginBottom: 12 },
+  tileBottom: {},
+  tileName: { fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: -0.2, marginBottom: 6 },
+  tileCountRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tileCount: { fontFamily: 'Inter_400Regular', fontSize: 12 },
+  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.pill },
   typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.3 },
-  tileBottom: { padding: 14, paddingTop: 12 },
-  tileName: { fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: -0.2, marginBottom: 4 },
-  tileCount: { fontFamily: 'Inter_300Light', fontSize: 12 },
 
   noteGrid: { padding: 20, paddingBottom: 120 },
   noteRow: { gap: 10, marginBottom: 10 },
