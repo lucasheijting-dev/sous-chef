@@ -769,13 +769,20 @@ export default function InstellingenTab() {
                 }}
                 activeOpacity={0.7}
               >
-                <Ionicons name={showCaldavCreds ? 'eye-off-outline' : 'eye-outline'} size={16} color={colors.gray400} />
-                <Text style={[styles.credToggleText, { color: colors.gray400 }]}>
-                  {showCaldavCreds ? 'Verberg inloggegevens' : 'Toon inloggegevens (voor wachtwoordprompt)'}
-                </Text>
+                <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                  <Ionicons name="key-outline" size={18} color={colors.black} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowLabel, { color: colors.black }]}>iPhone vraagt om een wachtwoord?</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.gray400 }]}>Tik om inloggegevens te bekijken en kopiëren</Text>
+                </View>
+                <Ionicons name={showCaldavCreds ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
               </TouchableOpacity>
               {showCaldavCreds && (
                 <View style={[styles.credBox, { backgroundColor: colors.offWhite }]}>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginBottom: 8 }}>
+                    Tik op een veld om het te kopiëren, plak het in het wachtwoordscherm van iOS.
+                  </Text>
                   <CredRow label="Server" value="caldav.sous-chef.nl" colors={colors} onCopy={copyToClipboard} />
                   <CredRow label="Gebruikersnaam" value={caldavCreds.username} colors={colors} onCopy={copyToClipboard} />
                   <CredRow label="Wachtwoord" value={caldavCreds.password} colors={colors} onCopy={copyToClipboard} />
