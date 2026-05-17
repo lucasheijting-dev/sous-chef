@@ -35,8 +35,8 @@ type MergedEvent = {
 };
 type Section  = { dateKey: string; label: string; isToday: boolean; isPast: boolean; data: MergedEvent[] };
 type FlatItem = { type: 'header'; section: Section } | { type: 'item'; item: MergedEvent; section: Section; isLast: boolean };
-type ViewMode = 'list' | 'calendar';
-type Filter   = 'all' | 'sous-chef' | 'phone';
+type ViewMode   = 'list' | 'calendar';
+type TimePeriod = 'today' | 'tomorrow' | 'week';
 
 const TODAY              = new Date().toISOString().split('T')[0];
 const SECTION_H          = 48;
@@ -232,10 +232,10 @@ export default function AgendaTab() {
   const listRef    = useRef<FlatList<FlatItem>>(null);
   const monthsRef  = useRef<FlatList>(null);
 
-  const [allSections, setAllSections]     = useState<Section[]>([]);
-  const [showPast, setShowPast]           = useState(false);
-  const [filter, setFilter]               = useState<Filter>('all');
-  const [loading, setLoading]             = useState(true);
+  const [allSections, setAllSections]   = useState<Section[]>([]);
+  const [timePeriod, setTimePeriod]     = useState<TimePeriod>('today');
+  const [streamFilter, setStreamFilter] = useState<string | null>(null);
+  const [loading, setLoading]           = useState(true);
   const [refreshing, setRefreshing]       = useState(false);
   const [calPermission, setCalPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   const [calHidden, setCalHidden]         = useState(false);
@@ -311,10 +311,20 @@ export default function AgendaTab() {
   const phoneConnected = calPermission === 'granted' && !calHidden;
 
   const sections = useMemo(() => {
-    const base = showPast ? allSections : allSections.filter(s => !s.isPast);
-    if (filter === 'all') return base;
-    return base.map(s => ({ ...s, data: s.data.filter(e => e.source === filter) })).filter(s => s.data.length > 0);
-  }, [allSections, showPast, filter]);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
+    const ranges: Record<TimePeriod, [string, string]> = {
+      today:    [offsetDay(0), offsetDay(0)],
+      tomorrow: [offsetDay(1), offsetDay(1)],
+      week:     [offsetDay(2), offsetDay(8)],
+    };
+    const [start, end] = ranges[timePeriod];
+    let base = allSections.filter(s => s.dateKey >= start && s.dateKey <= end);
+    if (streamFilter) {
+      base = base.map(s => ({ ...s, data: s.data.filter(e => e.calendar_stream === streamFilter || (streamFilter === '__phone' && e.source === 'phone')) })).filter(s => s.data.length > 0);
+    }
+    return base;
+  }, [allSections, timePeriod, streamFilter]);
 
   const { flatData, stickyIndices } = useMemo(() => {
     const items: FlatItem[] = []; const sticky: number[] = [];
@@ -326,7 +336,6 @@ export default function AgendaTab() {
     return { flatData: items, stickyIndices: sticky };
   }, [sections]);
 
-  const pastCount     = allSections.filter(s => s.isPast).reduce((n, s) => n + s.data.length, 0);
   const upcomingCount = allSections.filter(s => !s.isPast).reduce((n, s) => n + s.data.length, 0);
   const thisWeekCount = allSections.filter(s => !s.isPast && Math.round((new Date(s.dateKey + 'T00:00:00').getTime() - new Date().setHours(0,0,0,0)) / 86400000) <= 7).reduce((n, s) => n + s.data.length, 0);
 
@@ -362,30 +371,33 @@ export default function AgendaTab() {
           )}
         </View>
 
-        {/* Filter pills */}
-        <View style={[s.filterRow, { backgroundColor: colors.offWhite }]}>
-          {(['all', 'sous-chef', 'phone'] as Filter[]).map(f => (
-            <TouchableOpacity key={f} style={[s.pill, { backgroundColor: colors.white, borderColor: colors.gray200 }, filter === f && s.pillActive]} onPress={() => setFilter(f)}>
-              <Text style={[s.pillText, { color: colors.gray400 }, filter === f && s.pillTextActive]}>
-                {f === 'all' ? 'Alles' : f === 'sous-chef' ? 'Sous-Chef' : 'iPhone'}
-              </Text>
+        {/* Time period pills */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: colors.offWhite }} contentContainerStyle={s.filterRow}>
+          {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['week', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
+            <TouchableOpacity key={p} style={[s.pill, { backgroundColor: colors.white, borderColor: colors.gray200 }, timePeriod === p && s.pillActive]} onPress={() => setTimePeriod(p)}>
+              <Text style={[s.pillText, { color: colors.gray400 }, timePeriod === p && s.pillTextActive]}>{label}</Text>
             </TouchableOpacity>
           ))}
-          {phoneConnected && (
-            <TouchableOpacity style={s.unlinkBtn} onPress={() =>
-              Alert.alert('iPhone ontkoppelen', '', [
-                { text: 'Annuleer', style: 'cancel' },
-                { text: 'Ontkoppel', style: 'destructive', onPress: () => { setCalHidden(true); fetchEvents(true); } },
-              ])}>
-              <Ionicons name="unlink-outline" size={13} color={Colors.gray400} />
+        </ScrollView>
+
+        {/* Stream category chips */}
+        {streams.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: colors.offWhite }} contentContainerStyle={[s.filterRow, { paddingTop: 0, marginTop: -4 }]}>
+            <TouchableOpacity style={[s.chip, { backgroundColor: colors.white, borderColor: colors.gray200 }, streamFilter === null && s.pillActive]} onPress={() => setStreamFilter(null)}>
+              <Text style={[s.pillText, { color: colors.gray400 }, streamFilter === null && s.pillTextActive]}>Alles</Text>
             </TouchableOpacity>
-          )}
-          {calHidden && (
-            <TouchableOpacity style={s.unlinkBtn} onPress={() => { setCalHidden(false); fetchEvents(false); }}>
-              <Ionicons name="link-outline" size={13} color={Colors.yellow} />
-            </TouchableOpacity>
-          )}
-        </View>
+            {streams.map(st => (
+              <TouchableOpacity key={st.id} style={[s.chip, { backgroundColor: colors.white, borderColor: streamFilter === st.claude_key ? st.color : colors.gray200, borderWidth: 1.5 }, streamFilter === st.claude_key && { backgroundColor: st.color + '22' }]} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}>
+                <Text style={[s.pillText, { color: streamFilter === st.claude_key ? st.color : colors.gray400 }]}>{st.emoji} {st.name}</Text>
+              </TouchableOpacity>
+            ))}
+            {phoneConnected && (
+              <TouchableOpacity style={[s.chip, { backgroundColor: colors.white, borderColor: streamFilter === '__phone' ? colors.black : colors.gray200 }, streamFilter === '__phone' && { backgroundColor: colors.gray100 }]} onPress={() => setStreamFilter(streamFilter === '__phone' ? null : '__phone')}>
+                <Text style={[s.pillText, { color: streamFilter === '__phone' ? colors.black : colors.gray400 }]}>📱 iPhone</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        )}
 
         {/* View mode toggle */}
         <View style={[s.toggleWrap, { backgroundColor: colors.offWhite }]}>
@@ -424,12 +436,6 @@ export default function AgendaTab() {
                   <Ionicons name="phone-portrait-outline" size={15} color={colors.black} />
                   <Text style={[s.permText, { color: colors.black }]}>Toon ook je iPhone-agenda</Text>
                   <Ionicons name="chevron-forward" size={13} color={colors.gray400} />
-                </TouchableOpacity>
-              )}
-              {pastCount > 0 && (
-                <TouchableOpacity style={s.pastToggle} onPress={() => setShowPast(p => !p)}>
-                  <Text style={[s.pastToggleText, { color: colors.gray400 }]}>{showPast ? 'Verberg verstreken' : `Toon ${pastCount} verstreken`}</Text>
-                  <Ionicons name={showPast ? 'chevron-up' : 'chevron-down'} size={13} color={colors.gray400} />
                 </TouchableOpacity>
               )}
               {sections.length === 0 && (
@@ -585,8 +591,9 @@ const s = StyleSheet.create({
   icalBtn:     { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#FFFFFF12', borderRadius: Radius.pill, borderWidth: 1, borderColor: '#FFFFFF20' },
   icalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow },
 
-  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, marginBottom: 10, flexWrap: 'wrap' },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
   pill:      { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.pill, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200 },
+  chip:      { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.gray200 },
   pillActive:     { backgroundColor: Colors.black, borderColor: Colors.black },
   pillText:       { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.gray400 },
   pillTextActive: { color: Colors.white },
