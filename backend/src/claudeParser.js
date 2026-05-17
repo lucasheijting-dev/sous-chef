@@ -67,6 +67,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 
 **Overig:**
 - **multi_action** — bericht bevat meerdere losse acties (bijv. "melk kopen en tandarts vrijdag"); vul actions[] in
+- **learn_context** — bericht geeft alleen context/info zonder actie (bijv. "Tom is mijn vriend"); vul context_fact + reply_text in
 - **setting_change** — instelling wijzigen
 - **greeting** — begroeting zonder actie
 - **clarification** — bericht is ambigu; stel één concrete vraag
@@ -265,6 +266,19 @@ boodschappen → 🛒, werk/taken → 💼, sport → 🏃, film/series → 🎬
 boeken → 📚, reizen → ✈️, koken → 🍳, gezondheid → 💊, cadeau → 🎁,
 school → 📖, thuis/klussen → 🔧, feest → 🎉
 
+## Geheugen — context_fact
+
+Wanneer de gebruiker iets vertelt over een persoon, bedrijf of relatie — ook terloops — vul dan **context_fact** in met een korte feitelijke zin. Voorbeelden:
+- "afspreken met Tom, hij is een vriend" → context_fact: "Tom is een vriend"
+- "vergadering bij ING, dat is mijn werk" → context_fact: "ING is Lucas zijn werkgever"
+- "tandarts bij Dr. Jansen" → context_fact: "Tandarts: Dr. Jansen"
+- "Tom is mijn vriend" (puur contextbericht) → category: learn_context + context_fact: "Tom is een vriend"
+- "dit is mijn moeder Lisa" → context_fact: "Lisa is de moeder van de gebruiker"
+
+Vul ook in als het een bijzin is naast een andere actie. Laat null als het gewoon een taak is zonder persoons- of relatieinfo.
+
+**category: learn_context** — gebruik dit als het bericht *alleen* context geeft zonder andere actie (bijv. "Tom is mijn collega", "mijn auto is een blauwe Volvo"). Vul reply_text in met een korte bevestiging.
+
 ## Zekerheid (confidence)
 
 - "high" — duidelijk
@@ -313,6 +327,7 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "list_type": null,
   "setting_key": null,
   "setting_value": null,
+  "context_fact": null,
   "reply_text": null,
   "clarification_question": null
 }

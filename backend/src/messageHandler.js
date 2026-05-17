@@ -166,6 +166,16 @@ async function handleMessage({ from, text }) {
     return;
   }
 
+  // Persist any context fact Claude extracted (works alongside any intent)
+  if (intent.context_fact) {
+    const existing = await db.getUserContext(userId);
+    const existingFacts = existing.split('\n').filter(l => !l.startsWith('Totaal berichten:'));
+    if (!existingFacts.some(f => f.toLowerCase() === intent.context_fact.toLowerCase())) {
+      const updated = [...existingFacts, intent.context_fact].filter(Boolean).join('\n');
+      db.updateUserContext(userId, updated).catch(() => {});
+    }
+  }
+
   const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from);
   if (!baseReply) return;
 
@@ -852,6 +862,9 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     }
 
     // ── Greeting (fallback via Claude) ───────────────────────────────────────
+
+    case 'learn_context':
+      return intent.reply_text ?? `✅ Onthouden: _${intent.context_fact}_`;
 
     case 'greeting':
       return intent.reply_text ?? 'Hoi! Waarmee kan ik je helpen? 🍳';
