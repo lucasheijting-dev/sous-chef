@@ -6,6 +6,7 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
+import { TitanOne_400Regular } from '@expo-google-fonts/titan-one';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
@@ -84,6 +85,7 @@ export default function RootLayout() {
     Inter_400Regular,
     Inter_600SemiBold,
     Inter_700Bold,
+    TitanOne_400Regular,
   });
 
   useEffect(() => { checkForOTAUpdate(); }, []);

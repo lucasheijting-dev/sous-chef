@@ -113,11 +113,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'TitanOne_400Regular',
     fontSize: 32,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: -0.8,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   subtitle: {
     fontFamily: 'Inter_300Light',

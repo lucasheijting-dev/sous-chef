@@ -667,8 +667,8 @@ const styles = StyleSheet.create({
   },
   logoBox: { width: 88, height: 88, borderRadius: 26, marginBottom: 8 },
   title: {
-    fontFamily: 'Inter_700Bold', fontSize: 34, color: Colors.white,
-    textAlign: 'center', letterSpacing: -1, lineHeight: 40,
+    fontFamily: 'TitanOne_400Regular', fontSize: 34, color: Colors.white,
+    textAlign: 'center', letterSpacing: 1, lineHeight: 40, textTransform: 'uppercase',
   },
   subtitle: {
     fontFamily: 'Inter_300Light', fontSize: 15, color: '#888',
@@ -682,8 +682,8 @@ const styles = StyleSheet.create({
   primaryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black },
 
   stepTitle: {
-    fontFamily: 'Inter_700Bold', fontSize: 28, color: Colors.white,
-    textAlign: 'center', letterSpacing: -0.5,
+    fontFamily: 'TitanOne_400Regular', fontSize: 28, color: Colors.white,
+    textAlign: 'center', letterSpacing: 1, textTransform: 'uppercase',
   },
   stepSub: {
     fontFamily: 'Inter_300Light', fontSize: 14, color: '#666',

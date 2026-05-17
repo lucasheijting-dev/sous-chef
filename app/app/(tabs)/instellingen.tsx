@@ -1089,7 +1089,7 @@ const styles = StyleSheet.create({
   avatarBox: { marginBottom: 14 },
   avatar: { width: 72, height: 72, borderRadius: 22 },
   nameTouchable: { alignItems: 'center', flexDirection: 'column', gap: 2 },
-  bannerName: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.white, letterSpacing: -0.3, marginBottom: 2 },
+  bannerName: { fontFamily: 'TitanOne_400Regular', fontSize: 22, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
   bannerSubtitle: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 2 },
   pencilIcon: { marginTop: 4 },
   bannerNumber: { fontFamily: 'Inter_300Light', fontSize: 14, color: '#888', marginTop: 6 },

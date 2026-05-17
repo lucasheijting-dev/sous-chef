@@ -568,7 +568,7 @@ const s = StyleSheet.create({
 
   banner:      { paddingHorizontal: 24, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', marginBottom: 12 },
   bannerRow:   { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  bannerTitle: { fontFamily: 'Inter_700Bold', fontSize: 32, color: Colors.white, letterSpacing: -1 },
+  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 32, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
   bannerSub:   { fontFamily: 'Inter_300Light', fontSize: 13, color: '#888', marginTop: 2 },
   icalBtn:     { paddingHorizontal: 14, paddingVertical: 8, marginTop: 6, backgroundColor: '#FFFFFF12', borderRadius: Radius.pill, borderWidth: 1, borderColor: '#FFFFFF20' },
   icalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow },

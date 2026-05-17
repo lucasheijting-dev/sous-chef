@@ -446,8 +446,8 @@ export default function LijstenTab() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   banner: { paddingHorizontal: 32, paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
-  bannerEyebrow: { fontFamily: 'Inter_300Light', fontSize: 13, color: '#666', marginBottom: 6 },
-  bannerTitle: { fontFamily: 'Inter_700Bold', fontSize: 32, color: Colors.white, letterSpacing: -1, marginBottom: 16 },
+  bannerEyebrow: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 6 },
+  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 32, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 },
   bannerStats: { flexDirection: 'row', gap: 10 },
   statPill: {
     flexDirection: 'row', alignItems: 'baseline', gap: 5,

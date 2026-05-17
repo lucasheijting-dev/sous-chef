@@ -845,7 +845,7 @@ const s = StyleSheet.create({
   // Banner
   banner: { paddingHorizontal: 20, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
   bannerTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
-  bannerTitle: { fontFamily: 'Inter_700Bold', fontSize: 28, color: Colors.white, letterSpacing: -0.5 },
+  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 28, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
   bannerSubtitle: { fontFamily: 'Inter_300Light', fontSize: 13, color: Colors.yellow, marginTop: 3 },
 
   // Improvement #3: score pill
