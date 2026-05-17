@@ -201,10 +201,15 @@ Verwijzingen ("hem", "die", "het", "dat ook") → los op via conversatiegeschied
 
 ## Agenda-kalenders (calendar_stream)
 
+Gebruik de beschikbare kalender-streams van de gebruiker (zie ## Beschikbare kalenders onderaan). Kies de claude_key van de best passende kalender.
+
+Standaard fallback als geen aangepaste kalenders beschikbaar zijn:
 - **appointments** — dokter, tandarts, kapper, bezorging, afspraken met mensen
 - **birthdays** — verjaardagen, jubilea (+ event_recurrence="yearly")
 - **work** — vergadering, meeting, deadline, werkafspraak, zakelijk
 - **personal** — sport, hobby, reizen, privé — standaard
+
+**Kies de best passende kalender op basis van de naam, emoji en beschrijving.** Bijv. als er een "Vrienden" kalender is met claude_key "friends", gebruik die voor afspraken met vrienden. Bij twijfel: gebruik de meest voor de hand liggende of val terug op "personal".
 
 Bij events[] array: elk object ook "calendar_stream" meegeven.
 
@@ -215,20 +220,18 @@ Als het bericht meerdere data of tijden noemt, gebruik events[]:
 
 ## Reminder-regels
 
-reminder_minutes_before: null = geen reminder (standaard)
-reminder_minutes_before: 30 = 30 minuten van tevoren (standaard bij "herinner me", "remind me", "stuur een reminder")
-reminder_minutes_before: N = N minuten van tevoren
+reminder_minutes_before: 30 = **standaard voor ALLE agenda-afspraken** (gebruik altijd 30, tenzij de gebruiker dit expliciet anders vraagt)
+reminder_minutes_before: null = geen reminder — ALLEEN als gebruiker dit expliciet zegt: "geen alarm", "zonder herinnering", "geen reminder"
+reminder_minutes_before: N = N minuten van tevoren (als gebruiker een andere tijd noemt)
 
 reminder_days_before: null = geen reminder (standaard)
 reminder_days_before: N = N dagen van tevoren (alleen bij expliciete "N dagen van tevoren"-verzoeken)
 
-**Wanneer de gebruiker "herinner me eraan", "stuur me een reminder", "remind me" zegt TEGELIJK met een nieuwe afspraak:**
-→ Gebruik category "calendar" en vul reminder_minutes_before: 30 in.
+**Standaard: zet reminder_minutes_before altijd op 30 bij calendar events, tenzij de gebruiker anders vraagt.**
 
 **Wanneer de gebruiker "herinner me eraan", "stuur me een reminder", "remind me" zegt als FOLLOW-UP op een eerder geplande afspraak (zie conversatiegeschiedenis):**
 → Gebruik category "event_update_reminder", vul event_title en event_date in vanuit de conversatiegeschiedenis, en reminder_minutes_before: 30.
 
-Zet reminder_minutes_before ALLEEN bij expliciete vraag om reminder/alarm/herinnering.
 
 ## Correcties en annuleringen
 
@@ -316,13 +319,17 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
 
 Vul alleen de relevante velden in en laat de rest null.`;
 
-async function parseIntent({ text, availableLists, activeHabits, conversationHistory = [], userContext = '' }) {
+async function parseIntent({ text, availableLists, activeHabits, calendarStreams = [], conversationHistory = [], userContext = '' }) {
   const listsContext = availableLists.length > 0
     ? `\n\n## Beschikbare lijsten\n${availableLists.map(l => `- ID: ${l.id} | Naam: "${l.name}" | Emoji: ${l.emoji || '📝'}`).join('\n')}`
     : '\n\n## Beschikbare lijsten\nGeen lijsten aangemaakt.';
 
   const habitsContext = activeHabits.length > 0
     ? `\n\n## Actieve habits\n${activeHabits.map(h => `- ID: ${h.id} | Naam: "${h.name}" | Mini: ${h.mini_goal} | Goed: ${h.good_goal} | Elite: ${h.elite_goal}`).join('\n')}`
+    : '';
+
+  const streamsContext = calendarStreams.length > 0
+    ? `\n\n## Beschikbare kalenders\n${calendarStreams.map(s => `- claude_key: "${s.claude_key}" | Naam: "${s.name}" | Emoji: ${s.emoji || '📅'}`).join('\n')}`
     : '';
 
   const contextBlock = userContext
@@ -340,7 +347,7 @@ async function parseIntent({ text, availableLists, activeHabits, conversationHis
     system: [
       {
         type: 'text',
-        text: SYSTEM_PROMPT + listsContext + habitsContext + contextBlock,
+        text: SYSTEM_PROMPT + listsContext + habitsContext + streamsContext + contextBlock,
         cache_control: { type: 'ephemeral' },
       },
     ],

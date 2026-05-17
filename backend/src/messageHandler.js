@@ -130,14 +130,15 @@ async function handleMessage({ from, text }) {
   }
 
   // Load all context in parallel
-  const [lists, activeHabits, userContext, conversationHistory] = await Promise.all([
+  const [lists, activeHabits, userContext, calendarStreams, conversationHistory] = await Promise.all([
     db.getLists(userId),
     db.getActiveHabits(userId),
     db.getUserContext(userId),
+    db.getCalendarStreams(userId),
     Promise.resolve(session.getHistory(userId)),
   ]);
 
-  const intent = await parseIntent({ text, availableLists: lists, activeHabits, conversationHistory, userContext });
+  const intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, conversationHistory, userContext });
 
   Promise.all([
     db.logMessage(userId, text, intent.category),
@@ -564,7 +565,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       for (const ev of eventList) {
         const evTitle         = ev.title ?? intent.event_title ?? originalText;
         const reminderDays    = ev.reminder_days_before ?? null;
-        const reminderMinutes = ev.reminder_minutes_before ?? null;
+        const reminderMinutes = ev.reminder_minutes_before ?? 30;
         const stream          = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
 
         // Conflict check: warn if another timed event exists at same time
