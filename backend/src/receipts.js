@@ -26,10 +26,20 @@ router.delete('/:userId/:receiptId', async (req, res) => {
   }
 });
 
-// GET /receipts/:userId/export.pdf
+// GET /receipts/:userId/export.pdf  — registered after exact-match routes above
 router.get('/:userId/export.pdf', async (req, res) => {
   try {
-    const receipts = await db.getReceipts(req.params.userId);
+    const { categoryId } = req.query;
+    const [allReceipts, categories] = await Promise.all([
+      db.getReceipts(req.params.userId),
+      db.getReceiptCategories(req.params.userId).catch(() => []),
+    ]);
+    const receipts = categoryId
+      ? allReceipts.filter(r => r.receipt_category_id === categoryId)
+      : allReceipts;
+    const catName = categoryId
+      ? (categories.find(c => c.id === categoryId)?.name ?? 'Categorie')
+      : null;
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="bonnetjes.pdf"');
@@ -38,7 +48,8 @@ router.get('/:userId/export.pdf', async (req, res) => {
     doc.pipe(res);
 
     // Header
-    doc.fontSize(22).font('Helvetica-Bold').text('Bonnetjes overzicht', { align: 'left' });
+    const title = catName ? `Bonnetjes — ${catName}` : 'Bonnetjes overzicht';
+    doc.fontSize(22).font('Helvetica-Bold').text(title, { align: 'left' });
     doc.fontSize(11).font('Helvetica').fillColor('#888')
       .text(`Gegenereerd op ${new Date().toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}`, { align: 'left' });
     doc.moveDown(1.5);
