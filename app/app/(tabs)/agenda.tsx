@@ -37,7 +37,7 @@ type MergedEvent = {
 type Section  = { dateKey: string; label: string; isToday: boolean; isPast: boolean; data: MergedEvent[] };
 type FlatItem = { type: 'header'; section: Section } | { type: 'item'; item: MergedEvent; section: Section; isLast: boolean };
 type ViewMode   = 'list' | 'calendar';
-type TimePeriod = 'today' | 'tomorrow' | 'week';
+type TimePeriod = 'today' | 'tomorrow' | 'thisweek' | 'nextweek';
 
 const TODAY              = new Date().toISOString().split('T')[0];
 const SECTION_H          = 48;
@@ -178,7 +178,7 @@ function AgendaLite() {
   useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
     const now = new Date(); now.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setDate(end.getDate() + 9);
+    const end = new Date(now); end.setDate(end.getDate() + 14);
     const endKey = toKey(end);
     Promise.all([
       supabase.from('events').select('*').eq('user_id', user.id).gte('date', TODAY).lte('date', endKey),
@@ -196,7 +196,8 @@ function AgendaLite() {
     const ranges: Record<TimePeriod, [string, string]> = {
       today:    [offsetDay(0), offsetDay(0)],
       tomorrow: [offsetDay(1), offsetDay(1)],
-      week:     [offsetDay(2), offsetDay(8)],
+      thisweek: [offsetDay(0), offsetDay(6)],
+      nextweek: [offsetDay(7), offsetDay(13)],
     };
     const [start, end] = ranges[timePeriod];
     let evts = allEvents.filter(e => e.date && e.date >= start && e.date <= end);
@@ -212,26 +213,21 @@ function AgendaLite() {
       <View style={[s.banner, { paddingTop: insets.top + 24, paddingBottom: 20 }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
-        <View style={[s.bannerRow, { marginBottom: 0 }]}>
-          <Text style={s.bannerTitle}>Agenda</Text>
-          <TouchableOpacity style={s.icalBtn} onPress={() => Linking.openURL(`webcal://sous-chef-pckg.onrender.com/calendar/${user?.id}.ics`)}>
-            <Text style={s.icalBtnText}>Abonneren</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={s.bannerTitle}>Agenda</Text>
       </View>
 
-      {/* Period pills */}
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
-        {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['week', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
+      {/* Period pills — ScrollView so pills stay content-width */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
+        {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
           <TouchableOpacity
             key={p}
             onPress={() => { setTimePeriod(p); setStreamFilter(null); }}
-            style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
+            style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
           >
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Stream chips */}
       {streams.length > 0 && (
@@ -392,7 +388,8 @@ export default function AgendaTab() {
     const ranges: Record<TimePeriod, [string, string]> = {
       today:    [offsetDay(0), offsetDay(0)],
       tomorrow: [offsetDay(1), offsetDay(1)],
-      week:     [offsetDay(2), offsetDay(8)],
+      thisweek: [offsetDay(0), offsetDay(6)],
+      nextweek: [offsetDay(7), offsetDay(13)],
     };
     const [start, end] = ranges[timePeriod];
     let base = allSections.filter(s => s.dateKey >= start && s.dateKey <= end);
@@ -429,9 +426,6 @@ export default function AgendaTab() {
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
           <View style={s.bannerRow}>
             <Text style={s.bannerTitle}>Agenda</Text>
-            <TouchableOpacity style={s.icalBtn} onPress={() => Linking.openURL(`webcal://sous-chef-pckg.onrender.com/calendar/${user?.id}.ics`)}>
-              <Text style={s.icalBtnText}>Abonneren</Text>
-            </TouchableOpacity>
           </View>
           {viewMode === 'list' && (
             <View style={s.bannerStats}>
@@ -449,8 +443,8 @@ export default function AgendaTab() {
 
         {/* Time period pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
-          {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['week', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-            <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 18, paddingVertical: 9, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DEDEDE' }}>
+          {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
+            <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 16, paddingVertical: 9, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
             </TouchableOpacity>
           ))}
