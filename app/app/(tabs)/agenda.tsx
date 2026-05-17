@@ -222,7 +222,7 @@ function AgendaLite() {
           <TouchableOpacity
             key={p}
             onPress={() => { setTimePeriod(p); setStreamFilter(null); }}
-            style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
+            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
           >
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
           </TouchableOpacity>
@@ -234,7 +234,7 @@ function AgendaLite() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingBottom: 8 }}>
           <TouchableOpacity
             onPress={() => setStreamFilter(null)}
-            style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
+            style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}
           >
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>Alles</Text>
           </TouchableOpacity>
@@ -242,7 +242,7 @@ function AgendaLite() {
             <TouchableOpacity
               key={st.id}
               onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)}
-              style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
+              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}
             >
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111' }}>{st.emoji} {st.name}</Text>
             </TouchableOpacity>
@@ -444,7 +444,7 @@ export default function AgendaTab() {
         {/* Time period pills */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
           {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-            <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
+            <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111' }}>{label}</Text>
             </TouchableOpacity>
           ))}
