@@ -44,7 +44,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **list_all_open** — alle open items over alle lijsten
 - **correct_last** — laatste item corrigeren; vul correct_to in
 - **recurring_item** — terugkerend item (bijv. "elke vrijdag: koffie kopen", "dagelijks: pillen")
-- **new_list** — nieuwe lijst aanmaken; vul emoji in
+- **new_list** — nieuwe lijst aanmaken; vul emoji en list_type in
 
 **Agenda:**
 - **calendar** — afspraak(en) vastleggen; vul calendar_stream in
@@ -249,6 +249,13 @@ Zet reminder_minutes_before ALLEEN bij expliciete vraag om reminder/alarm/herinn
 - "w8" = wacht → correct_last of unknown
 - Engelstalig item in Nederlandse zin → gewoon verwerken
 
+## Lijst-type (list_type) voor nieuwe lijsten
+
+Bij **new_list**: detecteer het gewenste type en vul list_type in:
+- "links lijst" / "sla links op" / "bookmarks" / "url" / "websites" → list_type: "links"
+- "wifi wachtwoord" / "codes" / "handigheidjes" / "tips" / "key-value" / "wachtwoorden" → list_type: "tips"
+- standaard → list_type: "checklist"
+
 ## Auto-emoji voor nieuwe lijsten
 
 boodschappen → 🛒, werk/taken → 💼, sport → 🏃, film/series → 🎬,
@@ -300,6 +307,7 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "new_list_name": null,
   "new_habit": null,
   "emoji": null,
+  "list_type": null,
   "setting_key": null,
   "setting_value": null,
   "reply_text": null,

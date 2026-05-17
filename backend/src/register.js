@@ -60,6 +60,16 @@ router.post('/', async (req, res) => {
     sort_order: 0,
   }).catch(err => console.error('[Register] Boodschappenlijst failed:', err.message));
 
+  // Create default calendar streams for new user
+  const defaultStreams = [
+    { name: 'Afspraken',    emoji: '📅', color: '#4A90D8', caldav_id: 'appointments', claude_key: 'appointments', sort_order: 0 },
+    { name: 'Verjaardagen', emoji: '🎂', color: '#FF6B6B', caldav_id: 'birthdays',    claude_key: 'birthdays',    sort_order: 1 },
+    { name: 'Werk',         emoji: '💼', color: '#6B8CFF', caldav_id: 'work',         claude_key: 'work',         sort_order: 2 },
+    { name: 'Persoonlijk',  emoji: '🌿', color: '#4ECDC4', caldav_id: 'personal',     claude_key: 'personal',     sort_order: 3 },
+  ];
+  supabase.from('calendar_streams').insert(defaultStreams.map(s => ({ user_id: created.id, ...s })))
+    .catch(err => console.error('[Register] Calendar streams failed:', err.message));
+
   // Send welcome WhatsApp in background (don't block the response)
   sendMessage(number, WELCOME).catch(err =>
     console.error('[Register] Welcome message failed:', err.message)

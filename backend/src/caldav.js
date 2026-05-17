@@ -23,10 +23,10 @@ const CALDAV_ADMIN_URL   = process.env.CALDAV_ADMIN_URL;
 const CALDAV_ADMIN_SECRET = process.env.CALDAV_ADMIN_SECRET;
 
 const CALENDARS = [
-  { id: 'appointments', name: 'Afspraken',    stream: 'appointments' },
-  { id: 'birthdays',    name: 'Verjaardagen', stream: 'birthdays' },
-  { id: 'work',         name: 'Werk',         stream: 'work' },
-  { id: 'personal',     name: 'Persoonlijk',  stream: 'personal' },
+  { id: 'appointments', name: 'Afspraken',    stream: 'appointments', color: '#4A90D8' },
+  { id: 'birthdays',    name: 'Verjaardagen', stream: 'birthdays',    color: '#FF6B6B' },
+  { id: 'work',         name: 'Werk',         stream: 'work',         color: '#6B8CFF' },
+  { id: 'personal',     name: 'Persoonlijk',  stream: 'personal',     color: '#4ECDC4' },
 ];
 
 function isConfigured() {
@@ -56,6 +56,7 @@ async function provisionUser(username, password) {
 
   for (const cal of CALENDARS) {
     await mkcalendar(username, password, cal.id, cal.name);
+    await setCalendarColor(username, password, cal.id, cal.color).catch(() => {});
   }
 }
 
@@ -71,6 +72,25 @@ async function mkcalendar(username, password, calendarId, displayName) {
     },
     body,
   });
+}
+
+async function setCalendarColor(username, password, calendarId, hexColor) {
+  const url = `${CALDAV_URL}/${username}/${calendarId}/`;
+  const body = `<?xml version="1.0" encoding="UTF-8"?><D:propertyupdate xmlns:D="DAV:" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><ICAL:calendar-color>${hexColor}FF</ICAL:calendar-color></D:prop></D:set></D:propertyupdate>`;
+
+  await fetchWithRetry(url, {
+    method: 'PROPPATCH',
+    headers: {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Authorization': 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64'),
+    },
+    body,
+  });
+}
+
+async function createUserCalendar(username, password, calendarId, displayName, hexColor) {
+  await mkcalendar(username, password, calendarId, displayName);
+  await setCalendarColor(username, password, calendarId, hexColor).catch(() => {});
 }
 
 async function createEvent(username, password, calendarStream, event) {
@@ -259,4 +279,4 @@ function parseIcal(ics) {
   return { uid, title, date, time };
 }
 
-module.exports = { isConfigured, generateCredentials, provisionUser, createEvent, deleteEvent, CALENDARS, listCalendarEvents, getEventIcal, parseIcal };
+module.exports = { isConfigured, generateCredentials, provisionUser, createEvent, deleteEvent, CALENDARS, listCalendarEvents, getEventIcal, parseIcal, setCalendarColor, createUserCalendar };

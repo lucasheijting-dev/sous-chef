@@ -25,9 +25,12 @@ import { Colors, Radius, Shadow, ThemeColors } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 
+type CalendarStream = { id: string; claude_key: string; color: string; name: string; emoji: string };
+
 type MergedEvent = {
   id: string; title: string; date: string | null; time?: string | null;
   recurrence?: string | null; reminder_days_before?: number;
+  calendar_stream?: string | null;
   source: 'sous-chef' | 'phone';
 };
 type Section  = { dateKey: string; label: string; isToday: boolean; isPast: boolean; data: MergedEvent[] };
@@ -160,15 +163,19 @@ function AgendaLite() {
   const { colors } = useTheme();
   const insets     = useSafeAreaInsets();
   const [events, setEvents] = useState<MergedEvent[]>([]);
+  const [streams, setStreams] = useState<CalendarStream[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
-    supabase.from('events').select('*').eq('user_id', user.id).eq('date', TODAY)
-      .then(({ data }) => {
-        setEvents((data ?? []).map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const })));
-        setLoading(false);
-      });
+    Promise.all([
+      supabase.from('events').select('*').eq('user_id', user.id).eq('date', TODAY),
+      supabase.from('calendar_streams').select('*').eq('user_id', user.id),
+    ]).then(([evtRes, streamRes]) => {
+      setEvents((evtRes.data ?? []).map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const })));
+      if (streamRes.data) setStreams(streamRes.data);
+      setLoading(false);
+    });
   }, [user]);
 
   const todayLabel = new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -192,15 +199,19 @@ function AgendaLite() {
               Stuur "tandarts vrijdag 14u" via WhatsApp.
             </Text>
           </View>
-        ) : events.map(e => (
-          <View key={e.id} style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14 }, Shadow.card]}>
-            <Text style={{ fontSize: 24 }}>{eventEmoji(e.title)}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.black }}>{e.title}</Text>
-              {e.time && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>{e.time}</Text>}
+        ) : events.map(e => {
+          const streamColor = streams.find(s => s.claude_key === e.calendar_stream)?.color;
+          return (
+            <View key={e.id} style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden' }, Shadow.card]}>
+              {streamColor && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: streamColor }} />}
+              <Text style={{ fontSize: 24, marginLeft: streamColor ? 8 : 0 }}>{eventEmoji(e.title)}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.black }}>{e.title}</Text>
+                {e.time && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>{e.time}</Text>}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -225,6 +236,7 @@ export default function AgendaTab() {
   const [calHidden, setCalHidden]         = useState(false);
   const [viewMode, setViewMode]         = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState(TODAY);
+  const [streams, setStreams]           = useState<CalendarStream[]>([]);
 
   const PANEL_COLLAPSED = 200;
   const PANEL_EXPANDED  = 440;
@@ -273,6 +285,8 @@ export default function AgendaTab() {
   useEffect(() => {
     fetchEvents();
     if (!user || user.id === 'dev') return;
+    supabase.from('calendar_streams').select('*').eq('user_id', user.id)
+      .then(({ data }) => { if (data) setStreams(data); });
     const ch = supabase.channel('events-ch')
       .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'events', filter: `user_id=eq.${user.id}` }, fetchEvents)
       .subscribe();
@@ -431,10 +445,13 @@ export default function AgendaTab() {
             }
             const { item: event, section, isLast } = item;
             const cl = daysUntil(section.dateKey);
+            const streamColor = event.source === 'sous-chef'
+              ? streams.find(s => s.claude_key === event.calendar_stream)?.color
+              : undefined;
             return (
               <View style={[s.cardWrap, isLast && { marginBottom: 4 }]}>
                 <View style={[s.card, { backgroundColor: colors.white }, section.isPast && s.cardPast]}>
-                  <View style={[s.accent, event.source === 'phone' ? { backgroundColor: colors.gray200 } : section.isToday ? s.accentToday : { backgroundColor: colors.gray200 }]} />
+                  <View style={[s.accent, streamColor ? { backgroundColor: streamColor } : event.source === 'phone' ? { backgroundColor: colors.gray200 } : section.isToday ? s.accentToday : { backgroundColor: colors.gray200 }]} />
                   <Text style={s.emoji}>{eventEmoji(event.title)}</Text>
                   <View style={s.cardBody}>
                     <Text style={[s.cardTitle, { color: colors.black }, section.isPast && { color: colors.gray400 }]} numberOfLines={1}>{event.title}</Text>
@@ -482,19 +499,23 @@ export default function AgendaTab() {
             <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
               {selectedEvents.length === 0
                 ? <Text style={[cal.noEvents, { color: colors.gray400 }]}>Geen afspraken</Text>
-                : selectedEvents.map(e => (
-                  <View key={e.id} style={[cal.eventRow, { borderBottomColor: colors.gray100 }]}>
-                    <Text style={cal.eventEmoji}>{eventEmoji(e.title)}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[cal.eventTitle, { color: colors.black }]}>{e.title}</Text>
-                      {(e.time || e.source === 'phone') && (
-                        <Text style={[cal.eventSub, { color: colors.gray400 }]}>
-                          {[e.time, e.source === 'phone' ? 'iPhone-agenda' : null].filter(Boolean).join(' · ')}
-                        </Text>
-                      )}
+                : selectedEvents.map(e => {
+                  const sc = e.source === 'sous-chef' ? streams.find(s => s.claude_key === e.calendar_stream)?.color : undefined;
+                  return (
+                    <View key={e.id} style={[cal.eventRow, { borderBottomColor: colors.gray100 }]}>
+                      {sc && <View style={{ width: 4, height: '100%', borderRadius: 2, backgroundColor: sc, marginRight: 8 }} />}
+                      <Text style={cal.eventEmoji}>{eventEmoji(e.title)}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[cal.eventTitle, { color: colors.black }]}>{e.title}</Text>
+                        {(e.time || e.source === 'phone') && (
+                          <Text style={[cal.eventSub, { color: colors.gray400 }]}>
+                            {[e.time, e.source === 'phone' ? 'iPhone-agenda' : null].filter(Boolean).join(' · ')}
+                          </Text>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                ))
+                  );
+                })
               }
             </ScrollView>
           </Animated.View>

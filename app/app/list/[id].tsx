@@ -14,6 +14,7 @@ import {
   Switch,
   Alert,
   Modal,
+  Linking,
 } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -112,8 +113,49 @@ function SwipeableItem({
   );
 }
 
+const URL_REGEX = /https?:\/\/[^\s]+/i;
+const KEY_VALUE_REGEX = /^(.+?):\s*(.+)$/;
+
+function LinkItemRow({ item, colors }: { item: ListItem; colors: any }) {
+  const urlMatch = item.text.match(URL_REGEX);
+  const url = urlMatch?.[0];
+  return (
+    <View style={[styles.item, { backgroundColor: colors.white }]}>
+      <Ionicons name="link-outline" size={18} color={Colors.gray400} style={{ marginRight: 10 }} />
+      {url ? (
+        <TouchableOpacity onPress={() => Linking.openURL(url)} style={{ flex: 1 }} activeOpacity={0.7}>
+          <Text style={[styles.itemText, { color: '#4A90D8', textDecorationLine: 'underline' }]} numberOfLines={2}>{item.text}</Text>
+        </TouchableOpacity>
+      ) : (
+        <Text style={[styles.itemText, { color: colors.black }]}>{item.text}</Text>
+      )}
+    </View>
+  );
+}
+
+function TipItemRow({ item, colors }: { item: ListItem; colors: any }) {
+  const match = item.text.match(KEY_VALUE_REGEX);
+  if (match) {
+    return (
+      <View style={[styles.item, { backgroundColor: colors.white }]}>
+        <Ionicons name="bulb-outline" size={18} color={Colors.gray400} style={{ marginRight: 10 }} />
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+          <Text style={[styles.itemText, { color: Colors.gray400, fontFamily: 'Inter_600SemiBold' }]}>{match[1].trim()}:</Text>
+          <Text style={[styles.itemText, { color: colors.black }]}>{match[2].trim()}</Text>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.item, { backgroundColor: colors.white }]}>
+      <Ionicons name="bulb-outline" size={18} color={Colors.gray400} style={{ marginRight: 10 }} />
+      <Text style={[styles.itemText, { color: colors.black }]}>{item.text}</Text>
+    </View>
+  );
+}
+
 export default function ListDetailScreen() {
-  const { id, name, emoji } = useLocalSearchParams<{ id: string; name: string; emoji: string }>();
+  const { id, name, emoji, list_type: listTypeParam } = useLocalSearchParams<{ id: string; name: string; emoji: string; list_type?: string }>();
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { user } = useUser();
@@ -122,6 +164,7 @@ export default function ListDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [newItemText, setNewItemText] = useState('');
   const [adding, setAdding] = useState(false);
+  const [listType, setListType] = useState<string>(listTypeParam ?? 'checklist');
   const { toastProps, show: showToast } = useToast();
 
   const isGroceryList = isBoodschappenlijst(name ?? '');
@@ -135,8 +178,16 @@ export default function ListDetailScreen() {
   }, [isGroceryList]);
 
   useEffect(() => {
-    navigation.setOptions({ title: `${emoji || '📝'} ${name}` });
-  }, [name, emoji]);
+    const badge = listType === 'links' ? ' 🔗' : listType === 'tips' ? ' 💡' : '';
+    navigation.setOptions({ title: `${emoji || '📝'} ${name}${badge}` });
+  }, [name, emoji, listType]);
+
+  useEffect(() => {
+    if (!id) return;
+    supabase.from('lists').select('list_type').eq('id', id).single().then(({ data }) => {
+      if (data?.list_type) setListType(data.list_type);
+    });
+  }, [id]);
 
   const fetchItems = useCallback(async () => {
     const { data } = await supabase
@@ -282,6 +333,12 @@ export default function ListDetailScreen() {
               </View>
             }
             renderItem={({ item, index }) => {
+              if (listType === 'links') {
+                return <LinkItemRow item={item} colors={colors} />;
+              }
+              if (listType === 'tips') {
+                return <TipItemRow item={item} colors={colors} />;
+              }
               const isFirstChecked = item.checked && index === unchecked.length;
               return (
                 <>

@@ -59,7 +59,11 @@ function AnimatedCard({ item, index, onPress, colors }: { item: List & { item_co
           <Text style={styles.cardEmoji}>{item.emoji || '📝'}</Text>
         </View>
         <View style={styles.cardBody}>
-          <Text style={[styles.cardName, { color: colors.black }]}>{item.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={[styles.cardName, { color: colors.black }]}>{item.name}</Text>
+            {item.list_type === 'links' && <Text style={{ fontSize: 13 }}>🔗</Text>}
+            {item.list_type === 'tips'  && <Text style={{ fontSize: 13 }}>💡</Text>}
+          </View>
           <Text style={[styles.cardCount, { color: colors.gray400 }]}>{item.item_count} {item.item_count === 1 ? 'item' : 'items'}</Text>
         </View>
         <View style={[styles.chevronBox, { backgroundColor: colors.gray100 }]}>
@@ -221,7 +225,7 @@ export default function LijstenTab() {
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     const { data } = await supabase
-      .from('lists').select('*, list_items(count)')
+      .from('lists').select('id, name, emoji, sort_order, list_type, list_items(count)')
       .eq('user_id', user.id).order('sort_order', { ascending: true });
     if (data) setLists(data.map((l: any) => ({ ...l, item_count: l.list_items?.[0]?.count ?? 0 })));
     setLoading(false);
@@ -379,7 +383,7 @@ export default function LijstenTab() {
             renderItem={({ item, index }) => (
               <AnimatedCard
                 item={item} index={index} colors={colors}
-                onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji } })}
+                onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
               />
             )}
           />

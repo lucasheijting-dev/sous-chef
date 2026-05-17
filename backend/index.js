@@ -5,6 +5,7 @@ const calendarFeedRouter      = require('./src/calendarFeed');
 const calendarProfileRouter   = require('./src/calendarProfile');
 const geoAlertRouter          = require('./src/geoAlert');
 const registerRouter          = require('./src/register');
+const calendarStreamsRouter   = require('./src/calendarStreams');
 const cronJobs           = require('./src/cronJobs');
 
 const app = express();
@@ -15,6 +16,7 @@ app.use('/calendar', calendarFeedRouter);
 app.use('/calendar-profile', calendarProfileRouter);
 app.use('/geo-alert', geoAlertRouter);
 app.use('/register', registerRouter);
+app.use('/calendar-streams', calendarStreamsRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3000;

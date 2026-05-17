@@ -145,6 +145,20 @@ export default function InstellingenTab() {
   const [geoAlertEnabled, setGeoAlertEnabled] = useState(false);
   const [geoAlertLoading, setGeoAlertLoading] = useState(false);
 
+  // Calendar streams
+  const [streams, setStreams] = useState<any[]>([]);
+  const [streamModalVisible, setStreamModalVisible] = useState(false);
+  const [editingStream, setEditingStream] = useState<any | null>(null);
+  const [streamName, setStreamName] = useState('');
+  const [streamEmoji, setStreamEmoji] = useState('');
+  const [streamColor, setStreamColor] = useState('#4A90D8');
+  const [streamSaving, setStreamSaving] = useState(false);
+
+  const STREAM_COLORS = [
+    '#4A90D8', '#FF6B6B', '#4ECDC4', '#6B8CFF', '#FCC10C', '#FF9F43',
+    '#2ECC71', '#E84393', '#95A5A6', '#1ABC9C', '#E67E22', '#8E44AD',
+  ];
+
   // User data fetched from Supabase
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [caldavConnected, setCaldavConnected] = useState(false);
@@ -197,7 +211,7 @@ export default function InstellingenTab() {
   // Fetch on mount
   useEffect(() => { fetchUserData(); }, [fetchUserData]);
 
-  // Re-fetch CalDAV status every time this tab gets focus (e.g. after installing profile)
+  // Re-fetch CalDAV status + streams every time this tab gets focus
   useFocusEffect(useCallback(() => {
     if (!user || user.id === 'dev') return;
     supabase
@@ -206,6 +220,12 @@ export default function InstellingenTab() {
       .eq('id', user.id)
       .single()
       .then(({ data }) => { if (data) setCaldavConnected(!!data.caldav_username); });
+    supabase
+      .from('calendar_streams')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('sort_order', { ascending: true })
+      .then(({ data }) => { if (data) setStreams(data); });
   }, [user?.id]));
 
   // Keep name input in sync with settings
@@ -317,6 +337,46 @@ export default function InstellingenTab() {
   async function saveName() {
     await updateSetting('user_name', nameInputValue.trim());
     setNameModalVisible(false);
+  }
+
+  function openStreamModal(stream: any | null) {
+    setEditingStream(stream);
+    setStreamName(stream?.name ?? '');
+    setStreamEmoji(stream?.emoji ?? '📅');
+    setStreamColor(stream?.color ?? '#4A90D8');
+    setStreamModalVisible(true);
+  }
+
+  async function saveStream() {
+    if (!user || user.id === 'dev' || !streamName.trim()) return;
+    setStreamSaving(true);
+    const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+    try {
+      if (editingStream) {
+        const res = await fetch(`${API_BASE_URL}/calendar-streams/${user.id}/${editingStream.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: streamName.trim(), emoji: streamEmoji, color: streamColor }),
+        });
+        const updated = await res.json();
+        setStreams(prev => prev.map(s => s.id === updated.id ? updated : s));
+      } else {
+        const caldav_id = `stream-${Date.now()}`;
+        const res = await fetch(`${API_BASE_URL}/calendar-streams/${user.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: streamName.trim(), emoji: streamEmoji, color: streamColor, caldav_id, claude_key: caldav_id }),
+        });
+        const created = await res.json();
+        setStreams(prev => [...prev, created]);
+      }
+      setStreamModalVisible(false);
+      showToast(editingStream ? 'Categorie bijgewerkt' : 'Categorie toegevoegd', 'success');
+    } catch {
+      showToast('Opslaan mislukt', 'error');
+    } finally {
+      setStreamSaving(false);
+    }
   }
 
   const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -725,6 +785,40 @@ export default function InstellingenTab() {
           )}
         </View>
 
+        {/* ── Agenda categorieën ─────────────────────────────────────── */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 32, marginBottom: 8 }}>
+          <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 0, marginBottom: 0, marginLeft: 0 }]}>Agenda categorieën</Text>
+          <TouchableOpacity onPress={() => openStreamModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="add-circle-outline" size={22} color={Colors.yellow} />
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          {streams.length === 0 ? (
+            <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400 }}>Nog geen categorieën</Text>
+            </View>
+          ) : (
+            streams.map((stream, idx) => (
+              <View key={stream.id}>
+                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
+                <TouchableOpacity
+                  style={styles.row}
+                  onPress={() => openStreamModal(stream)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: stream.color ?? '#4A90D8' }} />
+                  </View>
+                  <View style={styles.rowLabelWrap}>
+                    <Text style={[styles.rowLabel, { color: colors.black }]}>{stream.emoji} {stream.name}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
+        </View>
+
         {/* ── Account ────────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Account</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
@@ -847,6 +941,80 @@ export default function InstellingenTab() {
             <TouchableOpacity onPress={() => setHabitsModalVisible(false)} style={styles.cancelBtn}>
               <Text style={[styles.cancelText, { color: colors.gray400 }]}>Annuleer</Text>
             </TouchableOpacity>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ── Stream edit modal ───────────────────────────────────────── */}
+      <Modal
+        visible={streamModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setStreamModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity
+              onPress={() => setStreamModalVisible(false)}
+              style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+            >
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Annuleer</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>
+              {editingStream ? 'Bewerk categorie' : 'Nieuwe categorie'}
+            </Text>
+            <TouchableOpacity
+              onPress={saveStream}
+              disabled={streamSaving || !streamName.trim()}
+              style={[styles.closeBtn, { backgroundColor: Colors.yellow, opacity: streamName.trim() ? 1 : 0.4 }]}
+            >
+              {streamSaving
+                ? <ActivityIndicator size="small" color={Colors.black} />
+                : <Text style={[styles.saveBtnText, { color: Colors.black }]}>Opslaan</Text>
+              }
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 24, gap: 20 }}>
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.sectionLabel, { marginLeft: 0, marginTop: 0, color: colors.gray400 }]}>Naam</Text>
+              <TextInput
+                style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
+                value={streamName}
+                onChangeText={setStreamName}
+                placeholder="Bijv. Familie"
+                placeholderTextColor={colors.gray400}
+                autoFocus={!editingStream}
+                selectionColor={Colors.yellow}
+              />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.sectionLabel, { marginLeft: 0, marginTop: 0, color: colors.gray400 }]}>Emoji</Text>
+              <TextInput
+                style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
+                value={streamEmoji}
+                onChangeText={t => setStreamEmoji(t.slice(-2) || t)}
+                placeholder="📅"
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                maxLength={2}
+              />
+            </View>
+            <View style={{ gap: 8 }}>
+              <Text style={[styles.sectionLabel, { marginLeft: 0, marginTop: 0, color: colors.gray400 }]}>Kleur</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {STREAM_COLORS.map(c => (
+                  <TouchableOpacity
+                    key={c}
+                    onPress={() => setStreamColor(c)}
+                    style={[
+                      { width: 40, height: 40, borderRadius: 20, backgroundColor: c },
+                      streamColor === c && { borderWidth: 3, borderColor: colors.black },
+                    ]}
+                    activeOpacity={0.8}
+                  />
+                ))}
+              </View>
+            </View>
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1109,4 +1277,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
   nameInputHint: { fontFamily: 'Inter_300Light', fontSize: 13, color: Colors.gray400 },
+  credRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 8 },
+  credToggleText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
+  credBox: { borderRadius: Radius.md, padding: 12, marginTop: 4, gap: 2 },
 });

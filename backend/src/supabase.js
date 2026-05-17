@@ -133,14 +133,14 @@ async function getLists(userId) {
   return data ?? [];
 }
 
-async function createList(userId, name, emoji = '📝') {
+async function createList(userId, name, emoji = '📝', listType = 'checklist') {
   const existing = await getLists(userId);
   const maxOrder = existing.reduce((m, l) => Math.max(m, l.sort_order ?? 0), 0);
 
   const { data, error } = await supabase
     .from('lists')
-    .insert({ user_id: userId, name, emoji, sort_order: maxOrder + 1, last_activity_at: new Date().toISOString() })
-    .select('id, name, emoji')
+    .insert({ user_id: userId, name, emoji, list_type: listType, sort_order: maxOrder + 1, last_activity_at: new Date().toISOString() })
+    .select('id, name, emoji, list_type')
     .single();
 
   if (error) throw new Error(`Failed to create list: ${error.message}`);
@@ -677,6 +677,43 @@ async function markGeoAlertSent(userId) {
   return !error && !!data;
 }
 
+// ── Calendar Streams ──────────────────────────────────────────────────────────
+
+async function getCalendarStreams(userId) {
+  const { data, error } = await supabase
+    .from('calendar_streams')
+    .select('*')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: true });
+  if (error) throw new Error(`Failed to get calendar streams: ${error.message}`);
+  return data ?? [];
+}
+
+async function createCalendarStream(userId, stream) {
+  const { data, error } = await supabase
+    .from('calendar_streams')
+    .insert({ user_id: userId, ...stream })
+    .select('*')
+    .single();
+  if (error) throw new Error(`Failed to create calendar stream: ${error.message}`);
+  return data;
+}
+
+async function updateCalendarStream(streamId, updates) {
+  const { data, error } = await supabase
+    .from('calendar_streams')
+    .update(updates)
+    .eq('id', streamId)
+    .select('*')
+    .single();
+  if (error) throw new Error(`Failed to update calendar stream: ${error.message}`);
+  return data;
+}
+
+async function deleteCalendarStream(streamId) {
+  await supabase.from('calendar_streams').delete().eq('id', streamId);
+}
+
 // ── Message Log ────────────────────────────────────────────────────────────────
 
 async function logMessage(userId, rawText, category) {
@@ -747,4 +784,8 @@ module.exports = {
   getUsersWithCalDAV,
   getCalDAVUidsByUser,
   createEventFromCalDAV,
+  getCalendarStreams,
+  createCalendarStream,
+  updateCalendarStream,
+  deleteCalendarStream,
 };

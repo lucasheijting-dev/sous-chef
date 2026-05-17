@@ -19,6 +19,7 @@ export type List = {
   emoji: string;
   sort_order: number;
   created_at: string;
+  list_type?: 'checklist' | 'links' | 'tips';
 };
 
 export type ListItem = {

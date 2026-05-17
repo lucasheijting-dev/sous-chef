@@ -473,7 +473,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     case 'new_list': {
       const name  = intent.new_list_name ?? originalText;
       const emoji = intent.emoji ?? '📝';
-      const newList = await db.createList(userId, name, emoji);
+      const newList = await db.createList(userId, name, emoji, intent.list_type ?? 'checklist');
       undo.record(userId, 'create_list', { listId: newList.id, name: newList.name });
 
       if (intent.item_text) {
