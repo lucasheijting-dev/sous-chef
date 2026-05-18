@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
@@ -17,11 +17,44 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { Swipeable } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { Note } from '@/lib/types';
 import { Colors, Radius, Shadow } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
+
+const todayStr = new Date().toISOString().split('T')[0];
+const yesterdayStr = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split('T')[0];
+})();
+
+function noteDateKey(iso: string): string {
+  return iso.split('T')[0];
+}
+
+function sectionTitle(dateKey: string): string {
+  if (dateKey === todayStr) return 'Vandaag';
+  if (dateKey === yesterdayStr) return 'Gisteren';
+  const d = new Date(dateKey + 'T00:00:00');
+  return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function groupNotes(notes: Note[]): { title: string; data: Note[] }[] {
+  const map = new Map<string, Note[]>();
+  for (const note of notes) {
+    const key = noteDateKey(note.created_at);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(note);
+  }
+  return Array.from(map.entries()).map(([key, data]) => ({
+    title: sectionTitle(key),
+    data,
+  }));
+}
 
 function getCardStyles(isDark: boolean) {
   return [
@@ -32,7 +65,34 @@ function getCardStyles(isDark: boolean) {
   ];
 }
 
-function NoteCard({ item, index, onPress }: { item: Note; index: number; onPress: () => void }) {
+function BreathingEmoji({ size = 40 }: { size?: number }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.0,  duration: 900, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return (
+    <Animated.View style={{ transform: [{ scale: pulse }] }}>
+      <Ionicons name="document-text-outline" size={size} color={Colors.gray400} />
+    </Animated.View>
+  );
+}
+
+function NoteCard({
+  item,
+  index,
+  onPress,
+  onDelete,
+}: {
+  item: Note;
+  index: number;
+  onPress: () => void;
+  onDelete: () => void;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -51,25 +111,66 @@ function NoteCard({ item, index, onPress }: { item: Note; index: number; onPress
     return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
   }
 
+  function renderRightActions() {
+    return (
+      <View style={styles.deleteAction}>
+        <Ionicons name="trash-outline" size={22} color={Colors.white} />
+        <Text style={styles.deleteActionText}>Verwijder</Text>
+      </View>
+    );
+  }
+
   return (
-    <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()}
-        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.card, { backgroundColor: style.bg }]}
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 10 }}>
+      <Swipeable
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={() => {
+          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          onDelete();
+        }}
+        rightThreshold={60}
+        overshootRight={false}
       >
-        <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
-          {item.title || item.body.slice(0, 40)}
-        </Text>
-        <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
-          {item.body}
-        </Text>
-        <View style={styles.cardFooter}>
-          <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
-          <Ionicons name="open-outline" size={12} color={style.date} />
-        </View>
-      </Pressable>
+        <Pressable
+          onPress={onPress}
+          onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+          onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
+        >
+          <Animated.View style={[styles.card, { backgroundColor: style.bg, transform: [{ scale }] }]}>
+            <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
+              {item.title || item.body.slice(0, 40)}
+            </Text>
+            <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
+              {item.body}
+            </Text>
+            <View style={styles.cardFooter}>
+              <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
+              <Ionicons name="open-outline" size={12} color={style.date} />
+            </View>
+          </Animated.View>
+        </Pressable>
+      </Swipeable>
+    </Animated.View>
+  );
+}
+
+function UndoSnackbar({ visible, onUndo }: { visible: boolean; onUndo: () => void }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    }
+  }, [visible]);
+
+  return (
+    <Animated.View style={[styles.snackbar, { opacity }]} pointerEvents={visible ? 'auto' : 'none'}>
+      <Text style={styles.snackbarText}>Notitie verwijderd</Text>
+      <TouchableOpacity onPress={onUndo} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.snackbarUndo}>Ongedaan</Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -84,6 +185,9 @@ export default function NotitiesTab() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Note | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
+  const [deletedNote, setDeletedNote] = useState<Note | null>(null);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
@@ -102,10 +206,42 @@ export default function NotitiesTab() {
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchNotes]);
 
+  function handleDelete(note: Note) {
+    setNotes(prev => prev.filter(n => n.id !== note.id));
+    setDeletedNote(note);
+    setSnackbarVisible(true);
+
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    undoTimeoutRef.current = setTimeout(async () => {
+      setSnackbarVisible(false);
+      setDeletedNote(prev => {
+        if (prev?.id === note.id) {
+          supabase.from('notes').delete().eq('id', note.id);
+          return null;
+        }
+        return prev;
+      });
+    }, 3000);
+  }
+
+  function handleUndo() {
+    if (!deletedNote) return;
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    setNotes(prev => {
+      const exists = prev.some(n => n.id === deletedNote.id);
+      if (exists) return prev;
+      return [deletedNote, ...prev].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    });
+    setDeletedNote(null);
+    setSnackbarVisible(false);
+  }
+
   const filtered = notes.filter(n =>
     n.title?.toLowerCase().includes(search.toLowerCase()) ||
     n.body.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const sections = groupNotes(filtered);
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -155,7 +291,7 @@ export default function NotitiesTab() {
       ) : filtered.length === 0 ? (
         <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
           <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
-            <Ionicons name="document-text-outline" size={32} color={colors.gray400} />
+            <BreathingEmoji size={32} />
           </View>
           <Text style={[styles.emptyTitle, { color: colors.black }]}>{search ? 'Geen resultaten' : 'Geen notities'}</Text>
           {!search && (
@@ -166,19 +302,30 @@ export default function NotitiesTab() {
           )}
         </View>
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(n) => n.id}
-          numColumns={2}
-          contentContainerStyle={styles.grid}
-          columnWrapperStyle={styles.row}
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
           style={{ backgroundColor: colors.offWhite }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} />}
+          stickySectionHeadersEnabled={false}
+          renderSectionHeader={({ section }) => (
+            <Text style={[styles.sectionHeader, { color: colors.gray400 }]}>
+              {section.title.toUpperCase()}
+            </Text>
+          )}
           renderItem={({ item, index }) => (
-            <NoteCard item={item} index={index} onPress={() => setSelected(item)} />
+            <NoteCard
+              item={item}
+              index={index}
+              onPress={() => setSelected(item)}
+              onDelete={() => handleDelete(item)}
+            />
           )}
         />
       )}
+
+      <UndoSnackbar visible={snackbarVisible} onUndo={handleUndo} />
 
       <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
@@ -219,13 +366,31 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg, padding: 16, ...Shadow.card,
   },
   skeletonLine: { height: 12, backgroundColor: Colors.gray100, borderRadius: 6, width: '70%' },
-  grid: { padding: 20, paddingBottom: 120 },
-  row: { gap: 10, marginBottom: 10 },
-  card: { flex: 1, borderRadius: Radius.lg, padding: 16, minHeight: 130, ...Shadow.card },
+  listContent: { padding: 20, paddingBottom: 120 },
+  sectionHeader: {
+    fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 1.2,
+    marginBottom: 10, marginTop: 6,
+  },
+  card: { borderRadius: Radius.lg, padding: 16, minHeight: 130, ...Shadow.card },
   cardTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, marginBottom: 8, letterSpacing: -0.2 },
   cardBody: { fontFamily: 'Inter_300Light', fontSize: 13, lineHeight: 19, flex: 1 },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   cardDate: { fontFamily: 'Inter_300Light', fontSize: 11 },
+  deleteAction: {
+    backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center',
+    borderRadius: Radius.lg, width: 80, marginBottom: 10,
+    gap: 4,
+  },
+  deleteActionText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, color: Colors.white },
+  snackbar: {
+    position: 'absolute', bottom: 24, left: 20, right: 20,
+    backgroundColor: Colors.black, borderRadius: Radius.md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
+    ...Shadow.card,
+  },
+  snackbarText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: Colors.white },
+  snackbarUndo: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyIcon: { width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.gray100, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, color: Colors.black, marginBottom: 12 },

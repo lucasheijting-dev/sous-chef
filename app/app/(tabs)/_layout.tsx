@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useRef, useEffect } from 'react';
+import * as Haptics from 'expo-haptics';
 import { useUser } from '@/context/UserContext';
 import { Colors } from '@/constants/Design';
 
@@ -16,6 +18,15 @@ const ALL_TABS = [
 ] as const;
 
 function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean; label: string }) {
+  const prevFocused = useRef(focused);
+
+  useEffect(() => {
+    if (focused && !prevFocused.current) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    prevFocused.current = focused;
+  }, [focused]);
+
   return (
     <View style={styles.iconCol}>
       <Ionicons name={name} size={19} color={focused ? Colors.yellow : '#666'} />

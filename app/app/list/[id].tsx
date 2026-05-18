@@ -15,6 +15,8 @@ import {
   Alert,
   Modal,
   Linking,
+  Pressable,
+  InputAccessoryView,
 } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +38,8 @@ import {
 } from '@/lib/geoAlert';
 import { SkeletonListCard } from '@/components/SkeletonCard';
 
+const ADD_INPUT_ACCESSORY_ID = 'sous-chef-add-input';
+
 function haptic(style: 'light' | 'medium' | 'warning' = 'light') {
   if (Platform.OS === 'web') return;
   if (style === 'warning') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
@@ -44,7 +48,18 @@ function haptic(style: 'light' | 'medium' | 'warning' = 'light') {
 }
 
 function AnimatedCheckbox({ checked, onPress }: { checked: boolean; onPress: () => void }) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useRef(new Animated.Value(checked ? 1 : 0)).current;
+  const prevChecked = useRef(checked);
+
+  useEffect(() => {
+    if (checked && !prevChecked.current) {
+      scale.setValue(0);
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 200, friction: 8 }).start();
+    } else if (!checked) {
+      scale.setValue(1);
+    }
+    prevChecked.current = checked;
+  }, [checked]);
 
   function handlePress() {
     Animated.sequence([
@@ -88,11 +103,27 @@ function SwipeableItem({
     onDelete();
   }
 
+  function handleToggleFromSwipe() {
+    swipeRef.current?.close();
+    onToggle();
+  }
+
+  const renderLeftActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
+    const iconScale = drag.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: 'clamp' });
+    return (
+      <TouchableOpacity style={styles.checkAction} onPress={handleToggleFromSwipe} activeOpacity={0.8}>
+        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+          <Ionicons name="checkmark" size={22} color={Colors.white} />
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderRightActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
-    const scale = drag.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.7], extrapolate: 'clamp' });
+    const iconScale = drag.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.7], extrapolate: 'clamp' });
     return (
       <TouchableOpacity style={styles.deleteAction} onPress={handleDelete} activeOpacity={0.8}>
-        <Animated.View style={{ transform: [{ scale }] }}>
+        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
           <Ionicons name="trash-outline" size={20} color={Colors.white} />
         </Animated.View>
       </TouchableOpacity>
@@ -102,15 +133,27 @@ function SwipeableItem({
   return (
     <Swipeable
       ref={swipeRef}
+      renderLeftActions={renderLeftActions}
       renderRightActions={renderRightActions}
+      leftThreshold={60}
       rightThreshold={40}
+      overshootLeft={false}
       overshootRight={false}
+      onSwipeableOpen={(direction) => {
+        if (direction === 'left') {
+          handleToggleFromSwipe();
+        }
+      }}
     >
-      <TouchableOpacity
-        style={[styles.item, { backgroundColor: colors.white }, item.checked && { backgroundColor: colors.gray100 }]}
+      <Pressable
+        style={({ pressed }) => [
+          styles.item,
+          { backgroundColor: colors.white },
+          item.checked && { backgroundColor: colors.gray100 },
+          pressed && { transform: [{ scale: 0.98 }] },
+        ]}
         onPress={() => { haptic('light'); onToggle(); }}
         onLongPress={() => { haptic('medium'); onLongPress(); }}
-        activeOpacity={0.8}
       >
         <AnimatedCheckbox checked={item.checked} onPress={onToggle} />
         {isEditing ? (
@@ -130,7 +173,7 @@ function SwipeableItem({
         {!item.checked && !isEditing && (
           <Ionicons name="reorder-three" size={18} color={colors.gray200} />
         )}
-      </TouchableOpacity>
+      </Pressable>
     </Swipeable>
   );
 }
@@ -190,17 +233,14 @@ export default function ListDetailScreen() {
   const [listType, setListType] = useState<string>(listTypeParam ?? 'checklist');
   const { toastProps, show: showToast } = useToast();
 
-  // Undo delete state
   const [pendingDelete, setPendingDelete] = useState<{ item: ListItem; timer: ReturnType<typeof setTimeout> } | null>(null);
-
-  // Inline edit
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-
-  // Search
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Collapsible done section
   const [doneExpanded, setDoneExpanded] = useState(true);
+
+  const prevItemCount = useRef(0);
+  const newItemAnim = useRef(new Animated.Value(0)).current;
+  const newItemSlide = useRef(new Animated.Value(40)).current;
 
   const isGroceryList = isBoodschappenlijst(name ?? '');
   const [geoEnabled, setGeoEnabled] = useState(false);
@@ -227,7 +267,18 @@ export default function ListDetailScreen() {
   const fetchItems = useCallback(async () => {
     const { data } = await supabase
       .from('list_items').select('*').eq('list_id', id).order('created_at', { ascending: true });
-    if (data) setItems(data);
+    if (data) {
+      if (data.length > prevItemCount.current && prevItemCount.current > 0) {
+        newItemAnim.setValue(0);
+        newItemSlide.setValue(40);
+        Animated.parallel([
+          Animated.timing(newItemAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(newItemSlide, { toValue: 0, duration: 280, useNativeDriver: true }),
+        ]).start();
+      }
+      prevItemCount.current = data.length;
+      setItems(data);
+    }
     setLoading(false);
     setRefreshing(false);
   }, [id]);
@@ -247,15 +298,25 @@ export default function ListDetailScreen() {
     fetchItems();
   }
 
+  async function checkAllItems() {
+    const unchecked = items.filter(i => !i.checked);
+    if (unchecked.length === 0) return;
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    const ids = unchecked.map(i => i.id);
+    setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, checked: true } : i));
+    await supabase.from('list_items').update({ checked: true }).in('id', ids);
+    showToast(`${ids.length} item${ids.length > 1 ? 's' : ''} afgevinkt`, 'success');
+  }
+
   function deleteItem(itemId: string) {
     haptic('warning');
     const target = items.find(i => i.id === itemId);
     if (!target) return;
 
-    // Optimistically remove from list
     setItems(prev => prev.filter(i => i.id !== itemId));
 
-    // Cancel any previous pending delete
     if (pendingDelete) {
       clearTimeout(pendingDelete.timer);
       supabase.from('list_items').delete().eq('id', pendingDelete.item.id);
@@ -325,7 +386,7 @@ export default function ListDetailScreen() {
   function toggleGeoAlert(value: boolean) {
     if (geoToggling) return;
     if (value) {
-      setGeoPermModal(true); // show explanation first
+      setGeoPermModal(true);
     } else {
       doDisableGeo();
     }
@@ -369,12 +430,10 @@ export default function ListDetailScreen() {
   const checked = items.filter(i => i.checked);
   const allDone = items.length > 0 && unchecked.length === 0;
 
-  // Progress bar
   const totalCount = items.length;
   const checkedCount = checked.length;
   const progress = totalCount > 0 ? checkedCount / totalCount : 0;
 
-  // Filtered items for search
   const filteredUnchecked = searchQuery.trim()
     ? unchecked.filter(i => i.text.toLowerCase().includes(searchQuery.toLowerCase()))
     : unchecked;
@@ -417,19 +476,31 @@ export default function ListDetailScreen() {
           </View>
         )}
 
-        {/* Search bar */}
+        {/* Search bar + Alles afvinken */}
         {!loading && items.length > 0 && (
-          <View style={[styles.searchBar, { backgroundColor: colors.white, borderColor: colors.gray100 }]}>
-            <Ionicons name="search-outline" size={16} color={colors.gray400} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.black }]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Zoeken in lijst..."
-              placeholderTextColor={colors.gray400}
-              returnKeyType="search"
-              clearButtonMode="while-editing"
-            />
+          <View style={[styles.searchRow]}>
+            <View style={[styles.searchBar, { backgroundColor: colors.white, borderColor: colors.gray100, flex: 1 }]}>
+              <Ionicons name="search-outline" size={16} color={colors.gray400} />
+              <TextInput
+                style={[styles.searchInput, { color: colors.black }]}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Zoeken in lijst..."
+                placeholderTextColor={colors.gray400}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+            </View>
+            {unchecked.length > 0 && (
+              <TouchableOpacity
+                onPress={checkAllItems}
+                style={[styles.checkAllBtn, { backgroundColor: Colors.yellow }]}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-done" size={14} color={Colors.black} />
+                <Text style={styles.checkAllText}>Alles</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -464,7 +535,7 @@ export default function ListDetailScreen() {
                   <Text style={styles.allDoneText}>Alles afgevinkt!</Text>
                 </View>
               ) : filteredUnchecked.length > 0 ? (
-                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen · veeg links om te verwijderen</Text>
+                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen · veeg links om af te vinken</Text>
               ) : null
             }
             ListEmptyComponent={
@@ -491,8 +562,18 @@ export default function ListDetailScreen() {
               if (listType === 'tips') {
                 return <TipItemRow item={item} colors={colors} />;
               }
-              // Show collapsible "done" header before first checked item
               const isFirstChecked = item.checked && index === filteredUnchecked.length;
+              const isLastItem = index === flatItems.length - 1;
+              const itemView = (
+                <SwipeableItem
+                  item={item}
+                  onToggle={() => toggleItem(item)}
+                  onDelete={() => deleteItem(item.id)}
+                  onLongPress={() => setEditingItemId(item.id)}
+                  editingItemId={editingItemId}
+                  onEditSubmit={saveInlineEdit}
+                />
+              );
               return (
                 <>
                   {isFirstChecked && filteredChecked.length > 0 && (
@@ -509,14 +590,11 @@ export default function ListDetailScreen() {
                       />
                     </TouchableOpacity>
                   )}
-                  <SwipeableItem
-                    item={item}
-                    onToggle={() => toggleItem(item)}
-                    onDelete={() => deleteItem(item.id)}
-                    onLongPress={() => setEditingItemId(item.id)}
-                    editingItemId={editingItemId}
-                    onEditSubmit={saveInlineEdit}
-                  />
+                  {isLastItem ? (
+                    <Animated.View style={{ opacity: newItemAnim, transform: [{ translateX: newItemSlide }] }}>
+                      {itemView}
+                    </Animated.View>
+                  ) : itemView}
                 </>
               );
             }}
@@ -533,6 +611,7 @@ export default function ListDetailScreen() {
               placeholderTextColor={colors.gray400}
               returnKeyType="done"
               onSubmitEditing={addItem}
+              inputAccessoryViewID={Platform.OS === 'ios' ? ADD_INPUT_ACCESSORY_ID : undefined}
             />
             <TouchableOpacity onPress={addItem} disabled={!newItemText.trim() || adding} activeOpacity={0.8}>
               <LinearGradient
@@ -546,6 +625,16 @@ export default function ListDetailScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {Platform.OS === 'ios' && (
+          <InputAccessoryView nativeID={ADD_INPUT_ACCESSORY_ID}>
+            <View style={[styles.klaarBar, { backgroundColor: colors.white, borderTopColor: colors.gray100 }]}>
+              <TouchableOpacity onPress={() => Keyboard.dismiss()} style={styles.klaarBtn} activeOpacity={0.7}>
+                <Text style={[styles.klaarText, { color: Colors.black }]}>Klaar</Text>
+              </TouchableOpacity>
+            </View>
+          </InputAccessoryView>
+        )}
 
         {pendingDelete && (
           <View style={[styles.snackbar, { bottom: (insets.bottom > 0 ? insets.bottom : 14) + 80 }]}>
@@ -628,7 +717,7 @@ const styles = StyleSheet.create({
   item: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white,
     borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 15, marginBottom: 8,
-    minHeight: 56, // Rule #5: min touch target
+    minHeight: 56,
     ...Shadow.card,
   },
   itemCheckedContainer: { opacity: 0.7 },
@@ -640,6 +729,10 @@ const styles = StyleSheet.create({
   checkboxDone: { backgroundColor: Colors.yellow, borderColor: Colors.yellow },
   itemText: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 16, color: Colors.black },
   itemTextDone: { textDecorationLine: 'line-through', color: Colors.gray400, fontFamily: 'Inter_300Light' },
+  checkAction: {
+    backgroundColor: '#22C55E', borderRadius: Radius.md, width: 72,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 8, marginRight: 4,
+  },
   deleteAction: {
     backgroundColor: '#ef4444', borderRadius: Radius.md, width: 72,
     justifyContent: 'center', alignItems: 'center', marginBottom: 8,
@@ -679,14 +772,25 @@ const styles = StyleSheet.create({
   },
   snackbarText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: Colors.white },
   snackbarUndo: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow },
-  searchBar: {
+  searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 8, marginBottom: 4,
+  },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 12, paddingVertical: 9,
     borderRadius: Radius.md, borderWidth: 1,
   },
   searchInput: {
     flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14, padding: 0,
+  },
+  checkAllBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 12, paddingVertical: 9,
+    borderRadius: Radius.md,
+  },
+  checkAllText: {
+    fontFamily: 'Inter_600SemiBold', fontSize: 13, color: Colors.black,
   },
   batchDeleteBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -701,4 +805,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 10,
   },
+  klaarBar: {
+    flexDirection: 'row', justifyContent: 'flex-end',
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderTopWidth: 1,
+  },
+  klaarBtn: {
+    paddingHorizontal: 16, paddingVertical: 6,
+    borderRadius: Radius.pill, backgroundColor: Colors.yellow,
+  },
+  klaarText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
 });

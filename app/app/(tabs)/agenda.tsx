@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Platform,
   TouchableOpacity,
+  Pressable,
   Linking,
   Alert,
   PanResponder,
@@ -16,6 +17,7 @@ import {
   Modal,
   SafeAreaView,
   LayoutAnimation,
+  Dimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +25,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Calendar from 'expo-calendar';
+import { Swipeable } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { CalEvent } from '@/lib/types';
@@ -49,6 +52,9 @@ const CARD_H             = 84;
 const MONTH_H            = 356;
 const MONTHS_BEFORE      = 6;
 const MONTHS_AFTER       = 18;
+const { width: screenWidth } = Dimensions.get('window');
+
+const PERIOD_ORDER: TimePeriod[] = ['today', 'tomorrow', 'thisweek', 'nextweek'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -90,6 +96,10 @@ function daysUntil(dateKey: string): string | null {
   if (diff > 0 && diff <= 30) return `over ${diff}d`;
   if (diff < 0) return `${Math.abs(diff)}d geleden`;
   return null;
+}
+
+function isPast(dateStr: string): boolean {
+  return new Date(dateStr + 'T23:59:59') < new Date();
 }
 
 function groupByDate(events: MergedEvent[]): Section[] {
@@ -188,8 +198,19 @@ function AgendaLite() {
   const [timePeriod, setTimePeriod]       = useState<TimePeriod>('today');
   const [streamFilter, setStreamFilter]   = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<MergedEvent | null>(null);
+  const [deleteTarget, setDeleteTarget]   = useState<MergedEvent | null>(null);
   const [scrollY, setScrollY]             = useState(0);
   const liteScrollRef                     = useRef<ScrollView>(null);
+  const chipScrollRef                     = useRef<ScrollView>(null);
+  const breatheAnim                       = useRef(new Animated.Value(1)).current;
+  const scrollYAnim                       = useRef(new Animated.Value(0)).current;
+
+  const PERIOD_LABELS: [TimePeriod, string][] = [
+    ['today', 'Vandaag'],
+    ['tomorrow', 'Morgen'],
+    ['thisweek', 'Deze week'],
+    ['nextweek', 'Volgende week'],
+  ];
 
   const EMPTY_STATE: Record<TimePeriod, { emoji: string; title: string; sub: string }> = {
     today:    { emoji: '🎉', title: 'Vandaag vrij!',       sub: 'Niets ingepland. Geniet ervan.' },
@@ -199,9 +220,19 @@ function AgendaLite() {
   };
 
   useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breatheAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(breatheAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [breatheAnim]);
+
+  useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
 
-    // Trigger bi-directional CalDAV sync fire-and-forget; UI refreshes via Supabase realtime
     fetch(`${API_BASE}/calendar-sync/${user.id}`, { method: 'POST' }).catch(() => {});
 
     const now = new Date(); now.setHours(0, 0, 0, 0);
@@ -243,6 +274,23 @@ function AgendaLite() {
     });
   }, [user]);
 
+  const periodCounts = useMemo(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
+    const ranges: Record<TimePeriod, [string, string]> = {
+      today:    [offsetDay(0), offsetDay(0)],
+      tomorrow: [offsetDay(1), offsetDay(1)],
+      thisweek: [offsetDay(0), offsetDay(6)],
+      nextweek: [offsetDay(7), offsetDay(13)],
+    };
+    const counts: Record<TimePeriod, number> = { today: 0, tomorrow: 0, thisweek: 0, nextweek: 0 };
+    for (const p of PERIOD_ORDER) {
+      const [start, end] = ranges[p];
+      counts[p] = allEvents.filter(e => e.date && e.date >= start && e.date <= end).length;
+    }
+    return counts;
+  }, [allEvents]);
+
   const visibleEvents = useMemo(() => {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
@@ -258,33 +306,89 @@ function AgendaLite() {
     return evts;
   }, [allEvents, timePeriod, streamFilter]);
 
+  function selectPeriod(p: TimePeriod) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTimePeriod(p);
+    setStreamFilter(null);
+    const index = PERIOD_ORDER.indexOf(p);
+    chipScrollRef.current?.scrollTo({ x: Math.max(0, index * 90 - screenWidth / 2 + 45), animated: true });
+  }
+
+  const swipePanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -60) {
+          setTimePeriod(prev => {
+            const idx = PERIOD_ORDER.indexOf(prev);
+            const next = PERIOD_ORDER[Math.min(idx + 1, PERIOD_ORDER.length - 1)];
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            const ni = PERIOD_ORDER.indexOf(next);
+            chipScrollRef.current?.scrollTo({ x: Math.max(0, ni * 90 - screenWidth / 2 + 45), animated: true });
+            return next;
+          });
+        } else if (g.dx > 60) {
+          setTimePeriod(prev => {
+            const idx = PERIOD_ORDER.indexOf(prev);
+            const next = PERIOD_ORDER[Math.max(idx - 1, 0)];
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            const ni = PERIOD_ORDER.indexOf(next);
+            chipScrollRef.current?.scrollTo({ x: Math.max(0, ni * 90 - screenWidth / 2 + 45), animated: true });
+            return next;
+          });
+        }
+      },
+    })
+  ).current;
+
+  async function deleteEvent(event: MergedEvent) {
+    if (event.source !== 'sous-chef') return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await supabase.from('events').delete().eq('id', event.id);
+    setAllEvents(prev => prev.filter(e => e.id !== event.id));
+    setDeleteTarget(null);
+  }
+
+  const bannerTranslateY = scrollYAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -20],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
       {/* Header */}
-      <View style={[s.banner, { paddingTop: insets.top + 24, paddingBottom: 20 }]}>
+      <Animated.View style={[s.banner, { paddingTop: insets.top + 24, paddingBottom: 20, transform: [{ translateY: bannerTranslateY }] }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
         <Text style={s.bannerTitle}>Agenda</Text>
-      </View>
+      </Animated.View>
 
       {/* Period pills */}
       <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 }}>
         <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Periode</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-            <TouchableOpacity
-              key={p}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                setTimePeriod(p);
-                setStreamFilter(null);
-              }}
-              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
-            >
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>{label}</Text>
-            </TouchableOpacity>
-          ))}
+        <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {PERIOD_LABELS.map(([p, label]) => {
+            const count = periodCounts[p];
+            const active = timePeriod === p;
+            return (
+              <TouchableOpacity
+                key={p}
+                onPress={() => selectPeriod(p)}
+                style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: active ? Colors.yellow : '#DDDCDC' }}
+              >
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>
+                  {label}{' '}
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: count === 0 ? '#aaa' : '#333' }}>
+                    ({count})
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -316,12 +420,19 @@ function AgendaLite() {
       })()}
 
       {/* Events */}
-      <ScrollView
+      <Animated.ScrollView
         ref={liteScrollRef}
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 140 }}
-        onScroll={e => setScrollY(e.nativeEvent.contentOffset.y)}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollYAnim } } }],
+          {
+            useNativeDriver: true,
+            listener: (e: any) => setScrollY(e.nativeEvent.contentOffset.y),
+          }
+        )}
         scrollEventThrottle={16}
+        {...swipePanResponder.panHandlers}
       >
         {loading ? (
           <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />
@@ -330,7 +441,7 @@ function AgendaLite() {
             const es = EMPTY_STATE[timePeriod];
             return (
               <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-                <Text style={{ fontSize: 40 }}>{es.emoji}</Text>
+                <Animated.Text style={{ fontSize: 40, transform: [{ scale: breatheAnim }] }}>{es.emoji}</Animated.Text>
                 <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>{es.title}</Text>
                 <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, textAlign: 'center' }}>{es.sub}</Text>
               </View>
@@ -338,12 +449,15 @@ function AgendaLite() {
           })()
         ) : visibleEvents.map(e => {
           const stream = streams.find(st => st.claude_key === e.calendar_stream);
-          return (
-            <TouchableOpacity
-              key={e.id}
+          const eventPast = e.date ? isPast(e.date) : false;
+
+          const cardContent = (
+            <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedEvent(e); }}
-              activeOpacity={0.85}
-              style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden' }, Shadow.card]}
+              style={({ pressed }) => [
+                { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden', opacity: eventPast ? 0.45 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+                Shadow.card,
+              ]}
             >
               {stream?.color && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: stream.color }} />}
               <Text style={{ fontSize: 24, marginLeft: stream?.color ? 8 : 0 }}>{eventEmoji(e.title)}</Text>
@@ -361,10 +475,28 @@ function AgendaLite() {
                   <Text style={{ fontSize: 11, color: stream.color, fontFamily: 'Inter_600SemiBold' }}>{stream.emoji}</Text>
                 </View>
               )}
-            </TouchableOpacity>
+            </Pressable>
+          );
+
+          if (e.source !== 'sous-chef') return <View key={e.id}>{cardContent}</View>;
+
+          return (
+            <Swipeable
+              key={e.id}
+              renderRightActions={() => (
+                <View style={{ width: 72, justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
+                  <View style={{ backgroundColor: '#E74C3C', borderRadius: Radius.lg, width: 56, height: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="trash-outline" size={20} color="#fff" />
+                  </View>
+                </View>
+              )}
+              onSwipeableOpen={() => setDeleteTarget(e)}
+            >
+              {cardContent}
+            </Swipeable>
           );
         })}
-      </ScrollView>
+      </Animated.ScrollView>
 
       {/* Event detail modal */}
       <Modal visible={!!selectedEvent} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSelectedEvent(null)}>
@@ -412,6 +544,30 @@ function AgendaLite() {
         )}
       </Modal>
 
+      {/* Delete confirmation bottom sheet */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 8 }}>Afspraak verwijderen?</Text>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, marginBottom: 24 }}>
+              "{deleteTarget?.title}" wordt permanent verwijderd.
+            </Text>
+            <Pressable
+              onPress={() => { if (deleteTarget) deleteEvent(deleteTarget); }}
+              style={({ pressed }) => [{ backgroundColor: '#E74C3C', borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', marginBottom: 10, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: '#fff' }}>Verwijderen</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setDeleteTarget(null)}
+              style={({ pressed }) => [{ backgroundColor: colors.gray100, borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>Annuleren</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Floating "Vandaag" button */}
       {scrollY > 100 && (
         <TouchableOpacity
@@ -448,6 +604,7 @@ export default function AgendaTab() {
   const insets     = useSafeAreaInsets();
   const listRef    = useRef<FlatList<FlatItem>>(null);
   const monthsRef  = useRef<FlatList>(null);
+  const chipScrollRef = useRef<ScrollView>(null);
 
   const [allSections, setAllSections]   = useState<Section[]>([]);
   const [timePeriod, setTimePeriod]     = useState<TimePeriod>('today');
@@ -460,11 +617,33 @@ export default function AgendaTab() {
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [streams, setStreams]           = useState<CalendarStream[]>([]);
   const [listScrollY, setListScrollY]   = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<MergedEvent | null>(null);
+
+  const breatheAnim  = useRef(new Animated.Value(1)).current;
+  const scrollYAnim  = useRef(new Animated.Value(0)).current;
 
   const PANEL_COLLAPSED = 200;
   const PANEL_EXPANDED  = 440;
   const panelHeight     = useRef(new Animated.Value(PANEL_COLLAPSED)).current;
   const panelCurrent    = useRef(PANEL_COLLAPSED);
+
+  const PERIOD_LABELS: [TimePeriod, string][] = [
+    ['today', 'Vandaag'],
+    ['tomorrow', 'Morgen'],
+    ['thisweek', 'Deze week'],
+    ['nextweek', 'Volgende week'],
+  ];
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breatheAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(breatheAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [breatheAnim]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -479,6 +658,35 @@ export default function AgendaTab() {
         const target = (g.vy < -0.3 || currentVal > midpoint) ? PANEL_EXPANDED : PANEL_COLLAPSED;
         panelCurrent.current = target;
         Animated.spring(panelHeight, { toValue: target, useNativeDriver: false, bounciness: 4 }).start();
+      },
+    })
+  ).current;
+
+  const swipePanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -60) {
+          setTimePeriod(prev => {
+            const idx = PERIOD_ORDER.indexOf(prev);
+            const next = PERIOD_ORDER[Math.min(idx + 1, PERIOD_ORDER.length - 1)];
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            const ni = PERIOD_ORDER.indexOf(next);
+            chipScrollRef.current?.scrollTo({ x: Math.max(0, ni * 90 - screenWidth / 2 + 45), animated: true });
+            return next;
+          });
+        } else if (g.dx > 60) {
+          setTimePeriod(prev => {
+            const idx = PERIOD_ORDER.indexOf(prev);
+            const next = PERIOD_ORDER[Math.max(idx - 1, 0)];
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            const ni = PERIOD_ORDER.indexOf(next);
+            chipScrollRef.current?.scrollTo({ x: Math.max(0, ni * 90 - screenWidth / 2 + 45), animated: true });
+            return next;
+          });
+        }
       },
     })
   ).current;
@@ -528,6 +736,24 @@ export default function AgendaTab() {
   const eventsByDate = useMemo(() => { const m = new Map<string, MergedEvent[]>(); for (const s of allSections) m.set(s.dateKey, s.data); return m; }, [allSections]);
   const phoneConnected = calPermission === 'granted' && !calHidden;
 
+  const periodCounts = useMemo(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
+    const ranges: Record<TimePeriod, [string, string]> = {
+      today:    [offsetDay(0), offsetDay(0)],
+      tomorrow: [offsetDay(1), offsetDay(1)],
+      thisweek: [offsetDay(0), offsetDay(6)],
+      nextweek: [offsetDay(7), offsetDay(13)],
+    };
+    const counts: Record<TimePeriod, number> = { today: 0, tomorrow: 0, thisweek: 0, nextweek: 0 };
+    const allEvents = allSections.flatMap(s => s.data);
+    for (const p of PERIOD_ORDER) {
+      const [start, end] = ranges[p];
+      counts[p] = allEvents.filter(e => e.date && e.date >= start && e.date <= end).length;
+    }
+    return counts;
+  }, [allSections]);
+
   const sections = useMemo(() => {
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
@@ -562,12 +788,34 @@ export default function AgendaTab() {
 
   const selectedEvents = eventsByDate.get(selectedDate) ?? [];
 
+  function selectPeriod(p: TimePeriod) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setTimePeriod(p as TimePeriod);
+    const index = PERIOD_ORDER.indexOf(p);
+    chipScrollRef.current?.scrollTo({ x: Math.max(0, index * 90 - screenWidth / 2 + 45), animated: true });
+  }
+
+  async function deleteEvent(event: MergedEvent) {
+    if (event.source !== 'sous-chef') return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await supabase.from('events').delete().eq('id', event.id);
+    setAllSections(prev => prev.map(sec => ({ ...sec, data: sec.data.filter(e => e.id !== event.id) })).filter(sec => sec.data.length > 0));
+    setDeleteTarget(null);
+  }
+
+  const bannerTranslateY = scrollYAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -20],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View style={[s.container, { backgroundColor: colors.offWhite }]}>
 
       {/* ── Fixed header ─────────────────────────────────────────────────── */}
       <View>
-        <View style={[s.banner, { paddingTop: insets.top + 36 }]}>
+        <Animated.View style={[s.banner, { paddingTop: insets.top + 36, transform: [{ translateY: bannerTranslateY }] }]}>
           <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
           <View style={s.bannerRow}>
@@ -585,25 +833,30 @@ export default function AgendaTab() {
               </View>
             </View>
           )}
-        </View>
+        </Animated.View>
 
         {/* Time period pills */}
         <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6 }}>
           <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Periode</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-              <TouchableOpacity
-                key={p}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                  setTimePeriod(p as TimePeriod);
-                }}
-                style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
-              >
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>{label}</Text>
-              </TouchableOpacity>
-            ))}
+          <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {PERIOD_LABELS.map(([p, label]) => {
+              const count = periodCounts[p];
+              const active = timePeriod === p;
+              return (
+                <TouchableOpacity
+                  key={p}
+                  onPress={() => selectPeriod(p)}
+                  style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: active ? Colors.yellow : '#DDDCDC' }}
+                >
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>
+                    {label}{' '}
+                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: count === 0 ? '#aaa' : '#333' }}>
+                      ({count})
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -661,11 +914,17 @@ export default function AgendaTab() {
           keyExtractor={(item, i) => item.type === 'header' ? `h-${item.section.dateKey}` : `i-${item.item.id}-${i}`}
           stickyHeaderIndices={stickyIndices}
           contentContainerStyle={{ paddingBottom: 120 }}
-          onScroll={e => setListScrollY(e.nativeEvent.contentOffset.y)}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollYAnim } } }],
+            {
+              useNativeDriver: false,
+              listener: (e: any) => setListScrollY(e.nativeEvent.contentOffset.y),
+            }
+          )}
           scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchEvents(); }} tintColor={Colors.yellow} />}
           ListHeaderComponent={
-            <View>
+            <View {...swipePanResponder.panHandlers}>
               {calPermission === 'unknown' && !calHidden && Platform.OS !== 'web' && (
                 <TouchableOpacity style={[s.permBanner, { backgroundColor: colors.yellowLight }]} onPress={async () => { await fetchPhoneEvents(); setCalPermission('granted'); fetchEvents(); }}>
                   <Ionicons name="phone-portrait-outline" size={15} color={colors.black} />
@@ -675,7 +934,7 @@ export default function AgendaTab() {
               )}
               {sections.length === 0 && (
                 <View style={s.empty}>
-                  <Text style={{ fontSize: 48, marginBottom: 16 }}>📅</Text>
+                  <Animated.Text style={{ fontSize: 48, marginBottom: 16, transform: [{ scale: breatheAnim }] }}>📅</Animated.Text>
                   <Text style={[s.emptyTitle, { color: colors.black }]}>Niets gepland</Text>
                   <Text style={[s.emptyText, { color: colors.gray400 }]}>Stuur "tandarts vrijdag 14u" via WhatsApp.</Text>
                 </View>
@@ -697,9 +956,14 @@ export default function AgendaTab() {
             const streamColor = event.source === 'sous-chef'
               ? streams.find(s => s.claude_key === event.calendar_stream)?.color
               : undefined;
-            return (
-              <View style={[s.cardWrap, isLast && { marginBottom: 4 }]}>
-                <View style={[s.card, { backgroundColor: colors.white }, section.isPast && s.cardPast]}>
+            const eventPast = event.date ? isPast(event.date) : false;
+
+            const cardContent = (
+              <View style={[s.cardWrap, isLast && { marginBottom: 4 }, { opacity: eventPast ? 0.45 : 1 }]}>
+                <Pressable
+                  style={({ pressed }) => [s.card, { backgroundColor: colors.white, transform: [{ scale: pressed ? 0.97 : 1 }] }, section.isPast && s.cardPast]}
+                  onPress={() => {}}
+                >
                   <View style={[s.accent, streamColor ? { backgroundColor: streamColor } : event.source === 'phone' ? { backgroundColor: colors.gray200 } : section.isToday ? s.accentToday : { backgroundColor: colors.gray200 }]} />
                   <Text style={s.emoji}>{eventEmoji(event.title)}</Text>
                   <View style={s.cardBody}>
@@ -712,15 +976,32 @@ export default function AgendaTab() {
                     </View>
                   </View>
                   {cl && <Text style={[s.countLabel, { color: colors.gray400 }, section.isPast && { color: colors.gray400 }]}>{cl}</Text>}
-                </View>
+                </Pressable>
               </View>
+            );
+
+            if (event.source !== 'sous-chef') return cardContent;
+
+            return (
+              <Swipeable
+                key={event.id}
+                renderRightActions={() => (
+                  <View style={{ width: 72, justifyContent: 'center', alignItems: 'center', paddingBottom: isLast ? 4 : 8, paddingHorizontal: 8 }}>
+                    <View style={{ backgroundColor: '#E74C3C', borderRadius: Radius.lg, flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
+                      <Ionicons name="trash-outline" size={20} color="#fff" />
+                    </View>
+                  </View>
+                )}
+                onSwipeableOpen={() => setDeleteTarget(event)}
+              >
+                {cardContent}
+              </Swipeable>
             );
           }}
         />
       )}
 
       {/* ── Calendar view ──────────────────────────────────────────────────── */}
-      {/* Bottom fade — only in list mode; calendar has its own panel */}
       {viewMode === 'list' && (
         <LinearGradient
           colors={[`${colors.offWhite}00`, colors.offWhite]}
@@ -796,6 +1077,30 @@ export default function AgendaTab() {
           </Animated.View>
         </>
       )}
+
+      {/* Delete confirmation bottom sheet */}
+      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 8 }}>Afspraak verwijderen?</Text>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, marginBottom: 24 }}>
+              "{deleteTarget?.title}" wordt permanent verwijderd.
+            </Text>
+            <Pressable
+              onPress={() => { if (deleteTarget) deleteEvent(deleteTarget); }}
+              style={({ pressed }) => [{ backgroundColor: '#E74C3C', borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', marginBottom: 10, opacity: pressed ? 0.8 : 1 }]}
+            >
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: '#fff' }}>Verwijderen</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setDeleteTarget(null)}
+              style={({ pressed }) => [{ backgroundColor: colors.gray100, borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>Annuleren</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -918,4 +1223,3 @@ const s = StyleSheet.create({
   },
   todayBtnText: { fontFamily: 'Inter_700Bold', fontSize: 13, color: Colors.black },
 });
-

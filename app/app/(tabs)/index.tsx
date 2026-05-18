@@ -17,6 +17,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -33,24 +34,105 @@ import { SkeletonListCard } from '@/components/SkeletonCard';
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
-// ── Lists ──────────────────────────────────────────────────────────────────────
-
-// Full-card solid colors — text color adapts per background
 const TILE_ACCENTS  = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
 const TILE_TEXT_FG  = ['#0A0A0A', '#FFFFFF',  '#FFFFFF',  '#FFFFFF'];
 
-function AnimatedCard({ item, index, onPress }: { item: List & { item_count: number; open_count: number }; index: number; onPress: () => void; colors: any }) {
+// ── Bottom Sheet ───────────────────────────────────────────────────────────────
+
+function ConfirmSheet({
+  visible,
+  title,
+  subtitle,
+  destructiveLabel,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  subtitle: string;
+  destructiveLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const slideAnim = useRef(new Animated.Value(300)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, tension: 70, friction: 12, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 300, duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel}>
+      <Animated.View style={[sheetStyles.overlay, { opacity: fadeAnim }]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
+        <Animated.View style={[sheetStyles.sheet, { backgroundColor: colors.white, paddingBottom: insets.bottom > 0 ? insets.bottom : 24, transform: [{ translateY: slideAnim }] }]}>
+          <View style={sheetStyles.handle} />
+          <Text style={[sheetStyles.title, { color: colors.black }]}>{title}</Text>
+          <Text style={[sheetStyles.subtitle, { color: colors.gray400 }]}>{subtitle}</Text>
+          <TouchableOpacity style={[sheetStyles.destructiveBtn]} onPress={onConfirm} activeOpacity={0.85}>
+            <Text style={sheetStyles.destructiveBtnText}>{destructiveLabel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[sheetStyles.cancelBtn, { backgroundColor: colors.gray100 }]} onPress={onCancel} activeOpacity={0.8}>
+            <Text style={[sheetStyles.cancelBtnText, { color: colors.black }]}>Annuleer</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 14, gap: 10 },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 16 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 18, textAlign: 'center', marginBottom: 2 },
+  subtitle: { fontFamily: 'Inter_300Light', fontSize: 14, textAlign: 'center', marginBottom: 8 },
+  destructiveBtn: { backgroundColor: '#EF4444', borderRadius: Radius.pill, paddingVertical: 15, alignItems: 'center' },
+  destructiveBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.white },
+  cancelBtn: { borderRadius: Radius.pill, paddingVertical: 15, alignItems: 'center' },
+  cancelBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 16 },
+});
+
+// ── List Card ──────────────────────────────────────────────────────────────────
+
+function AnimatedCard({
+  item,
+  index,
+  onPress,
+  onDeleteConfirm,
+}: {
+  item: List & { item_count: number; open_count: number };
+  index: number;
+  onPress: () => void;
+  onDeleteConfirm: () => void;
+  colors: any;
+}) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const swipeRef = useRef<Swipeable>(null);
 
-  const bg  = TILE_ACCENTS[index % TILE_ACCENTS.length];
-  const fg  = TILE_TEXT_FG[index % TILE_TEXT_FG.length];
+  const bg = TILE_ACCENTS[index % TILE_ACCENTS.length];
+  const fg = TILE_TEXT_FG[index % TILE_TEXT_FG.length];
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 320, delay: index * 55, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, delay: index * 55, tension: 90, friction: 13, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 200, delay: index * 40, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 200, delay: index * 40, useNativeDriver: true }),
     ]).start();
   }, []);
 
@@ -60,43 +142,72 @@ function AnimatedCard({ item, index, onPress }: { item: List & { item_count: num
   const allDone = totalCount > 0 && openCount === 0;
   const progress = totalCount > 0 ? (totalCount - openCount) / totalCount : 0;
 
+  const renderLeftActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
+    const iconScale = drag.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: 'clamp' });
+    return (
+      <TouchableOpacity
+        style={cardStyles.deleteAction}
+        onPress={() => { swipeRef.current?.close(); onDeleteConfirm(); }}
+        activeOpacity={0.8}
+      >
+        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+          <Ionicons name="trash-outline" size={22} color={Colors.white} />
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }]}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()}
-        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.tile, { backgroundColor: bg }]}
-      >
-        <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
-        <View style={styles.tileBottom}>
-          <Text style={[styles.tileName, { color: fg }]} numberOfLines={2}>{item.name}</Text>
-          <View style={styles.tileCountRow}>
-            {totalCount > 0 ? (
-              allDone ? (
-                <Text style={[styles.tileCount, { color: '#4CAF50', opacity: 1, fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
+      <Swipeable ref={swipeRef} renderLeftActions={renderLeftActions} leftThreshold={60} overshootLeft={false}>
+        <Pressable
+          onPress={onPress}
+          onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+          onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+          style={[styles.tile, { backgroundColor: bg }]}
+        >
+          <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
+          <View style={styles.tileBottom}>
+            <Text style={[styles.tileName, { color: fg }]} numberOfLines={2}>{item.name}</Text>
+            <View style={styles.tileCountRow}>
+              {totalCount > 0 ? (
+                allDone ? (
+                  <Text style={[styles.tileCount, { color: '#4CAF50', opacity: 1, fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
+                ) : (
+                  <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>{openCount} open</Text>
+                )
               ) : (
-                <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>{openCount} open</Text>
-              )
-            ) : (
-              <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>Leeg</Text>
-            )}
-            {typeLabel && (
-              <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
-                <Text style={[styles.typeBadgeText, { color: fg }]}>{typeLabel}</Text>
-              </View>
-            )}
+                <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>Leeg</Text>
+              )}
+              {typeLabel && (
+                <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
+                  <Text style={[styles.typeBadgeText, { color: fg }]}>{typeLabel}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
-        {totalCount > 0 && (
-          <View style={styles.tileProgressBg}>
-            <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#4CAF50' : Colors.yellow }]} />
-          </View>
-        )}
-      </Pressable>
+          {totalCount > 0 && (
+            <View style={styles.tileProgressBg}>
+              <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#4CAF50' : Colors.yellow }]} />
+            </View>
+          )}
+        </Pressable>
+      </Swipeable>
     </Animated.View>
   );
 }
+
+const cardStyles = StyleSheet.create({
+  deleteAction: {
+    backgroundColor: '#EF4444',
+    borderRadius: Radius.xl,
+    width: 72,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 0,
+    marginRight: 8,
+  },
+});
 
 // ── Notes ──────────────────────────────────────────────────────────────────────
 
@@ -224,6 +335,39 @@ function GettingStartedBanner({ userId, onDismiss, colors }: { userId: string | 
   );
 }
 
+// ── Sort Toggle ────────────────────────────────────────────────────────────────
+
+type SortMode = 'recent' | 'az' | 'complete';
+
+function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v: SortMode) => void; colors: any }) {
+  const options: { key: SortMode; label: string }[] = [
+    { key: 'recent', label: 'Recent' },
+    { key: 'az', label: 'A-Z' },
+    { key: 'complete', label: 'Compleet' },
+  ];
+  return (
+    <View style={sortStyles.row}>
+      {options.map(opt => (
+        <TouchableOpacity
+          key={opt.key}
+          onPress={() => onChange(opt.key)}
+          style={[sortStyles.pill, value === opt.key && sortStyles.pillActive]}
+          activeOpacity={0.75}
+        >
+          <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : colors.gray400 }]}>{opt.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+const sortStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
+  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: 'transparent' },
+  pillActive: { backgroundColor: Colors.yellow },
+  pillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+});
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 type Tab = 'lists' | 'notes' | 'receipts';
@@ -285,6 +429,12 @@ export default function LijstenTab() {
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [deleteSheet, setDeleteSheet] = useState<{ listId: string; listName: string } | null>(null);
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const emptyBreath = useRef(new Animated.Value(1)).current;
+  const breathLoopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const showBanner = settings.onboarding_done && !settings.getting_started_dismissed;
 
@@ -337,6 +487,16 @@ export default function LijstenTab() {
     n.body.toLowerCase().includes(search.toLowerCase())
   );
 
+  const sortedLists = [...lists].sort((a, b) => {
+    if (sortMode === 'az') return a.name.localeCompare(b.name, 'nl');
+    if (sortMode === 'complete') {
+      const pa = a.item_count > 0 ? (a.item_count - a.open_count) / a.item_count : 0;
+      const pb = b.item_count > 0 ? (b.item_count - b.open_count) / b.item_count : 0;
+      return pb - pa;
+    }
+    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+  });
+
   const fetchReceipts = useCallback(async () => {
     if (!user || user.id === 'dev') return;
     try {
@@ -382,15 +542,40 @@ export default function LijstenTab() {
     setAssignModalReceipt(null);
   }
 
+  async function deleteList(listId: string) {
+    setLists(prev => prev.filter(l => l.id !== listId));
+    setDeleteSheet(null);
+    await supabase.from('lists').delete().eq('id', listId);
+  }
+
   useEffect(() => { if (settings.receipts_enabled) fetchReceipts(); }, [fetchReceipts, settings.receipts_enabled]);
 
-  const showNotesTab     = settings.notes_enabled;
-  const showReceiptsTab  = settings.receipts_enabled;
+  useEffect(() => {
+    if (lists.length === 0 && !loading) {
+      breathLoopRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(emptyBreath, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+          Animated.timing(emptyBreath, { toValue: 1, duration: 900, useNativeDriver: true }),
+        ])
+      );
+      breathLoopRef.current.start();
+    } else {
+      breathLoopRef.current?.stop();
+      emptyBreath.setValue(1);
+    }
+    return () => { breathLoopRef.current?.stop(); };
+  }, [lists.length, loading]);
+
+  const bannerTranslateY = scrollY.interpolate({ inputRange: [0, 120], outputRange: [0, -36], extrapolate: 'clamp' });
+
+  const showNotesTab    = settings.notes_enabled;
+  const showReceiptsTab = settings.receipts_enabled;
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
       {/* Banner */}
-      <View style={[styles.banner, { paddingTop: insets.top + 40 }]}>
+      <Animated.View style={[styles.banner, { paddingTop: insets.top + 40, transform: [{ translateY: bannerTranslateY }] }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
         <Text style={styles.bannerEyebrow}>
@@ -433,7 +618,7 @@ export default function LijstenTab() {
             )}
           </View>
         )}
-      </View>
+      </Animated.View>
 
       {/* Toggle */}
       {(showNotesTab || showReceiptsTab) && (
@@ -493,9 +678,9 @@ export default function LijstenTab() {
             )}
             <View style={styles.emptyContainer}>
               <LinearGradient colors={['#FCC10C22', '#FCC10C00']} style={styles.emptyGlow} />
-              <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
+              <Animated.View style={[styles.emptyIcon, { backgroundColor: colors.gray100, transform: [{ scale: emptyBreath }] }]}>
                 <Ionicons name="layers-outline" size={32} color={colors.gray400} />
-              </View>
+              </Animated.View>
               <Text style={[styles.emptyTitle, { color: colors.black }]}>Nog geen lijsten</Text>
               <Text style={[styles.emptyText, { color: colors.gray400 }]}>
                 Stuur een WhatsApp-bericht zoals:{'\n'}
@@ -515,24 +700,32 @@ export default function LijstenTab() {
           </ScrollView>
         ) : (
           <FlatList
-            data={lists}
+            data={sortedLists}
             keyExtractor={(l) => l.id}
             numColumns={2}
             columnWrapperStyle={styles.tileRow}
             contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }]}
             style={{ backgroundColor: colors.offWhite }}
-            ListHeaderComponent={showBanner ? (
-              <GettingStartedBanner
-                userId={user?.id ?? null}
-                onDismiss={() => updateSetting('getting_started_dismissed', true)}
-                colors={colors}
-              />
-            ) : null}
+            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+            scrollEventThrottle={16}
+            ListHeaderComponent={
+              <>
+                {showBanner && (
+                  <GettingStartedBanner
+                    userId={user?.id ?? null}
+                    onDismiss={() => updateSetting('getting_started_dismissed', true)}
+                    colors={colors}
+                  />
+                )}
+                <SortToggle value={sortMode} onChange={setSortMode} colors={colors} />
+              </>
+            }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
             renderItem={({ item, index }) => (
               <AnimatedCard
                 item={item} index={index} colors={colors}
                 onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
               />
             )}
           />
@@ -583,14 +776,12 @@ export default function LijstenTab() {
             {/* Category + PDF bar */}
             <View style={{ paddingVertical: 10, backgroundColor: colors.offWhite }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}>
-                {/* All chip */}
                 <TouchableOpacity
                   onPress={() => setSelectedCatId(null)}
                   style={[rStyles.chip, { backgroundColor: !selectedCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
                 >
                   <Text style={[rStyles.chipText, { color: !selectedCatId ? colors.white : colors.gray400 }]}>Alle</Text>
                 </TouchableOpacity>
-                {/* Category chips */}
                 {receiptCats.map(cat => (
                   <TouchableOpacity
                     key={cat.id}
@@ -609,7 +800,6 @@ export default function LijstenTab() {
                     <Text style={[rStyles.chipText, { color: selectedCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
                   </TouchableOpacity>
                 ))}
-                {/* Add category */}
                 <TouchableOpacity
                   onPress={() => { setNewCatName(''); setNewCatEmoji(''); setNewCatColor(CAT_COLORS[0]); setCatModalVisible(true); }}
                   style={[rStyles.chip, { backgroundColor: colors.white, borderColor: colors.gray200, borderStyle: 'dashed' }]}
@@ -617,7 +807,6 @@ export default function LijstenTab() {
                   <Ionicons name="add" size={15} color={colors.gray400} />
                   <Text style={[rStyles.chipText, { color: colors.gray400 }]}>Nieuw</Text>
                 </TouchableOpacity>
-                {/* PDF export */}
                 <TouchableOpacity
                   onPress={() => {
                     const url = `${API_BASE}/receipts/${user?.id}/export.pdf${selectedCatId ? `?categoryId=${selectedCatId}` : ''}`;
@@ -629,7 +818,6 @@ export default function LijstenTab() {
                   <Text style={[rStyles.chipText, { color: Colors.black }]}>PDF</Text>
                 </TouchableOpacity>
               </ScrollView>
-              {/* Category total */}
               {selectedCatId && (
                 <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
                   <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400 }}>
@@ -731,7 +919,6 @@ export default function LijstenTab() {
                   <Image source={{ uri: detailReceipt.image_url }} style={{ width: '100%', height: 260 }} resizeMode="cover" />
                 )}
                 <View style={{ padding: 20, gap: 16 }}>
-                  {/* Header info */}
                   <View style={{ gap: 4 }}>
                     <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 22, color: colors.black }}>{detailReceipt.store ?? 'Onbekende winkel'}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -747,13 +934,11 @@ export default function LijstenTab() {
                       </Text>
                     )}
                   </View>
-                  {/* Description */}
                   {detailReceipt.description && (
                     <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, lineHeight: 20 }}>
                       {detailReceipt.description}
                     </Text>
                   )}
-                  {/* Items */}
                   {Array.isArray(detailReceipt.items) && detailReceipt.items.length > 0 && (
                     <View style={{ gap: 0 }}>
                       <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: colors.black, marginBottom: 10 }}>Artikelen</Text>
@@ -882,7 +1067,18 @@ export default function LijstenTab() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Delete list bottom sheet */}
+      <ConfirmSheet
+        visible={!!deleteSheet}
+        title={`"${deleteSheet?.listName}" verwijderen?`}
+        subtitle="Deze lijst en alle items worden permanent verwijderd."
+        destructiveLabel="Verwijder lijst"
+        onConfirm={() => deleteSheet && deleteList(deleteSheet.listId)}
+        onCancel={() => setDeleteSheet(null)}
+      />
     </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -960,7 +1156,6 @@ const styles = StyleSheet.create({
   },
   emptyActionBtnText: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black },
 
-  // Getting started banner
   gettingStartedCard: {
     marginHorizontal: 24,
     marginTop: 16,

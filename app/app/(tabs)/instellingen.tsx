@@ -15,6 +15,8 @@ import {
   Modal,
   SafeAreaView,
   Animated,
+  Pressable,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -37,8 +39,7 @@ import { startGeoAlertTask, stopGeoAlertTask, isGeoAlertEnabled } from '@/lib/ge
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
   if (digits.startsWith('31') && digits.length === 11) {
-    // +31 X XX XX XX XX
-    const local = digits.slice(2); // 9 digits
+    const local = digits.slice(2);
     return `+31 ${local[0]} ${local.slice(1, 3)} ${local.slice(3, 5)} ${local.slice(5, 7)} ${local.slice(7, 9)}`;
   }
   return `+${digits}`;
@@ -81,7 +82,11 @@ function SettingsRow({
   );
 
   if (onPress) {
-    return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{inner}</TouchableOpacity>;
+    return (
+      <Pressable onPress={onPress} style={({ pressed }) => ({ transform: [{ scale: pressed ? 0.97 : 1 }] })}>
+        {inner}
+      </Pressable>
+    );
   }
   return inner;
 }
@@ -97,6 +102,71 @@ function CredRow({ label, value, colors, onCopy }: { label: string; value: strin
       <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, flex: 2, textAlign: 'right' }} numberOfLines={1}>{value}</Text>
       <Ionicons name="copy-outline" size={13} color={colors.gray400} style={{ marginLeft: 6 }} />
     </TouchableOpacity>
+  );
+}
+
+function SpringModal({ visible, children, ...rest }: React.ComponentProps<typeof Modal> & { children: React.ReactNode }) {
+  const translateY = useRef(new Animated.Value(30)).current;
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      translateY.setValue(30);
+      setReady(false);
+      const t = setTimeout(() => {
+        setReady(true);
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 18,
+          stiffness: 200,
+          mass: 0.8,
+        }).start();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} {...rest}>
+      <Animated.View style={[{ flex: 1 }, ready ? { transform: [{ translateY }] } : undefined]}>
+        {children}
+      </Animated.View>
+    </Modal>
+  );
+}
+
+function AnimatedStatChip({ emoji, value, label }: { emoji: string; value: number; label: string }) {
+  const [displayed, setDisplayed] = useState(0);
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
+    const duration = 600;
+    const steps = 30;
+    const interval = duration / steps;
+    let step = 0;
+
+    const id = setInterval(() => {
+      step++;
+      const progress = step / steps;
+      const eased = 1 - Math.pow(1 - progress, 2);
+      setDisplayed(Math.round(eased * value));
+      if (step >= steps) {
+        clearInterval(id);
+        setDisplayed(value);
+      }
+    }, interval);
+
+    return () => clearInterval(id);
+  }, [value]);
+
+  return (
+    <View style={styles.statChip}>
+      <Text style={styles.statChipText}>{emoji} {displayed} {label}</Text>
+    </View>
   );
 }
 
@@ -128,11 +198,9 @@ export default function InstellingenTab() {
   const router = useRouter();
   const { toastProps, show: showToast } = useToast();
 
-  // Scroll-to-top
   const scrollViewRef = useRef<ScrollView>(null);
   const [scrollY, setScrollY] = useState(0);
 
-  // Reminder state
   const [saving, setSaving] = useState(false);
   const [reminderTime, setReminderTime] = useState(prefs?.habits_reminder_time?.slice(0, 5) ?? '20:00');
 
@@ -144,6 +212,10 @@ export default function InstellingenTab() {
   const [meldingModalVisible, setMeldingModalVisible] = useState(false);
   const [suggestiesModalVisible, setSuggestiesModalVisible] = useState(false);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
+
+  // Inline name edit in banner
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(settings.user_name ?? '');
 
   // Geo-alert
   const [geoAlertEnabled, setGeoAlertEnabled] = useState(false);
@@ -163,7 +235,6 @@ export default function InstellingenTab() {
     '#2ECC71', '#E84393', '#95A5A6', '#1ABC9C', '#E67E22', '#8E44AD',
   ];
 
-  // User data fetched from Supabase
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [caldavConnected, setCaldavConnected] = useState(false);
   const [caldavCreds, setCaldavCreds] = useState<{ username: string; password: string } | null>(null);
@@ -172,7 +243,6 @@ export default function InstellingenTab() {
   const [listsCount, setListsCount] = useState<number | null>(null);
   const [eventsCount, setEventsCount] = useState<number | null>(null);
 
-  // Suggestions frequency
   const [suggestionsFreq, setSuggestionsFreq] = useState<'daily' | 'weekly' | 'never'>(
     (prefs as any)?.suggestions_frequency ?? 'weekly',
   );
@@ -212,10 +282,8 @@ export default function InstellingenTab() {
     if (eventsResult.count !== null) setEventsCount(eventsResult.count);
   }, [user?.id]);
 
-  // Fetch on mount
   useEffect(() => { fetchUserData(); }, [fetchUserData]);
 
-  // Re-fetch CalDAV status + streams every time this tab gets focus
   useFocusEffect(useCallback(() => {
     if (!user || user.id === 'dev') return;
     supabase
@@ -232,9 +300,9 @@ export default function InstellingenTab() {
       .then(({ data }) => { if (data) setStreams(data); });
   }, [user?.id]));
 
-  // Keep name input in sync with settings
   useEffect(() => {
     setNameInputValue(settings.user_name ?? '');
+    setNameValue(settings.user_name ?? '');
   }, [settings.user_name]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -306,7 +374,7 @@ export default function InstellingenTab() {
       } else if (result === 'denied') {
         Alert.alert('Locatietoestemming vereist', 'Geef locatietoegang in Instellingen om deze functie te gebruiken.');
       } else {
-        setGeoAlertEnabled(true); // expo-go degraded mode
+        setGeoAlertEnabled(true);
       }
     } else {
       await stopGeoAlertTask();
@@ -341,6 +409,12 @@ export default function InstellingenTab() {
   async function saveName() {
     await updateSetting('user_name', nameInputValue.trim());
     setNameModalVisible(false);
+  }
+
+  async function saveBannerName() {
+    const trimmed = nameValue.trim();
+    await updateSetting('user_name', trimmed);
+    setEditingName(false);
   }
 
   function openStreamModal(stream: any | null) {
@@ -500,18 +574,41 @@ export default function InstellingenTab() {
             <Image source={require('@/assets/images/logo.jpg')} style={styles.avatar} />
           </View>
 
-          {/* Name / title */}
-          <TouchableOpacity
-            onPress={() => setNameModalVisible(true)}
-            activeOpacity={0.75}
-            style={styles.nameTouchable}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={styles.bannerName}>{displayName || 'Sous-Chef'}</Text>
-              <Ionicons name="pencil-outline" size={13} color="rgba(255,255,255,0.4)" />
+          {/* Inline name edit */}
+          {editingName ? (
+            <View style={{ alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <TextInput
+                value={nameValue}
+                onChangeText={setNameValue}
+                style={styles.bannerNameInput}
+                autoFocus
+                selectionColor={Colors.yellow}
+                returnKeyType="done"
+                onSubmitEditing={saveBannerName}
+                onBlur={saveBannerName}
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholder="Jouw naam"
+              />
+              <TouchableOpacity onPress={saveBannerName} style={styles.bannerSaveBtn}>
+                <Text style={styles.bannerSaveBtnText}>Opslaan</Text>
+              </TouchableOpacity>
             </View>
-            {displayName ? <Text style={styles.bannerSubtitle}>Sous-Chef</Text> : null}
-          </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                setNameValue(displayName ?? '');
+                setEditingName(true);
+              }}
+              activeOpacity={0.75}
+              style={styles.nameTouchable}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.bannerName}>{displayName || 'Sous-Chef'}</Text>
+                <Ionicons name="pencil-outline" size={13} color="rgba(255,255,255,0.4)" />
+              </View>
+              {displayName ? <Text style={styles.bannerSubtitle}>Sous-Chef</Text> : null}
+            </TouchableOpacity>
+          )}
 
           {/* Phone + copy button */}
           <TouchableOpacity
@@ -532,23 +629,17 @@ export default function InstellingenTab() {
             <Text style={styles.bannerMeta}>Lid sinds {lidSinds}</Text>
           ) : null}
 
-          {/* Stats chips */}
+          {/* Stats chips with count-up animation */}
           {(messageCount !== null || listsCount !== null || eventsCount !== null) ? (
             <View style={styles.statsRow}>
               {messageCount !== null ? (
-                <View style={styles.statChip}>
-                  <Text style={styles.statChipText}>💬 {messageCount} berichten</Text>
-                </View>
+                <AnimatedStatChip emoji="💬" value={messageCount} label="berichten" />
               ) : null}
               {eventsCount !== null ? (
-                <View style={styles.statChip}>
-                  <Text style={styles.statChipText}>📅 {eventsCount} afspraken</Text>
-                </View>
+                <AnimatedStatChip emoji="📅" value={eventsCount} label="afspraken" />
               ) : null}
               {listsCount !== null ? (
-                <View style={styles.statChip}>
-                  <Text style={styles.statChipText}>📋 {listsCount} lijsten</Text>
-                </View>
+                <AnimatedStatChip emoji="📋" value={listsCount} label="lijsten" />
               ) : null}
             </View>
           ) : null}
@@ -694,7 +785,7 @@ export default function InstellingenTab() {
           />
         </View>
 
-        {/* Danger card: koppeling verwijderen + account verwijderen */}
+        {/* Danger card */}
         <View style={[styles.card, styles.dangerCard, { backgroundColor: colors.white }]}>
           <SettingsRow
             icon="log-out-outline"
@@ -745,7 +836,6 @@ export default function InstellingenTab() {
           />
         </View>
 
-        {/* App version */}
         <Text style={[styles.versionText, { color: colors.gray400 }]}>Sous-Chef v{appVersion}</Text>
       </ScrollView>
 
@@ -763,11 +853,10 @@ export default function InstellingenTab() {
         </TouchableOpacity>
       ) : null}
 
-      {/* Toast */}
       <Toast {...toastProps} />
 
       {/* ── Habits onboarding modal ──────────────────────────────────── */}
-      <Modal
+      <SpringModal
         visible={habitsModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -820,10 +909,10 @@ export default function InstellingenTab() {
             </TouchableOpacity>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
 
       {/* ── Stream edit modal ───────────────────────────────────────── */}
-      <Modal
+      <SpringModal
         visible={streamModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -896,10 +985,10 @@ export default function InstellingenTab() {
             </View>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
 
       {/* ── Modules modal ───────────────────────────────────────────── */}
-      <Modal
+      <SpringModal
         visible={modulesModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -918,7 +1007,6 @@ export default function InstellingenTab() {
           </View>
           <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
             <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
-              {/* Calendar mode */}
               <View style={styles.moduleRow}>
                 <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
                   <Ionicons name="calendar-outline" size={18} color={colors.black} />
@@ -1024,10 +1112,10 @@ export default function InstellingenTab() {
             </View>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
 
       {/* ── Meldingen modal ─────────────────────────────────────────── */}
-      <Modal
+      <SpringModal
         visible={meldingModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -1090,10 +1178,10 @@ export default function InstellingenTab() {
             </View>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
 
       {/* ── Suggesties modal ────────────────────────────────────────── */}
-      <Modal
+      <SpringModal
         visible={suggestiesModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -1149,10 +1237,10 @@ export default function InstellingenTab() {
             </View>
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
 
       {/* ── Thema modal ─────────────────────────────────────────────── */}
-      <Modal
+      <SpringModal
         visible={themeModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -1192,10 +1280,10 @@ export default function InstellingenTab() {
             </View>
           </View>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
 
-      {/* ── Name edit modal ──────────────────────────────────────────── */}
-      <Modal
+      {/* ── Name edit modal (kept for direct access if needed) ───────── */}
+      <SpringModal
         visible={nameModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
@@ -1234,7 +1322,7 @@ export default function InstellingenTab() {
             </Text>
           </View>
         </SafeAreaView>
-      </Modal>
+      </SpringModal>
     </View>
   );
 }
@@ -1258,6 +1346,30 @@ const styles = StyleSheet.create({
   avatar: { width: 72, height: 72, borderRadius: 22 },
   nameTouchable: { alignItems: 'center', gap: 4 },
   bannerName: { fontFamily: 'TitanOne_400Regular', fontSize: 22, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  bannerNameInput: {
+    fontFamily: 'TitanOne_400Regular',
+    fontSize: 22,
+    color: Colors.white,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'rgba(255,255,255,0.5)',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    minWidth: 160,
+  },
+  bannerSaveBtn: {
+    backgroundColor: Colors.yellow,
+    borderRadius: Radius.pill,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+  },
+  bannerSaveBtnText: {
+    fontFamily: 'Inter_700Bold',
+    fontSize: 13,
+    color: Colors.black,
+  },
   bannerSubtitle: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 2 },
   pencilIcon: { marginTop: 4 },
   bannerNumber: { fontFamily: 'Inter_300Light', fontSize: 14, color: '#888', marginTop: 6 },
@@ -1322,13 +1434,13 @@ const styles = StyleSheet.create({
 
   divider: { height: 1, backgroundColor: Colors.gray100, marginHorizontal: 16 },
 
-  // Module rows with description
+  // Module rows
   moduleRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
   moduleRowInner: { flex: 1, gap: 4 },
   moduleRowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   modeDesc: { fontFamily: 'Inter_300Light', fontSize: 12, color: Colors.gray400, lineHeight: 16 },
 
-  // Mode toggle (segmented)
+  // Mode toggle
   modeToggle: { flexDirection: 'row', gap: 6 },
   modeBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
   modeBtnActive: { backgroundColor: Colors.yellow },
@@ -1364,7 +1476,7 @@ const styles = StyleSheet.create({
   themeBtnLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.gray400 },
   themeBtnLabelActive: { color: Colors.black },
 
-  // Calendar connection status badges
+  // Calendar connection badges
   connectedBadge: {
     backgroundColor: '#DCFCE7',
     borderRadius: Radius.pill,

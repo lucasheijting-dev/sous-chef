@@ -8,6 +8,7 @@ import {
   StyleSheet,
   RefreshControl,
   Animated,
+  Pressable,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,7 +40,6 @@ const LEVELS = [
   { key: 'elite', emoji: '🥇', label: 'Goud',   activeBg: Colors.yellow, activeFg: Colors.black, pts: 3 },
 ] as const;
 
-// Improvement #6: 14-day strip
 const STRIP_DAYS = 14;
 const today = new Date().toISOString().split('T')[0];
 
@@ -78,7 +78,6 @@ function dayLabel(dateKey: string): string {
   return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-// Improvement #13: streak per habit
 function computeStreak(habitId: string, logs: HabitLog[], endDate: string): number {
   const d = new Date(endDate + 'T00:00:00');
   let streak = 0;
@@ -91,7 +90,6 @@ function computeStreak(habitId: string, logs: HabitLog[], endDate: string): numb
   return streak;
 }
 
-// Improvement #3: weekly score
 function computeWeekScore(logs: HabitLog[]): number {
   const weekStart = strip[STRIP_DAYS - 7].date;
   return logs
@@ -99,7 +97,6 @@ function computeWeekScore(logs: HabitLog[]): number {
     .reduce((s, l) => s + (LEVELS.find(lv => lv.key === l.level)?.pts ?? 0), 0);
 }
 
-// Improvement #23: perfect days this month
 function computePerfectDays(habits: Habit[], monthLogs: HabitLog[]): number {
   const now = new Date();
   let count = 0;
@@ -111,7 +108,6 @@ function computePerfectDays(habits: Habit[], monthLogs: HabitLog[]): number {
   return count;
 }
 
-// Improvement #24: current overall streak (all habits done)
 function computeOverallStreak(habits: Habit[], logs: HabitLog[]): number {
   if (habits.length === 0) return 0;
   let streak = 0;
@@ -127,7 +123,34 @@ function computeOverallStreak(habits: Habit[], logs: HabitLog[]): number {
   return streak;
 }
 
-// ── Spark Line — Improvement #14 ───────────────────────────────────────────────
+// ── Completion Ring ────────────────────────────────────────────────────────────
+
+function CompletionRing({ level }: { level: string | undefined }) {
+  const dots = [
+    level === 'mini' || level === 'good' || level === 'elite',
+    level === 'good' || level === 'elite',
+    level === 'elite',
+  ];
+  return (
+    <View style={ring.wrap}>
+      {dots.map((filled, i) => (
+        <View
+          key={i}
+          style={[ring.dot, filled ? ring.dotFilled : ring.dotEmpty]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const ring = StyleSheet.create({
+  wrap: { flexDirection: 'row', gap: 3, alignItems: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotFilled: { backgroundColor: Colors.yellow },
+  dotEmpty: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#D1D5DB' },
+});
+
+// ── Spark Line ─────────────────────────────────────────────────────────────────
 
 function SparkLine({ habitId, logs }: { habitId: string; logs: HabitLog[] }) {
   const last7 = strip.slice(-7);
@@ -155,7 +178,7 @@ const spark = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1 },
 });
 
-// ── Logged Pill — Improvement #16 (animated entrance) ─────────────────────────
+// ── Logged Pill ────────────────────────────────────────────────────────────────
 
 function LoggedPill({ log }: { log: HabitLog | undefined }) {
   const anim = useRef(new Animated.Value(0)).current;
@@ -188,7 +211,7 @@ function LoggedPill({ log }: { log: HabitLog | undefined }) {
   );
 }
 
-// ── Level Button — Improvements #15, #17 ───────────────────────────────────────
+// ── Level Button ───────────────────────────────────────────────────────────────
 
 function LevelButton({
   emoji, label, isActive, activeBg, activeFg, onPress, isLoading,
@@ -214,14 +237,12 @@ function LevelButton({
           s.levelBtn,
           { borderColor: colors.gray200, backgroundColor: colors.offWhite },
           isActive && { backgroundColor: activeBg, borderColor: activeBg },
-          // Improvement #12: elite glow
           isActive && activeBg === Colors.yellow && { shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
           { transform: [{ scale }] },
         ]}
       >
         <Text style={s.levelEmoji}>{emoji}</Text>
         <Text style={[s.levelLabel, { color: colors.gray600 }, isActive && { color: activeFg }]}>{label}</Text>
-        {/* Improvement #17: checkmark on active */}
         {isActive && (
           <View style={s.levelCheck}>
             <Ionicons name="checkmark-circle" size={14} color={activeFg} />
@@ -232,7 +253,7 @@ function LevelButton({
   );
 }
 
-// ── All Done Card — Improvement #26 ───────────────────────────────────────────
+// ── All Done Card ──────────────────────────────────────────────────────────────
 
 function AllDoneCard({ day }: { day: string }) {
   const scale = useRef(new Animated.Value(0.9)).current;
@@ -251,7 +272,7 @@ function AllDoneCard({ day }: { day: string }) {
   );
 }
 
-// ── Month Overview — Improvements #21–25 ───────────────────────────────────────
+// ── Month Overview ─────────────────────────────────────────────────────────────
 
 function MonthOverview({ habits, monthLogs, onDayPress }: {
   habits: Habit[]; monthLogs: HabitLog[]; onDayPress: (d: string) => void;
@@ -283,7 +304,6 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
   }
 
-  // Improvements #23, #24, #25
   const perfectDays = computePerfectDays(habits, monthLogs);
   const overallStreak = computeOverallStreak(habits, monthLogs);
   const daysElapsed = Math.min(todayNum, daysInMonth);
@@ -297,13 +317,11 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
           <Text style={[m.title, { color: colors.black }]}>Maandoverzicht</Text>
           <Text style={[m.subtitle, { color: colors.gray400 }]}>{monthName}</Text>
         </View>
-        {/* Improvement #25 */}
         <View style={m.pctBadge}>
           <Text style={m.pctText}>{completionPct}%</Text>
         </View>
       </View>
 
-      {/* Improvement #23, #24: stats row */}
       <View style={m.statsRow}>
         <View style={m.statChip}>
           <Text style={m.statChipIcon}>🏅</Text>
@@ -326,7 +344,6 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
       <View style={m.grid}>
         {cells.map((day, idx) =>
           day === null ? <View key={`e${idx}`} style={m.cell} /> : (
-            // Improvement #21: tap to navigate
             <TouchableOpacity
               key={day}
               style={[m.cell, day === todayNum && { backgroundColor: colors.gray100, borderRadius: 8 }]}
@@ -341,7 +358,6 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
                 { color: day > todayNum ? colors.gray200 : colors.gray600 },
                 day === todayNum && { fontFamily: 'Inter_700Bold', color: colors.black },
               ]}>{day}</Text>
-              {/* Improvement #22: bigger dots (8px) */}
               {status(day) !== 'none' && (
                 <View style={[
                   m.dot,
@@ -361,6 +377,23 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
         <View style={m.legendItem}><View style={[m.dot, m.dotElite]}   /><Text style={[m.legendLabel, { color: colors.gray400 }]}>Elite</Text></View>
       </View>
     </View>
+  );
+}
+
+// ── Empty State with breathing animation ───────────────────────────────────────
+
+function BreathingEmoji({ emoji, size = 40 }: { emoji: string; size?: number }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.0,  duration: 900, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return (
+    <Animated.Text style={{ fontSize: size, transform: [{ scale: pulse }] }}>{emoji}</Animated.Text>
   );
 }
 
@@ -420,7 +453,7 @@ function HabitsLite() {
           <SkeletonHabitCard />
         ) : habits.length === 0 ? (
           <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-            <Text style={{ fontSize: 40 }}>🏆</Text>
+            <BreathingEmoji emoji="🏆" />
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Geen habits</Text>
             <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, textAlign: 'center' }}>
               Stuur "voeg habit toe" via WhatsApp.
@@ -466,6 +499,119 @@ function HabitsLite() {
   );
 }
 
+// ── Habit Card ─────────────────────────────────────────────────────────────────
+
+function HabitCard({
+  habit, log, streak, logs, selectedDay, loadingKey, onLog,
+}: {
+  habit: Habit;
+  log: HabitLog | undefined;
+  streak: number;
+  logs: HabitLog[];
+  selectedDay: string;
+  loadingKey: string | null;
+  onLog: (habit: Habit, level: 'mini' | 'good' | 'elite') => void;
+}) {
+  const { colors } = useTheme();
+  const cardScale = useRef(new Animated.Value(1)).current;
+  const burstScale = useRef(new Animated.Value(1)).current;
+  const flashOpacity = useRef(new Animated.Value(0)).current;
+  const prevLogLevel = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (log?.level && log.level !== prevLogLevel.current) {
+      Animated.sequence([
+        Animated.spring(burstScale, { toValue: 1.08, useNativeDriver: true, tension: 300, friction: 10 }),
+        Animated.spring(burstScale, { toValue: 1,    useNativeDriver: true, tension: 300, friction: 10 }),
+      ]).start();
+      Animated.sequence([
+        Animated.timing(flashOpacity, { toValue: 1, duration: 80,  useNativeDriver: true }),
+        Animated.timing(flashOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start();
+    }
+    prevLogLevel.current = log?.level;
+  }, [log?.level]);
+
+  const isElite = log?.level === 'elite';
+  const accentColor = log?.level === 'elite' ? Colors.yellow
+    : log?.level === 'good'  ? '#6B7280'
+    : log?.level === 'mini'  ? '#92400E'
+    : colors.gray200;
+
+  return (
+    <Pressable
+      onPressIn={() => Animated.spring(cardScale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+      onPressOut={() => Animated.spring(cardScale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
+    >
+      <Animated.View
+        style={[
+          s.habitCard,
+          { backgroundColor: colors.white },
+          isElite && { shadowColor: '#FCC10C', shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+          { transform: [{ scale: cardScale }, { scale: burstScale }] },
+        ]}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { borderRadius: Radius.xl, backgroundColor: Colors.yellow, opacity: flashOpacity }]}
+        />
+        <View style={[s.accentBar, { backgroundColor: accentColor }]} />
+
+        <View style={s.habitInner}>
+          <View style={s.habitHeader}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginRight: 10 }}>
+                <Text style={[s.habitName, { color: colors.black }]}>{habit.name}</Text>
+                <View style={s.streakChip}>
+                  <Text style={s.streakChipText}>
+                    🔥 {streak > 0 ? streak : '—'}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <CompletionRing level={log?.level} />
+                {streak > 0 && (
+                  <Text style={[s.streakBadge, { color: colors.gray400 }]}>
+                    {streak} {streak === 1 ? 'dag' : 'dagen'} op rij
+                  </Text>
+                )}
+              </View>
+              <SparkLine habitId={habit.id} logs={logs} />
+            </View>
+            <LoggedPill log={log} />
+          </View>
+
+          <View style={[s.cardDivider, { backgroundColor: colors.gray100 }]} />
+
+          <View style={s.levelRow}>
+            {LEVELS.map(lvl => {
+              const btnKey = `${habit.id}-${selectedDay}-${lvl.key}`;
+              return (
+                <LevelButton
+                  key={lvl.key}
+                  emoji={lvl.emoji}
+                  label={lvl.label}
+                  isActive={log?.level === lvl.key}
+                  activeBg={lvl.activeBg}
+                  activeFg={lvl.activeFg}
+                  onPress={() => onLog(habit, lvl.key)}
+                  isLoading={loadingKey === btnKey}
+                />
+              );
+            })}
+          </View>
+
+          <View style={s.goalsRow}>
+            <GoalChip emoji="🥉" text={habit.mini_goal} colors={colors} />
+            <GoalChip emoji="🥈" text={habit.good_goal} colors={colors} />
+            <GoalChip emoji="🥇" text={habit.elite_goal} colors={colors} />
+          </View>
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export default function HabitsTab() {
@@ -482,18 +628,15 @@ export default function HabitsTab() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState(today);
-  // Improvement #15: per-button loading key = `${habitId}-${selectedDay}-${level}`
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const { toastProps, show: showToast } = useToast();
 
-  // Improvement #28: fade animation on day change
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const fetchData = useCallback(async () => {
     if (!user) return;
     const [{ data: habitData }, { data: logData }, { data: monthLogData }] = await Promise.all([
       supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true).order('sort_order', { ascending: true }),
-      // Improvement #6: fetch 90 days for streak computation
       supabase.from('habit_logs').select('*').eq('user_id', user.id).gte('date', NINETY_DAYS_AGO),
       supabase.from('habit_logs').select('*').eq('user_id', user.id).gte('date', MONTH_START),
     ]);
@@ -506,14 +649,12 @@ export default function HabitsTab() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Scroll strip to end (today) on mount — Improvement #6
   useEffect(() => {
     setTimeout(() => stripRef.current?.scrollToEnd({ animated: false }), 100);
   }, [loading]);
 
   function selectDay(date: string) {
     if (date === selectedDay) return;
-    // Improvement #28: fade out/in
     Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start(() => {
       setSelectedDay(date);
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
@@ -536,7 +677,7 @@ export default function HabitsTab() {
       await supabase.from('habit_logs').delete().eq('id', existing.id);
       showToast(`${habit.name} ongedaan gemaakt`, 'info');
     } else {
-      haptic('success');
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await supabase.from('habit_logs').upsert(
         { habit_id: habit.id, user_id: user.id, date: selectedDay, level, logged_at: new Date().toISOString() },
         { onConflict: 'habit_id,date' },
@@ -557,7 +698,6 @@ export default function HabitsTab() {
     habit,
     log: getLog(habit.id, selectedDay),
     streak: computeStreak(habit.id, logs, selectedDay),
-    weekHist: strip.map(day => logs.find(l => l.habit_id === habit.id && l.date === day.date)?.level ?? null),
   })), [habits, logs, selectedDay]);
 
   const todayLogsCount = useMemo(() => logs.filter(l => l.date === today).length, [logs]);
@@ -569,7 +709,6 @@ export default function HabitsTab() {
   const isPastDay = selectedDay < today;
   const isFutureDay = selectedDay > today;
 
-  // Improvement #1: motivational subtitle
   const bannerSubtitle = useMemo(() => {
     const overallStreak = computeOverallStreak(habits, logs);
     if (allDoneToday && overallStreak >= 3) return `🔥 ${overallStreak} dagen op rij!`;
@@ -580,7 +719,6 @@ export default function HabitsTab() {
     return habits.length > 0 ? 'Begin je dag sterk' : '';
   }, [habits, logs, allDoneToday, todayLogsCount]);
 
-  // Improvement #9: day completion per strip day
   function stripDayCompletion(date: string) {
     if (habits.length === 0) return null;
     const count = logs.filter(l => l.date === date).length;
@@ -637,7 +775,6 @@ export default function HabitsTab() {
             )}
           </View>
 
-          {/* Improvement #2: progress bar */}
           {habits.length > 0 && (
             <View style={s.progressBarWrap}>
               <View style={[s.progressBarTrack, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
@@ -647,7 +784,6 @@ export default function HabitsTab() {
             </View>
           )}
 
-          {/* Improvement #6/#9/#7: 14-day scrollable strip with future dimming and completion dots */}
           <FlatList
             ref={stripRef}
             data={strip}
@@ -666,13 +802,12 @@ export default function HabitsTab() {
                   style={[
                     s.dayPill,
                     isSelected && s.dayPillSelected,
-                    isFuture && { opacity: 0.4 }, // Improvement #7
+                    isFuture && { opacity: 0.4 },
                   ]}
                   onPress={() => { if (!isFuture) selectDay(day.date); }}
                   activeOpacity={isFuture ? 1 : 0.75}
                   hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
                 >
-                  {/* Improvement #8: "Vand." label for today */}
                   <Text style={[s.dayLabel, isSelected && s.dayLabelActive]}>
                     {isToday && !isSelected ? 'Vand.' : day.day}
                   </Text>
@@ -681,7 +816,6 @@ export default function HabitsTab() {
                       {day.num}
                     </Text>
                   </View>
-                  {/* Improvement #10: colored dot instead of text */}
                   {completion === 'all'     && <View style={[s.completionDot, isSelected ? s.completionDotSelected : s.completionDotAll]} />}
                   {completion === 'partial' && <View style={[s.completionDot, isSelected ? s.completionDotSelected : s.completionDotPartial]} />}
                   {!completion              && <View style={s.completionPlaceholder} />}
@@ -691,7 +825,6 @@ export default function HabitsTab() {
           />
         </View>
 
-        {/* Improvement #5: past day notice */}
         {isPastDay && (
           <View style={[s.pastNotice, { backgroundColor: colors.gray100 }]}>
             <Ionicons name="time-outline" size={13} color={colors.gray400} />
@@ -702,10 +835,9 @@ export default function HabitsTab() {
         )}
 
         {habits.length === 0 ? (
-          // Improvement #30: better empty state
           <View style={s.emptyContainer}>
             <View style={[s.emptyIcon, { backgroundColor: colors.gray100 }]}>
-              <Text style={{ fontSize: 36 }}>🏋️</Text>
+              <BreathingEmoji emoji="🏋️" size={36} />
             </View>
             <Text style={[s.emptyTitle, { color: colors.black }]}>Begin met habits</Text>
             <Text style={[s.emptyText, { color: colors.gray400 }]}>
@@ -733,91 +865,30 @@ export default function HabitsTab() {
         ) : (
           <Animated.View style={[s.habitsList, { opacity: fadeAnim }]}>
 
-            {/* Improvement #18: section label */}
             <Text style={[s.sectionLabel, { color: colors.gray400 }]}>
               {dayLabel(selectedDay).toUpperCase()} · {habits.length} HABITS
             </Text>
 
-            {/* Improvement #26: all done celebration card */}
             {allDoneSelected && <AllDoneCard day={selectedDay} />}
 
-            {habitData.map(({ habit, log, streak, weekHist }) => {
-              const isElite = log?.level === 'elite';
-              const accentColor = log?.level === 'elite' ? Colors.yellow
-                : log?.level === 'good'  ? '#6B7280'
-                : log?.level === 'mini'  ? '#92400E'
-                : colors.gray200;
-
-              return (
-                <View
-                  key={habit.id}
-                  style={[
-                    s.habitCard,
-                    { backgroundColor: colors.white },
-                    // Improvement #12: elite golden glow
-                    isElite && { shadowColor: '#FCC10C', shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
-                  ]}
-                >
-                  {/* Improvement #11: left accent bar */}
-                  <View style={[s.accentBar, { backgroundColor: accentColor }]} />
-
-                  <View style={s.habitInner}>
-                    {/* Card header */}
-                    <View style={s.habitHeader}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.habitName, { color: colors.black }]}>{habit.name}</Text>
-                        {/* Improvement #13: streak badge */}
-                        {streak > 0 && (
-                          <Text style={[s.streakBadge, { color: colors.gray400 }]}>
-                            🔥 {streak} {streak === 1 ? 'dag' : 'dagen'} op rij
-                          </Text>
-                        )}
-                        {/* Improvement #14: 7-day sparkline */}
-                        <SparkLine habitId={habit.id} logs={logs} />
-                      </View>
-                      {/* Improvement #16: animated logged pill */}
-                      <LoggedPill log={log} />
-                    </View>
-
-                    {/* Improvement #19: separator */}
-                    <View style={[s.cardDivider, { backgroundColor: colors.gray100 }]} />
-
-                    {/* Level buttons */}
-                    <View style={s.levelRow}>
-                      {LEVELS.map(lvl => {
-                        const btnKey = `${habit.id}-${selectedDay}-${lvl.key}`;
-                        return (
-                          <LevelButton
-                            key={lvl.key}
-                            emoji={lvl.emoji}
-                            label={lvl.label}
-                            isActive={log?.level === lvl.key}
-                            activeBg={lvl.activeBg}
-                            activeFg={lvl.activeFg}
-                            onPress={() => logHabit(habit, lvl.key)}
-                            isLoading={loadingKey === btnKey}
-                          />
-                        );
-                      })}
-                    </View>
-
-                    {/* Improvement #20: goals with cleaner design */}
-                    <View style={s.goalsRow}>
-                      <GoalChip emoji="🥉" text={habit.mini_goal} colors={colors} />
-                      <GoalChip emoji="🥈" text={habit.good_goal} colors={colors} />
-                      <GoalChip emoji="🥇" text={habit.elite_goal} colors={colors} />
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
+            {habitData.map(({ habit, log, streak }) => (
+              <HabitCard
+                key={habit.id}
+                habit={habit}
+                log={log}
+                streak={streak}
+                logs={logs}
+                selectedDay={selectedDay}
+                loadingKey={loadingKey}
+                onLog={logHabit}
+              />
+            ))}
 
             <MonthOverview
               habits={habits}
               monthLogs={monthLogs}
               onDayPress={(d) => {
                 selectDay(d);
-                // scroll strip to show the tapped date
                 const idx = strip.findIndex(s => s.date === d);
                 if (idx >= 0) stripRef.current?.scrollToIndex({ index: idx, animated: true });
               }}
@@ -831,7 +902,7 @@ export default function HabitsTab() {
   );
 }
 
-// ── Goal Chip — Improvement #20 ────────────────────────────────────────────────
+// ── Goal Chip ──────────────────────────────────────────────────────────────────
 
 function GoalChip({ emoji, text, colors }: { emoji: string; text: string; colors: any }) {
   return (
@@ -848,7 +919,6 @@ const s = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1 },
 
-  // Banner
   banner: { paddingHorizontal: 20, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
   bannerTop: { marginBottom: 10 },
   bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 28, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
@@ -858,13 +928,11 @@ const s = StyleSheet.create({
   statNum: { fontFamily: 'Inter_700Bold', fontSize: 20, color: Colors.white, letterSpacing: -0.5 },
   statLabel: { fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 1 },
 
-  // Improvement #2: progress bar
   progressBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   progressBarTrack: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: Colors.yellow, borderRadius: 2 },
   progressPct: { fontFamily: 'Inter_700Bold', fontSize: 11, color: 'rgba(255,255,255,0.5)', minWidth: 30, textAlign: 'right' },
 
-  // Improvement #6/#9: day strip — taller pills
   dayPill: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 6, borderRadius: Radius.md, width: 46 },
   dayPillSelected: { backgroundColor: Colors.yellow },
   dayLabel: { fontFamily: 'Inter_300Light', fontSize: 8, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3 },
@@ -873,39 +941,33 @@ const s = StyleSheet.create({
   dayNumToday: { borderWidth: 1.5, borderColor: Colors.yellow },
   dayNum: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: 'rgba(255,255,255,0.6)' },
   dayNumActive: { color: Colors.black },
-  // Improvement #10: completion dot
   completionDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
   completionDotAll:      { backgroundColor: Colors.yellow },
   completionDotPartial:  { backgroundColor: 'rgba(255,255,255,0.4)' },
   completionDotSelected: { backgroundColor: Colors.black },
   completionPlaceholder: { height: 10, marginTop: 4 },
 
-  // Improvement #5: past day notice
   pastNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 20, marginTop: 10, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   pastNoticeText: { fontFamily: 'Inter_400Regular', fontSize: 12 },
 
-  // Improvement #18: section label
   sectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.8, marginBottom: 8 },
 
-  // Habits list
   habitsList: { padding: 16, gap: 14, paddingBottom: 120 },
   habitCard: { borderRadius: Radius.xl, overflow: 'hidden', flexDirection: 'row', ...Shadow.card },
   habitInner: { flex: 1, padding: 16 },
 
-  // Improvement #11: accent bar
   accentBar: { width: 4 },
 
-  // Habit header
   habitHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
-  habitName: { fontFamily: 'Inter_700Bold', fontSize: 17, marginRight: 10, marginBottom: 2 },
+  habitName: { fontFamily: 'Inter_700Bold', fontSize: 17, marginRight: 8, marginBottom: 0, flexShrink: 1 },
 
-  // Improvement #13: streak
-  streakBadge: { fontFamily: 'Inter_400Regular', fontSize: 12, marginTop: 2 },
+  streakChip: { backgroundColor: '#FEF3C7', borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
+  streakChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: '#92400E' },
 
-  // Improvement #19: divider
+  streakBadge: { fontFamily: 'Inter_400Regular', fontSize: 12 },
+
   cardDivider: { height: 1, marginBottom: 12 },
 
-  // Level buttons
   levelRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   levelBtnTouch: { flex: 1 },
   levelBtn: {
@@ -914,27 +976,22 @@ const s = StyleSheet.create({
   },
   levelEmoji: { fontSize: 22, marginBottom: 4 },
   levelLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
-  // Improvement #17: checkmark badge
   levelCheck: { position: 'absolute', top: 5, right: 5 },
 
-  // Logged pill
   loggedPill: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
   loggedPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.gray600 },
 
-  // Improvement #20: goal chips
   goalsRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   goalChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   goalChipEmoji: { fontSize: 11 },
   goalChipText: { fontFamily: 'Inter_300Light', fontSize: 11 },
 
-  // Improvement #26: all done card
   allDoneCard: { borderRadius: Radius.xl, overflow: 'hidden', marginBottom: 4 },
   allDoneGradient: { padding: 20, alignItems: 'center' },
   allDoneEmoji: { fontSize: 40, marginBottom: 8 },
   allDoneTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.black, letterSpacing: -0.5 },
   allDoneSub: { fontFamily: 'Inter_400Regular', fontSize: 14, color: 'rgba(0,0,0,0.6)', marginTop: 4 },
 
-  // Improvement #30: empty state
   emptyContainer: { padding: 32, alignItems: 'center', marginTop: 12 },
   emptyIcon: { width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginBottom: 8 },
@@ -946,16 +1003,13 @@ const s = StyleSheet.create({
   skeletonList: { padding: 16 },
 });
 
-// Month overview styles
 const m = StyleSheet.create({
   card: { borderRadius: Radius.xl, padding: 16, ...Shadow.card, marginTop: 4 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   subtitle: { fontFamily: 'Inter_300Light', fontSize: 12, textTransform: 'capitalize', marginTop: 2 },
-  // Improvement #25: completion pct badge
   pctBadge: { backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
   pctText: { fontFamily: 'Inter_700Bold', fontSize: 12, color: Colors.black },
-  // Improvements #23, #24: stats row
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   statChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.gray100, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   statChipIcon: { fontSize: 12 },
@@ -965,7 +1019,6 @@ const m = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   cell: { width: `${100 / 7}%` as any, alignItems: 'center', paddingVertical: 5 },
   cellNum: { fontFamily: 'Inter_400Regular', fontSize: 12 },
-  // Improvement #22: bigger dots (8px)
   dot: { width: 8, height: 8, borderRadius: 4, marginTop: 3 },
   dotPartial: { backgroundColor: '#FDE68A' },
   dotAll:     { backgroundColor: Colors.yellow },
