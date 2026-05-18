@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 import { ListItem } from '@/lib/types';
 import { Colors, Radius, Shadow } from '@/constants/Design';
@@ -84,7 +85,6 @@ function SwipeableItem({
 
   function handleDelete() {
     swipeRef.current?.close();
-    haptic('warning');
     onDelete();
   }
 
@@ -181,6 +181,7 @@ export default function ListDetailScreen() {
   const navigation = useNavigation();
   const { colors } = useTheme();
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -188,6 +189,9 @@ export default function ListDetailScreen() {
   const [adding, setAdding] = useState(false);
   const [listType, setListType] = useState<string>(listTypeParam ?? 'checklist');
   const { toastProps, show: showToast } = useToast();
+
+  // Undo delete state
+  const [pendingDelete, setPendingDelete] = useState<{ item: ListItem; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   // Inline edit
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -243,10 +247,36 @@ export default function ListDetailScreen() {
     fetchItems();
   }
 
-  async function deleteItem(itemId: string) {
-    await supabase.from('list_items').delete().eq('id', itemId);
-    showToast('Item verwijderd', 'info');
-    fetchItems();
+  function deleteItem(itemId: string) {
+    haptic('warning');
+    const target = items.find(i => i.id === itemId);
+    if (!target) return;
+
+    // Optimistically remove from list
+    setItems(prev => prev.filter(i => i.id !== itemId));
+
+    // Cancel any previous pending delete
+    if (pendingDelete) {
+      clearTimeout(pendingDelete.timer);
+      supabase.from('list_items').delete().eq('id', pendingDelete.item.id);
+    }
+
+    const timer = setTimeout(async () => {
+      await supabase.from('list_items').delete().eq('id', itemId);
+      setPendingDelete(null);
+    }, 3000);
+
+    setPendingDelete({ item: target, timer });
+  }
+
+  function undoDelete() {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timer);
+    setItems(prev => {
+      const without = prev.filter(i => i.id !== pendingDelete.item.id);
+      return [...without, pendingDelete.item].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    });
+    setPendingDelete(null);
   }
 
   async function addItem() {
@@ -493,27 +523,38 @@ export default function ListDetailScreen() {
           />
         )}
 
-        <View style={[styles.addRow, { backgroundColor: colors.white, borderTopColor: colors.gray100 }]}>
-          <TextInput
-            style={[styles.addInput, { color: colors.black, backgroundColor: colors.white }]}
-            value={newItemText}
-            onChangeText={setNewItemText}
-            placeholder="Item toevoegen..."
-            placeholderTextColor={colors.gray400}
-            returnKeyType="done"
-            onSubmitEditing={addItem}
-          />
-          <TouchableOpacity onPress={addItem} disabled={!newItemText.trim() || adding} activeOpacity={0.8}>
-            <LinearGradient
-              colors={newItemText.trim() ? ['#FCC10C', '#E5A800'] : [Colors.gray100, Colors.gray100]}
-              style={styles.addButton}
-            >
-              {adding
-                ? <ActivityIndicator size="small" color={Colors.black} />
-                : <Ionicons name="add" size={22} color={newItemText.trim() ? Colors.black : Colors.gray400} />}
-            </LinearGradient>
-          </TouchableOpacity>
+        <View style={[styles.addRow, { backgroundColor: colors.white, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14 }]}>
+          <View style={[styles.addPill, { backgroundColor: colors.gray100 }]}>
+            <TextInput
+              style={[styles.addInput, { color: colors.black }]}
+              value={newItemText}
+              onChangeText={setNewItemText}
+              placeholder="Item toevoegen..."
+              placeholderTextColor={colors.gray400}
+              returnKeyType="done"
+              onSubmitEditing={addItem}
+            />
+            <TouchableOpacity onPress={addItem} disabled={!newItemText.trim() || adding} activeOpacity={0.8}>
+              <LinearGradient
+                colors={newItemText.trim() ? ['#FCC10C', '#E5A800'] : [Colors.gray200, Colors.gray200]}
+                style={styles.addButton}
+              >
+                {adding
+                  ? <ActivityIndicator size="small" color={Colors.black} />
+                  : <Ionicons name="arrow-up" size={18} color={newItemText.trim() ? Colors.black : Colors.gray400} />}
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {pendingDelete && (
+          <View style={[styles.snackbar, { bottom: (insets.bottom > 0 ? insets.bottom : 14) + 80 }]}>
+            <Text style={styles.snackbarText}>Item verwijderd</Text>
+            <TouchableOpacity onPress={undoDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.snackbarUndo}>Ongedaan maken</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <Toast {...toastProps} />
 
@@ -611,18 +652,33 @@ const styles = StyleSheet.create({
   emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, color: Colors.black },
   emptyText: { fontFamily: 'Inter_300Light', fontSize: 14, color: Colors.gray400, textAlign: 'center', lineHeight: 21 },
   addRow: {
-    flexDirection: 'row', padding: 14, backgroundColor: Colors.white,
-    borderTopWidth: 1, borderTopColor: Colors.gray100, gap: 10, alignItems: 'center',
+    paddingHorizontal: 14, paddingTop: 10,
+    backgroundColor: Colors.white,
+    borderTopWidth: 1, borderTopColor: Colors.gray100,
+  },
+  addPill: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: Radius.pill, paddingLeft: 18, paddingRight: 6, paddingVertical: 6,
+    gap: 8,
   },
   addInput: {
-    flex: 1, backgroundColor: Colors.offWhite, borderRadius: Radius.md,
-    paddingHorizontal: 14, paddingVertical: 13, // Rule #5: min 44pt
+    flex: 1,
     fontFamily: 'Inter_400Regular', fontSize: 15, color: Colors.black,
+    paddingVertical: 10,
   },
   addButton: {
-    width: 48, height: 48, borderRadius: 14, // Rule #5: 48pt touch target
+    width: 40, height: 40, borderRadius: Radius.pill,
     justifyContent: 'center', alignItems: 'center',
   },
+  snackbar: {
+    position: 'absolute', left: 16, right: 16,
+    backgroundColor: '#1A1A1A', borderRadius: Radius.lg,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 18, paddingVertical: 14,
+    ...Shadow.strong,
+  },
+  snackbarText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: Colors.white },
+  snackbarUndo: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     marginHorizontal: 16, marginTop: 8, marginBottom: 4,

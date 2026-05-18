@@ -39,7 +39,7 @@ const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onre
 const TILE_ACCENTS  = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
 const TILE_TEXT_FG  = ['#0A0A0A', '#FFFFFF',  '#FFFFFF',  '#FFFFFF'];
 
-function AnimatedCard({ item, index, onPress }: { item: List & { item_count: number }; index: number; onPress: () => void; colors: any }) {
+function AnimatedCard({ item, index, onPress }: { item: List & { item_count: number; open_count: number }; index: number; onPress: () => void; colors: any }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -55,6 +55,10 @@ function AnimatedCard({ item, index, onPress }: { item: List & { item_count: num
   }, []);
 
   const typeLabel = item.list_type === 'links' ? 'Links' : item.list_type === 'tips' ? 'Tips' : null;
+  const totalCount = item.item_count;
+  const openCount = item.open_count;
+  const allDone = totalCount > 0 && openCount === 0;
+  const progress = totalCount > 0 ? (totalCount - openCount) / totalCount : 0;
 
   return (
     <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }]}>
@@ -68,9 +72,15 @@ function AnimatedCard({ item, index, onPress }: { item: List & { item_count: num
         <View style={styles.tileBottom}>
           <Text style={[styles.tileName, { color: fg }]} numberOfLines={2}>{item.name}</Text>
           <View style={styles.tileCountRow}>
-            <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>
-              {item.item_count} {item.item_count === 1 ? 'item' : 'items'}
-            </Text>
+            {totalCount > 0 ? (
+              allDone ? (
+                <Text style={[styles.tileCount, { color: '#4CAF50', opacity: 1, fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
+              ) : (
+                <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>{openCount} open</Text>
+              )
+            ) : (
+              <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>Leeg</Text>
+            )}
             {typeLabel && (
               <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
                 <Text style={[styles.typeBadgeText, { color: fg }]}>{typeLabel}</Text>
@@ -78,6 +88,11 @@ function AnimatedCard({ item, index, onPress }: { item: List & { item_count: num
             )}
           </View>
         </View>
+        {totalCount > 0 && (
+          <View style={styles.tileProgressBg}>
+            <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#4CAF50' : Colors.yellow }]} />
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -253,7 +268,7 @@ export default function LijstenTab() {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<Tab>('lists');
-  const [lists, setLists] = useState<(List & { item_count: number })[]>([]);
+  const [lists, setLists] = useState<(List & { item_count: number; open_count: number })[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [receiptCats, setReceiptCats] = useState<ReceiptCategory[]>([]);
@@ -266,6 +281,7 @@ export default function LijstenTab() {
   const [detailReceipt, setDetailReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -274,10 +290,26 @@ export default function LijstenTab() {
 
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
-    const { data } = await supabase
-      .from('lists').select('id, name, emoji, sort_order, list_type, list_items(count)')
-      .eq('user_id', user.id).order('sort_order', { ascending: true });
-    if (data) setLists(data.map((l: any) => ({ ...l, item_count: l.list_items?.[0]?.count ?? 0 })));
+    try {
+      const listsRes = await supabase
+        .from('lists')
+        .select('id, name, emoji, sort_order, list_type, list_items(count, checked)')
+        .eq('user_id', user.id)
+        .order('sort_order', { ascending: true });
+      if (listsRes.data) {
+        setLists(listsRes.data.map((l: any) => {
+          const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
+          const totalCount = items.length;
+          const openCount = items.filter((li: any) => !li.checked).length;
+          return { ...l, item_count: totalCount, open_count: openCount };
+        }));
+        setFetchError(false);
+      } else {
+        setFetchError(true);
+      }
+    } catch {
+      setFetchError(true);
+    }
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -431,11 +463,26 @@ export default function LijstenTab() {
           <View style={styles.skeletonList}>
             {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
           </View>
+        ) : fetchError ? (
+          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
+            <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
+              <Ionicons name="cloud-offline-outline" size={32} color={colors.gray400} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.black }]}>Kon lijsten niet laden</Text>
+            <Text style={[styles.emptyText, { color: colors.gray400 }]}>Controleer je verbinding en probeer opnieuw.</Text>
+            <TouchableOpacity
+              onPress={() => { setLoading(true); setFetchError(false); fetchLists(); }}
+              style={[styles.retryBtn, { backgroundColor: Colors.yellow }]}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryBtnText}>Probeer opnieuw</Text>
+            </TouchableOpacity>
+          </View>
         ) : lists.length === 0 ? (
           <ScrollView
             style={{ backgroundColor: colors.offWhite }}
             contentContainerStyle={styles.emptyScrollContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
           >
             {showBanner && (
               <GettingStartedBanner
@@ -481,7 +528,7 @@ export default function LijstenTab() {
                 colors={colors}
               />
             ) : null}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
             renderItem={({ item, index }) => (
               <AnimatedCard
                 item={item} index={index} colors={colors}
@@ -515,7 +562,7 @@ export default function LijstenTab() {
             contentContainerStyle={styles.noteGrid}
             columnWrapperStyle={styles.noteRow}
             style={{ backgroundColor: colors.offWhite }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
             renderItem={({ item, index }) => (
               <NoteCard item={item} index={index} isDark={isDark} onPress={() => setSelectedNote(item)} />
             )}
@@ -610,7 +657,7 @@ export default function LijstenTab() {
                 keyExtractor={r => r.id}
                 contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
                 style={{ backgroundColor: colors.offWhite }}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReceipts().then(() => setRefreshing(false)); }} tintColor={Colors.yellow} />}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchReceipts().then(() => setRefreshing(false)); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
                 renderItem={({ item }) => {
                   const itemCat = receiptCats.find(c => c.id === item.receipt_category_id);
                   return (
@@ -886,6 +933,10 @@ const styles = StyleSheet.create({
   tileCount: { fontFamily: 'Inter_400Regular', fontSize: 12 },
   typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.pill },
   typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.3 },
+  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, backgroundColor: 'rgba(0,0,0,0.15)', borderBottomLeftRadius: Radius.xl, borderBottomRightRadius: Radius.xl, overflow: 'hidden' },
+  tileProgressFill: { height: 4, borderBottomLeftRadius: Radius.xl },
+  retryBtn: { borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
+  retryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },
 
   noteGrid: { padding: 20, paddingBottom: 120 },
   noteRow: { gap: 10, marginBottom: 10 },

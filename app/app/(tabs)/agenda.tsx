@@ -13,7 +13,11 @@ import {
   Alert,
   PanResponder,
   Animated,
+  Modal,
+  SafeAreaView,
+  LayoutAnimation,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -162,7 +166,16 @@ function MonthGrid({ year, month, eventDates, selectedDate, onDayPress }: {
   );
 }
 
+const DEFAULT_STREAMS: CalendarStream[] = [
+  { id: '__persoonlijk', claude_key: 'persoonlijk', color: '#4A90D9', name: 'Persoonlijk', emoji: '👤' },
+  { id: '__werk',        claude_key: 'werk',        color: '#E67E22', name: 'Werk',        emoji: '💼' },
+  { id: '__familie',     claude_key: 'familie',     color: '#27AE60', name: 'Familie',     emoji: '👨‍👩‍👧' },
+  { id: '__gezondheid',  claude_key: 'gezondheid',  color: '#E74C3C', name: 'Gezondheid',  emoji: '🏥' },
+];
+
 // ── AgendaLite (period pills + stream chips) ──────────────────────────────────
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
 function AgendaLite() {
   const { user }   = useUser();
@@ -171,13 +184,26 @@ function AgendaLite() {
 
   const [allEvents, setAllEvents]         = useState<MergedEvent[]>([]);
   const [streams, setStreams]             = useState<CalendarStream[]>([]);
-  const [nativeCals, setNativeCals]       = useState<{ id: string; name: string; color: string }[]>([]);
   const [loading, setLoading]             = useState(true);
   const [timePeriod, setTimePeriod]       = useState<TimePeriod>('today');
   const [streamFilter, setStreamFilter]   = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<MergedEvent | null>(null);
+  const [scrollY, setScrollY]             = useState(0);
+  const liteScrollRef                     = useRef<ScrollView>(null);
+
+  const EMPTY_STATE: Record<TimePeriod, { emoji: string; title: string; sub: string }> = {
+    today:    { emoji: '🎉', title: 'Vandaag vrij!',       sub: 'Niets ingepland. Geniet ervan.' },
+    tomorrow: { emoji: '😴', title: 'Morgen nog niks',     sub: 'Stuur "tandarts morgen 14u" via WhatsApp.' },
+    thisweek: { emoji: '🌤️', title: 'Rustige week',        sub: 'Nog geen afspraken deze week.' },
+    nextweek: { emoji: '📭', title: 'Volgende week leeg',  sub: 'Nog niets gepland voor volgende week.' },
+  };
 
   useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
+
+    // Trigger bi-directional CalDAV sync fire-and-forget; UI refreshes via Supabase realtime
+    fetch(`${API_BASE}/calendar-sync/${user.id}`, { method: 'POST' }).catch(() => {});
+
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const end = new Date(now); end.setDate(end.getDate() + 14);
     const endKey = toKey(end);
@@ -193,11 +219,9 @@ function AgendaLite() {
         Calendar.getCalendarPermissionsAsync().then(({ status }) => {
           if (status !== 'granted') { setAllEvents(scEvents); setLoading(false); return; }
           Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT).then(cals => {
-            const visibleCals = cals.filter(c => c.allowsModifications !== false || c.source?.type !== 'com.apple.reminder');
-            setNativeCals(visibleCals.map(c => ({ id: c.id, name: c.title, color: c.color ?? '#888' })));
             const start2 = new Date(now); start2.setHours(0, 0, 0, 0);
             const end2   = new Date(now); end2.setDate(end2.getDate() + 14);
-            Calendar.getEventsAsync(visibleCals.map(c => c.id), start2, end2).then(phoneEvts => {
+            Calendar.getEventsAsync(cals.map(c => c.id), start2, end2).then(phoneEvts => {
               const scKeys = new Set(scEvents.map(e => `${e.title?.toLowerCase()}|${e.date}`));
               const merged: MergedEvent[] = phoneEvts
                 .filter(e => !scKeys.has(`${e.title?.toLowerCase()}|${e.startDate ? new Date(e.startDate).toISOString().split('T')[0] : ''}`))
@@ -206,7 +230,6 @@ function AgendaLite() {
                   date: e.startDate ? toKey(new Date(e.startDate)) : null,
                   time: e.startDate && !e.allDay ? new Date(e.startDate).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : null,
                   source: 'phone' as const,
-                  calendar_stream: `cal_${e.calendarId}`,
                 }));
               setAllEvents([...scEvents, ...merged]);
               setLoading(false);
@@ -251,7 +274,12 @@ function AgendaLite() {
           {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
             <TouchableOpacity
               key={p}
-              onPress={() => { setTimePeriod(p); setStreamFilter(null); }}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setTimePeriod(p);
+                setStreamFilter(null);
+              }}
               style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
             >
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>{label}</Text>
@@ -263,66 +291,144 @@ function AgendaLite() {
       {/* Separator */}
       <View style={{ height: 1, backgroundColor: '#E0E0E0', marginHorizontal: 16, marginVertical: 8 }} />
 
-      {/* Category chips: sous-chef streams + native calendars */}
-      {(streams.length > 0 || nativeCals.length > 0) && (
-        <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingBottom: 10 }}>
-          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Categorie</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
-            </TouchableOpacity>
-            {streams.map(st => (
-              <TouchableOpacity key={st.id} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
+      {/* Category chips: defaults + user streams */}
+      {(() => {
+        const userKeys = new Set(streams.map(s => s.claude_key));
+        const mergedStreams = [
+          ...DEFAULT_STREAMS.filter(d => !userKeys.has(d.claude_key)),
+          ...streams,
+        ];
+        return (
+          <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 16, paddingBottom: 10 }}>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>Categorie</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(null); }} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
               </TouchableOpacity>
-            ))}
-            {nativeCals.map(cal => {
-              const key = `cal_${cal.id}`;
-              const active = streamFilter === key;
-              return (
-                <TouchableOpacity key={cal.id} onPress={() => setStreamFilter(active ? null : key)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: active ? cal.color : '#DDDCDC' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: active ? '#fff' : '#111', lineHeight: 18 }}>{cal.name}</Text>
+              {mergedStreams.map(st => (
+                <TouchableOpacity key={st.id} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key); }} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
                 </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
+              ))}
+            </ScrollView>
+          </View>
+        );
+      })()}
 
       {/* Events */}
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 140 }}>
+      <ScrollView
+        ref={liteScrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 140 }}
+        onScroll={e => setScrollY(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
+      >
         {loading ? (
           <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />
         ) : visibleEvents.length === 0 ? (
-          <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-            <Text style={{ fontSize: 40 }}>📅</Text>
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Niets gepland</Text>
-            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, textAlign: 'center' }}>
-              Stuur "tandarts vrijdag 14u" via WhatsApp.
-            </Text>
-          </View>
+          (() => {
+            const es = EMPTY_STATE[timePeriod];
+            return (
+              <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
+                <Text style={{ fontSize: 40 }}>{es.emoji}</Text>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>{es.title}</Text>
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, textAlign: 'center' }}>{es.sub}</Text>
+              </View>
+            );
+          })()
         ) : visibleEvents.map(e => {
           const stream = streams.find(st => st.claude_key === e.calendar_stream);
           return (
-            <View key={e.id} style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden' }, Shadow.card]}>
+            <TouchableOpacity
+              key={e.id}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedEvent(e); }}
+              activeOpacity={0.85}
+              style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden' }, Shadow.card]}
+            >
               {stream?.color && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: stream.color }} />}
               <Text style={{ fontSize: 24, marginLeft: stream?.color ? 8 : 0 }}>{eventEmoji(e.title)}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.black }}>{e.title}</Text>
-                {e.time && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>{e.time}</Text>}
-                {timePeriod === 'week' && e.date && (
-                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginTop: 1 }}>{sectionLabel(e.date)}</Text>
+                {(timePeriod === 'thisweek' || timePeriod === 'nextweek') && e.date && (
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>
+                    {sectionLabel(e.date)}
+                  </Text>
                 )}
+                {e.time && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>{e.time}</Text>}
               </View>
               {stream && (
                 <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: stream.color + '22' }}>
                   <Text style={{ fontSize: 11, color: stream.color, fontFamily: 'Inter_600SemiBold' }}>{stream.emoji}</Text>
                 </View>
               )}
-            </View>
+            </TouchableOpacity>
           );
         })}
       </ScrollView>
+
+      {/* Event detail modal */}
+      <Modal visible={!!selectedEvent} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSelectedEvent(null)}>
+        {selectedEvent && (
+          <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.gray100 }}>
+              <TouchableOpacity onPress={() => setSelectedEvent(null)} style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="close" size={18} color={colors.black} />
+              </TouchableOpacity>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>Afspraak</Text>
+              <View style={{ width: 34 }} />
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 28, gap: 16 }}>
+              <Text style={{ fontFamily: 'TitanOne_400Regular', fontSize: 28, color: colors.black, letterSpacing: 0.5 }}>{selectedEvent.title}</Text>
+              {selectedEvent.date && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Ionicons name="calendar-outline" size={18} color={colors.gray400} />
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black }}>{sectionLabel(selectedEvent.date)}</Text>
+                </View>
+              )}
+              {selectedEvent.time && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Ionicons name="time-outline" size={18} color={colors.gray400} />
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black }}>{selectedEvent.time}</Text>
+                </View>
+              )}
+              {selectedEvent.source === 'phone' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Ionicons name="phone-portrait-outline" size={18} color={colors.gray400} />
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400 }}>iPhone-agenda</Text>
+                </View>
+              )}
+              {(() => {
+                const stream = streams.find(st => st.claude_key === selectedEvent.calendar_stream);
+                if (!stream) return null;
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: stream.color }} />
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: stream.color }}>{stream.emoji} {stream.name}</Text>
+                  </View>
+                );
+              })()}
+            </ScrollView>
+          </SafeAreaView>
+        )}
+      </Modal>
+
+      {/* Floating "Vandaag" button */}
+      {scrollY > 100 && (
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            liteScrollRef.current?.scrollTo({ y: 0, animated: true });
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setTimePeriod('today');
+            setStreamFilter(null);
+          }}
+          style={[s.todayBtn, { bottom: insets.bottom + 24 }]}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="calendar-outline" size={14} color={Colors.black} />
+          <Text style={s.todayBtnText}>Vandaag</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Bottom fade */}
       <LinearGradient
@@ -353,6 +459,7 @@ export default function AgendaTab() {
   const [viewMode, setViewMode]         = useState<ViewMode>('list');
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [streams, setStreams]           = useState<CalendarStream[]>([]);
+  const [listScrollY, setListScrollY]   = useState(0);
 
   const PANEL_COLLAPSED = 200;
   const PANEL_EXPANDED  = 440;
@@ -485,7 +592,15 @@ export default function AgendaTab() {
           <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Periode</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {([['today', 'Vandaag'], ['tomorrow', 'Morgen'], ['thisweek', 'Deze week'], ['nextweek', 'Volgende week']] as [TimePeriod, string][]).map(([p, label]) => (
-              <TouchableOpacity key={p} onPress={() => setTimePeriod(p)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}>
+              <TouchableOpacity
+                key={p}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                  setTimePeriod(p as TimePeriod);
+                }}
+                style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 24, backgroundColor: timePeriod === p ? Colors.yellow : '#DDDCDC' }}
+              >
                 <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>{label}</Text>
               </TouchableOpacity>
             ))}
@@ -546,6 +661,8 @@ export default function AgendaTab() {
           keyExtractor={(item, i) => item.type === 'header' ? `h-${item.section.dateKey}` : `i-${item.item.id}-${i}`}
           stickyHeaderIndices={stickyIndices}
           contentContainerStyle={{ paddingBottom: 120 }}
+          onScroll={e => setListScrollY(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchEvents(); }} tintColor={Colors.yellow} />}
           ListHeaderComponent={
             <View>
@@ -609,6 +726,24 @@ export default function AgendaTab() {
           colors={[`${colors.offWhite}00`, colors.offWhite]}
           style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, pointerEvents: 'none' }}
         />
+      )}
+
+      {/* Floating "Vandaag" button */}
+      {viewMode === 'list' && listScrollY > 100 && (
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            listRef.current?.scrollToOffset({ offset: 0, animated: true });
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            setTimePeriod('today');
+            setStreamFilter(null);
+          }}
+          style={[s.todayBtn, { bottom: insets.bottom + 24 }]}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="calendar-outline" size={14} color={Colors.black} />
+          <Text style={s.todayBtnText}>Vandaag</Text>
+        </TouchableOpacity>
       )}
 
       {viewMode === 'calendar' && (
@@ -762,5 +897,25 @@ const s = StyleSheet.create({
   empty:     { alignItems: 'center', paddingTop: 60 },
   emptyTitle:{ fontFamily: 'Inter_700Bold', fontSize: 20, color: Colors.black, marginBottom: 8 },
   emptyText: { fontFamily: 'Inter_300Light', fontSize: 14, color: Colors.gray400, textAlign: 'center' },
+
+  todayBtn: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    alignSelf: 'center',
+    backgroundColor: Colors.yellow,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+    zIndex: 99,
+  },
+  todayBtnText: { fontFamily: 'Inter_700Bold', fontSize: 13, color: Colors.black },
 });
 
