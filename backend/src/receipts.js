@@ -118,7 +118,7 @@ router.get('/:userId/export.pdf', async (req, res) => {
             const imgBuf = Buffer.from(await imgRes.arrayBuffer());
             doc.moveDown(0.5);
             if (doc.y + 260 > 780) doc.addPage();
-            doc.image(imgBuf, 48, doc.y, { fit: [210, 260] });
+            doc.image(imgBuf, { fit: [210, 260] });
             doc.moveDown(0.5);
           }
         } catch {}

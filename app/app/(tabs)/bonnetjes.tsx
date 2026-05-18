@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, Alert, Linking, Image,
-  Modal, SafeAreaView,
+  Modal, SafeAreaView, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -137,9 +137,9 @@ export default function BonnetjesTab() {
             onLongPress={() => confirmDelete(item)}
           >
             {item.image_url && (
-              <TouchableOpacity onPress={() => setFullscreenImage(item.image_url)} activeOpacity={0.9}>
+              <Pressable onPress={() => setFullscreenImage(item.image_url)}>
                 <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="cover" />
-              </TouchableOpacity>
+              </Pressable>
             )}
             <View style={styles.cardBody}>
               <View style={styles.cardTop}>
