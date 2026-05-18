@@ -62,9 +62,10 @@ router.get('/:userId/export.pdf', async (req, res) => {
 
     // Summary stats
     const total = receipts.reduce((s, r) => s + (r.total ?? 0), 0);
+    const summaryCur = receipts.find(r => r.currency)?.currency ?? 'EUR';
     doc.fontSize(12).font('Helvetica-Bold').fillColor('#000')
       .text(`Totaal ${receipts.length} bonnetjes — `, { continued: true })
-      .font('Helvetica').text(`€${total.toFixed(2)} uitgegeven`);
+      .font('Helvetica').text(`${fmtAmount(total, summaryCur)} uitgegeven`);
     doc.moveDown(1.5);
 
     // Separator line
@@ -75,8 +76,18 @@ router.get('/:userId/export.pdf', async (req, res) => {
     for (const r of receipts) {
       if (doc.y > 680) doc.addPage();
 
-      doc.font('Helvetica-Bold').fontSize(13).fillColor('#000').text(r.store ?? 'Onbekende winkel');
+      const lineY = doc.y;
+      const cur   = r.currency ?? 'EUR';
 
+      // Total right-aligned, store left-aligned — both at same Y so they sit side by side
+      if (r.total != null) {
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
+          .text(fmtAmount(r.total, cur), 48, lineY, { width: 499, align: 'right' });
+      }
+      doc.font('Helvetica-Bold').fontSize(13).fillColor('#000')
+        .text(r.store ?? 'Onbekende winkel', 48, lineY, { width: 340 });
+
+      // Meta (date · category) on its own line, below store
       const meta = [
         r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : null,
         r.category ?? null,
@@ -86,14 +97,9 @@ router.get('/:userId/export.pdf', async (req, res) => {
         doc.font('Helvetica').fontSize(10).fillColor('#888').text(meta);
       }
 
-      if (r.total != null) {
-        doc.font('Helvetica-Bold').fontSize(14).fillColor('#000')
-          .text(`€${Number(r.total).toFixed(2)}`, { align: 'right' });
-        doc.moveUp();
-      }
-
+      // Description — flows naturally below meta, no overlap with total
       if (r.description) {
-        doc.font('Helvetica').fontSize(10).fillColor('#555').text(r.description);
+        doc.font('Helvetica').fontSize(10).fillColor('#555').text(r.description, { width: 499 });
       }
 
       // Items breakdown
@@ -102,7 +108,7 @@ router.get('/:userId/export.pdf', async (req, res) => {
         doc.font('Helvetica').fontSize(9).fillColor('#444');
         for (const item of r.items.slice(0, 10)) {
           const qty   = item.quantity && item.quantity > 1 ? `${item.quantity}× ` : '';
-          const price = item.price != null ? `€${Number(item.price).toFixed(2)}` : '';
+          const price = item.price != null ? fmtAmount(item.price, cur) : '';
           doc.text(`  • ${qty}${item.name}`, { continued: !!price }).text(price ? `  ${price}` : '', { align: 'right' });
         }
         if (r.items.length > 10) {
@@ -137,5 +143,14 @@ router.get('/:userId/export.pdf', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+const CURRENCY_SYMBOLS = { EUR: '€', USD: '$', GBP: '£', CHF: 'CHF', SEK: 'kr', NOK: 'kr', DKK: 'kr', JPY: '¥', AUD: 'A$', CAD: 'C$' };
+
+function fmtAmount(amount, currency = 'EUR') {
+  const code = currency?.toUpperCase() ?? 'EUR';
+  const sym  = CURRENCY_SYMBOLS[code] ?? code;
+  const num  = Number(amount).toFixed(2);
+  return ['SEK', 'NOK', 'DKK'].includes(code) ? `${num} ${sym}` : `${sym}${num}`;
+}
 
 module.exports = router;

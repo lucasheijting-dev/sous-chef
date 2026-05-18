@@ -137,9 +137,16 @@ export default function BonnetjesTab() {
             onLongPress={() => confirmDelete(item)}
           >
             {item.image_url && (
-              <Pressable onPress={() => setFullscreenImage(item.image_url)}>
+              <View>
                 <Image source={{ uri: item.image_url }} style={styles.thumb} resizeMode="cover" />
-              </Pressable>
+                <TouchableOpacity
+                  style={styles.thumbBtn}
+                  onPress={() => setFullscreenImage(item.image_url)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="expand-outline" size={15} color="#fff" />
+                </TouchableOpacity>
+              </View>
             )}
             <View style={styles.cardBody}>
               <View style={styles.cardTop}>
@@ -205,6 +212,7 @@ const styles = StyleSheet.create({
 
   card:     { borderRadius: Radius.lg, overflow: 'hidden' },
   thumb:    { width: '100%', height: 140 },
+  thumbBtn: { position: 'absolute', bottom: 8, right: 8, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 8, padding: 6 },
   cardBody: { padding: 14, gap: 6 },
   cardTop:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
   emoji:    { fontSize: 22 },
