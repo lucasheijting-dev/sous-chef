@@ -46,15 +46,21 @@ async function incrementMessageCount(userId) {
 }
 
 async function getUserContext(userId) {
-  const { data } = await supabase
-    .from('users')
-    .select('user_context, message_count')
-    .eq('id', userId)
-    .single();
-  if (!data) return '';
+  const [{ data: user }, { data: prefs }] = await Promise.all([
+    supabase.from('users').select('user_context, message_count').eq('id', userId).single(),
+    supabase.from('user_prefs').select('profile_birth_year, profile_employer, profile_friends, profile_extra').eq('user_id', userId).single(),
+  ]);
+  if (!user) return '';
   const parts = [];
-  if (data.message_count > 0) parts.push(`Totaal berichten: ${data.message_count}`);
-  if (data.user_context) parts.push(data.user_context);
+  if (user.message_count > 0) parts.push(`Totaal berichten: ${user.message_count}`);
+  if (prefs?.profile_birth_year) {
+    const age = new Date().getFullYear() - prefs.profile_birth_year;
+    parts.push(`Leeftijd gebruiker: ${age} jaar (geb. ${prefs.profile_birth_year})`);
+  }
+  if (prefs?.profile_employer) parts.push(`Werkgever: ${prefs.profile_employer}`);
+  if (prefs?.profile_friends) parts.push(`Vrienden/mensen die de gebruiker kent: ${prefs.profile_friends}`);
+  if (prefs?.profile_extra) parts.push(`Extra context: ${prefs.profile_extra}`);
+  if (user.user_context) parts.push(user.user_context);
   return parts.join('\n');
 }
 
