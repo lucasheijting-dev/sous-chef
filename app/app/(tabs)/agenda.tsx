@@ -613,7 +613,7 @@ export default function AgendaTab() {
   const [refreshing, setRefreshing]       = useState(false);
   const [calPermission, setCalPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
   const [calHidden, setCalHidden]         = useState(false);
-  const [viewMode, setViewMode]         = useState<ViewMode>('list');
+  const [viewMode, setViewMode]         = useState<ViewMode>('calendar');
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [streams, setStreams]           = useState<CalendarStream[]>([]);
   const [listScrollY, setListScrollY]   = useState(0);
@@ -815,24 +815,22 @@ export default function AgendaTab() {
 
       {/* ── Fixed header ─────────────────────────────────────────────────── */}
       <View>
-        <Animated.View style={[s.banner, { paddingTop: insets.top + 36, transform: [{ translateY: bannerTranslateY }] }]}>
+        <Animated.View style={[s.banner, { paddingTop: insets.top + 40, paddingBottom: 28, transform: [{ translateY: bannerTranslateY }] }]}>
           <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
           <View style={s.bannerRow}>
             <Text style={s.bannerTitle}>Agenda</Text>
           </View>
-          {viewMode === 'list' && (
-            <View style={s.bannerStats}>
-              <View style={s.statTile}>
-                <Text style={s.statNum}>{thisWeekCount}</Text>
-                <Text style={s.statLabel}>deze week</Text>
-              </View>
-              <View style={[s.statTile, s.statTileAccent]}>
-                <Text style={[s.statNum, { color: Colors.black }]}>{upcomingCount}</Text>
-                <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>aankomend</Text>
-              </View>
+          <View style={s.bannerStats}>
+            <View style={s.statTile}>
+              <Text style={s.statNum}>{thisWeekCount}</Text>
+              <Text style={s.statLabel}>deze week</Text>
             </View>
-          )}
+            <View style={[s.statTile, s.statTileAccent]}>
+              <Text style={[s.statNum, { color: Colors.black }]}>{upcomingCount}</Text>
+              <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>aankomend</Text>
+            </View>
+          </View>
         </Animated.View>
 
         {/* Time period pills */}

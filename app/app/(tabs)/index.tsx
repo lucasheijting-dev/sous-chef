@@ -443,7 +443,7 @@ export default function LijstenTab() {
     try {
       const listsRes = await supabase
         .from('lists')
-        .select('id, name, emoji, sort_order, list_type, list_items(count, checked)')
+        .select('id, name, emoji, sort_order, list_type, list_items(checked)')
         .eq('user_id', user.id)
         .order('sort_order', { ascending: true });
       if (listsRes.data) {
@@ -575,7 +575,7 @@ export default function LijstenTab() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
       {/* Banner */}
-      <Animated.View style={[styles.banner, { paddingTop: insets.top + 40, transform: [{ translateY: bannerTranslateY }] }]}>
+      <Animated.View style={[styles.banner, { paddingTop: insets.top + 40, paddingBottom: 28, transform: [{ translateY: bannerTranslateY }] }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
         <Text style={styles.bannerEyebrow}>

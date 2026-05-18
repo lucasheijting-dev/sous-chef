@@ -14,7 +14,7 @@ const ALL_TABS = [
   { name: 'index',        label: 'Lijsten', icon: 'layers',        iconOff: 'layers-outline'        },
   { name: 'agenda',       label: 'Agenda',  icon: 'calendar',      iconOff: 'calendar-outline'      },
   { name: 'habits',       label: 'Habits',  icon: 'trophy',        iconOff: 'trophy-outline'        },
-  { name: 'instellingen', label: 'Profiel', icon: 'person-circle', iconOff: 'person-circle-outline' },
+  { name: 'instellingen', label: 'Instellingen', icon: 'person-circle', iconOff: 'person-circle-outline' },
 ] as const;
 
 function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean; label: string }) {

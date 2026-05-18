@@ -212,6 +212,17 @@ export default function InstellingenTab() {
   const [meldingModalVisible, setMeldingModalVisible] = useState(false);
   const [suggestiesModalVisible, setSuggestiesModalVisible] = useState(false);
   const [themeModalVisible, setThemeModalVisible] = useState(false);
+  const [profielModalVisible, setProfielModalVisible] = useState(false);
+  const [agendaModalVisible, setAgendaModalVisible] = useState(false);
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+
+  // Profiel context
+  const [profileBirthYear, setProfileBirthYear] = useState('');
+  const [profileEmployer, setProfileEmployer] = useState('');
+  const [profileFriends, setProfileFriends] = useState('');
+  const [profileExtra, setProfileExtra] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
 
   // Inline name edit in banner
   const [editingName, setEditingName] = useState(false);
@@ -254,7 +265,7 @@ export default function InstellingenTab() {
 
     isGeoAlertEnabled().then(setGeoAlertEnabled);
 
-    const [userRow, listsResult, eventsResult] = await Promise.all([
+    const [userRow, listsResult, eventsResult, prefsRow] = await Promise.all([
       supabase
         .from('users')
         .select('caldav_username, caldav_password, created_at, message_count')
@@ -268,6 +279,11 @@ export default function InstellingenTab() {
         .from('events')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id),
+      supabase
+        .from('user_prefs')
+        .select('profile_birth_year, profile_employer, profile_friends, profile_extra')
+        .eq('user_id', user.id)
+        .single(),
     ]);
 
     if (userRow.data) {
@@ -280,6 +296,12 @@ export default function InstellingenTab() {
     }
     if (listsResult.count !== null) setListsCount(listsResult.count);
     if (eventsResult.count !== null) setEventsCount(eventsResult.count);
+    if (prefsRow.data) {
+      setProfileBirthYear(String(prefsRow.data.profile_birth_year ?? ''));
+      setProfileEmployer(prefsRow.data.profile_employer ?? '');
+      setProfileFriends(prefsRow.data.profile_friends ?? '');
+      setProfileExtra(prefsRow.data.profile_extra ?? '');
+    }
   }, [user?.id]);
 
   useEffect(() => { fetchUserData(); }, [fetchUserData]);
@@ -311,6 +333,25 @@ export default function InstellingenTab() {
     await Clipboard.setStringAsync(value);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     showToast('Gekopieerd');
+  }
+
+  async function saveProfile() {
+    if (!user || user.id === 'dev') return;
+    setProfileSaving(true);
+    const birthYearNum = parseInt(profileBirthYear, 10);
+    await Promise.all([
+      supabase.from('user_prefs').upsert({
+        user_id: user.id,
+        profile_birth_year: isNaN(birthYearNum) ? null : birthYearNum,
+        profile_employer: profileEmployer.trim() || null,
+        profile_friends: profileFriends.trim() || null,
+        profile_extra: profileExtra.trim() || null,
+      }, { onConflict: 'user_id' }),
+      updateSetting('user_name', nameValue.trim()),
+    ]);
+    setProfileSaving(false);
+    setProfielModalVisible(false);
+    showToast('Profiel opgeslagen');
   }
 
   async function toggleHabits(value: boolean) {
@@ -645,6 +686,18 @@ export default function InstellingenTab() {
           ) : null}
         </View>
 
+        {/* ── Profiel ────────────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Profiel</Text>
+        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          <SettingsRow
+            icon="person-outline"
+            label="Mijn profiel"
+            subtitle="Naam, leeftijd, werkgever, vrienden"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setProfielModalVisible(true)}
+          />
+        </View>
+
         {/* ── Voorkeuren ─────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Voorkeuren</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
@@ -681,158 +734,47 @@ export default function InstellingenTab() {
           />
         </View>
 
-        {/* ── iPhone Agenda ──────────────────────────────────────────── */}
-        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>iPhone Agenda</Text>
+        {/* ── Agenda ─────────────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Agenda</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
           <SettingsRow
             icon="calendar-outline"
             label="iPhone Agenda koppelen"
-            subtitle="Na installatie: Instellingen → Algemeen → VPN en apparaatbeheer"
-            right={
-              caldavConnected ? (
-                <View style={styles.connectedBadge}>
-                  <Text style={styles.connectedBadgeText}>✓ Verbonden</Text>
-                </View>
-              ) : (
-                <View style={styles.disconnectedBadge}>
-                  <Text style={styles.disconnectedBadgeText}>Niet gekoppeld</Text>
-                </View>
-              )
-            }
-            onPress={openCalendarProfile}
+            value={caldavConnected ? 'Verbonden' : 'Niet gekoppeld'}
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setAgendaModalVisible(true)}
           />
-          {caldavCreds && (
-            <>
-              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-              <TouchableOpacity
-                style={styles.credRow}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setShowCaldavCreds(v => !v);
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-                  <Ionicons name="key-outline" size={18} color={colors.black} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.rowLabel, { color: colors.black }]}>iPhone vraagt om een wachtwoord?</Text>
-                  <Text style={[styles.rowSubtitle, { color: colors.gray400 }]}>Tik om inloggegevens te bekijken en kopiëren</Text>
-                </View>
-                <Ionicons name={showCaldavCreds ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
-              </TouchableOpacity>
-              {showCaldavCreds && (
-                <View style={[styles.credBox, { backgroundColor: colors.offWhite }]}>
-                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginBottom: 8 }}>
-                    Tik op een veld om het te kopiëren, plak het in het wachtwoordscherm van iOS.
-                  </Text>
-                  <CredRow label="Server" value="caldav.sous-chef.nl" colors={colors} onCopy={copyToClipboard} />
-                  <CredRow label="Gebruikersnaam" value={caldavCreds.username} colors={colors} onCopy={copyToClipboard} />
-                  <CredRow label="Wachtwoord" value={caldavCreds.password} colors={colors} onCopy={copyToClipboard} />
-                </View>
-              )}
-            </>
-          )}
-        </View>
-
-        {/* ── Agenda categorieën ─────────────────────────────────────── */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 32, marginBottom: 8 }}>
-          <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 0, marginBottom: 0, marginLeft: 0 }]}>Agenda categorieën</Text>
-          <TouchableOpacity onPress={() => openStreamModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="add-circle-outline" size={22} color={Colors.yellow} />
-          </TouchableOpacity>
-        </View>
-        <View style={[styles.card, { backgroundColor: colors.white }]}>
-          {streams.length === 0 ? (
-            <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
-              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400 }}>Nog geen categorieën</Text>
-            </View>
-          ) : (
-            streams.map((stream, idx) => (
-              <View key={stream.id}>
-                {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
-                <TouchableOpacity
-                  style={styles.row}
-                  onPress={() => openStreamModal(stream)}
-                  activeOpacity={0.7}
-                >
-                  <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: stream.color ?? '#4A90D8' }} />
-                  </View>
-                  <View style={styles.rowLabelWrap}>
-                    <Text style={[styles.rowLabel, { color: colors.black }]}>{stream.emoji} {stream.name}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
-                </TouchableOpacity>
-              </View>
-            ))
-          )}
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          <SettingsRow
+            icon="folder-outline"
+            label="Agenda categorieën"
+            value={streams.length > 0 ? `${streams.length} categorie${streams.length !== 1 ? 'ën' : ''}` : 'Geen'}
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setAgendaModalVisible(true)}
+          />
         </View>
 
         {/* ── Account ────────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Account</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
           <SettingsRow
-            icon="refresh-outline"
-            label="Bekijk onboarding opnieuw"
-            onPress={confirmResetOnboarding}
+            icon="settings-outline"
+            label="Account beheren"
+            subtitle="Onboarding, data export, verwijderen"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setAccountModalVisible(true)}
           />
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          <SettingsRow
-            icon="download-outline"
-            label="Exporteer mijn data"
-            onPress={handleExportData}
-          />
-        </View>
-
-        {/* Danger card */}
-        <View style={[styles.card, styles.dangerCard, { backgroundColor: colors.white }]}>
-          <SettingsRow
-            icon="log-out-outline"
-            label="Koppeling verwijderen"
-            danger
-            onPress={confirmLogout}
-          />
-          <View style={styles.dangerCardSubtitleWrap}>
-            <Text style={styles.dangerCardSubtitle}>
-              Je WhatsApp-koppeling wordt verwijderd. Data blijft bewaard.
-            </Text>
-          </View>
-          <View style={[styles.divider, { backgroundColor: '#FEE2E2' }]} />
-          <SettingsRow
-            icon="trash-outline"
-            label="Account verwijderen"
-            danger
-            onPress={confirmDeleteAccount}
-          />
-          <View style={styles.dangerCardSubtitleWrap}>
-            <Text style={styles.dangerCardSubtitle}>
-              Al je data wordt permanent verwijderd.
-            </Text>
-          </View>
         </View>
 
         {/* ── Info ───────────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Info</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
           <SettingsRow
-            icon="chatbubble-outline"
-            label="Hulp of feedback"
-            onPress={() =>
-              Linking.openURL('whatsapp://send?phone=31684965318&text=Hoi%2C%20ik%20heb%20een%20vraag%20over%20Sous-Chef')
-            }
-          />
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          <SettingsRow
-            icon="shield-outline"
-            label="Privacybeleid"
-            onPress={() => Linking.openURL('https://sous-chef.nl/privacy')}
-          />
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          <SettingsRow
-            icon="document-outline"
-            label="Gebruiksvoorwaarden"
-            onPress={() => Linking.openURL('https://sous-chef.nl/terms')}
+            icon="information-circle-outline"
+            label="Over Sous-Chef"
+            subtitle="Hulp, privacy, gebruiksvoorwaarden"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setInfoModalVisible(true)}
           />
         </View>
 
@@ -1029,7 +971,7 @@ export default function InstellingenTab() {
                     </View>
                   </View>
                   <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
-                    {settings.calendar_mode === 'lite' ? "Alleen vandaag's afspraken" : 'Volledige planning + kalenderweergave'}
+                    {settings.calendar_mode === 'lite' ? 'Komende afspraken op een rij, zonder kalender' : 'Volledig kalenderrooster + lijst met filters'}
                   </Text>
                 </View>
               </View>
@@ -1321,6 +1263,221 @@ export default function InstellingenTab() {
               Wordt getoond in de profielbanner.
             </Text>
           </View>
+        </SafeAreaView>
+      </SpringModal>
+
+      {/* ── Profiel modal ────────────────────────────────────────────── */}
+      <SpringModal
+        visible={profielModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setProfielModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setProfielModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Mijn profiel</Text>
+            <TouchableOpacity onPress={saveProfile} disabled={profileSaving} style={[styles.closeBtn, { backgroundColor: Colors.yellow, opacity: profileSaving ? 0.6 : 1 }]}>
+              <Text style={[styles.saveBtnText, { color: Colors.black }]}>{profileSaving ? '...' : 'Opslaan'}</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 40 }}>
+            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, lineHeight: 18 }}>
+              Claude gebruikt dit als context bij elke conversatie, zodat hij jou beter leert kennen.
+            </Text>
+            {[
+              { label: 'Naam', value: nameValue, setter: setNameValue, placeholder: 'Jouw naam', hint: 'Wordt ook in de banner getoond' },
+              { label: 'Geboortejaar', value: profileBirthYear, setter: setProfileBirthYear, placeholder: '1990', hint: 'Claude berekent je leeftijd hieruit', keyboardType: 'number-pad' as const },
+              { label: 'Werkgever', value: profileEmployer, setter: setProfileEmployer, placeholder: 'Bijv. Google, eigen bedrijf, zzp...', hint: '' },
+              { label: 'Vrienden & mensen', value: profileFriends, setter: setProfileFriends, placeholder: 'Bijv. Jan, Emma, Thomas...', hint: 'Komma-gescheiden — Claude herkent deze namen' },
+              { label: 'Extra context', value: profileExtra, setter: setProfileExtra, placeholder: 'Bijv. hobby\'s, dieetwensen, andere context...', hint: 'Vrij tekstveld voor Claude' },
+            ].map(({ label, value, setter, placeholder, hint, keyboardType }) => (
+              <View key={label} style={{ gap: 6 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>{label}</Text>
+                <TextInput
+                  style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
+                  value={value}
+                  onChangeText={setter}
+                  placeholder={placeholder}
+                  placeholderTextColor={colors.gray400}
+                  selectionColor={Colors.yellow}
+                  returnKeyType="done"
+                  keyboardType={keyboardType ?? 'default'}
+                />
+                {hint ? <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>{hint}</Text> : null}
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </SpringModal>
+
+      {/* ── Agenda modal ─────────────────────────────────────────────── */}
+      <SpringModal
+        visible={agendaModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAgendaModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setAgendaModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Agenda</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+            <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
+              <SettingsRow
+                icon="calendar-outline"
+                label="iPhone Agenda koppelen"
+                subtitle="Na installatie: Instellingen → Algemeen → VPN en apparaatbeheer"
+                right={
+                  caldavConnected ? (
+                    <View style={styles.connectedBadge}><Text style={styles.connectedBadgeText}>✓ Verbonden</Text></View>
+                  ) : (
+                    <View style={styles.disconnectedBadge}><Text style={styles.disconnectedBadgeText}>Niet gekoppeld</Text></View>
+                  )
+                }
+                onPress={openCalendarProfile}
+              />
+              {caldavCreds && (
+                <>
+                  <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+                  <TouchableOpacity
+                    style={styles.credRow}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowCaldavCreds(v => !v); }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                      <Ionicons name="key-outline" size={18} color={colors.black} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.black }]}>iPhone vraagt om een wachtwoord?</Text>
+                      <Text style={[styles.rowSubtitle, { color: colors.gray400 }]}>Tik om inloggegevens te bekijken en kopiëren</Text>
+                    </View>
+                    <Ionicons name={showCaldavCreds ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
+                  </TouchableOpacity>
+                  {showCaldavCreds && (
+                    <View style={[styles.credBox, { backgroundColor: colors.offWhite }]}>
+                      <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginBottom: 8 }}>
+                        Tik op een veld om het te kopiëren, plak het in het wachtwoordscherm van iOS.
+                      </Text>
+                      <CredRow label="Server" value="caldav.sous-chef.nl" colors={colors} onCopy={copyToClipboard} />
+                      <CredRow label="Gebruikersnaam" value={caldavCreds.username} colors={colors} onCopy={copyToClipboard} />
+                      <CredRow label="Wachtwoord" value={caldavCreds.password} colors={colors} onCopy={copyToClipboard} />
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 28, marginBottom: 8 }}>
+              <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 0, marginBottom: 0, marginLeft: 0 }]}>Categorieën</Text>
+              <TouchableOpacity onPress={() => openStreamModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="add-circle-outline" size={22} color={Colors.yellow} />
+              </TouchableOpacity>
+            </View>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
+              {streams.length === 0 ? (
+                <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400 }}>Nog geen categorieën</Text>
+                </View>
+              ) : (
+                streams.map((stream, idx) => (
+                  <View key={stream.id}>
+                    {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
+                    <TouchableOpacity style={styles.row} onPress={() => openStreamModal(stream)} activeOpacity={0.7}>
+                      <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: stream.color ?? '#4A90D8' }} />
+                      </View>
+                      <View style={styles.rowLabelWrap}>
+                        <Text style={[styles.rowLabel, { color: colors.black }]}>{stream.emoji} {stream.name}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </SpringModal>
+
+      {/* ── Account modal ────────────────────────────────────────────── */}
+      <SpringModal
+        visible={accountModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAccountModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setAccountModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Account</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 12 }}>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
+              <SettingsRow icon="refresh-outline" label="Bekijk onboarding opnieuw" onPress={confirmResetOnboarding} />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow icon="download-outline" label="Exporteer mijn data" onPress={handleExportData} />
+            </View>
+            <View style={[styles.card, styles.dangerCard, { backgroundColor: colors.white }]}>
+              <SettingsRow icon="log-out-outline" label="Koppeling verwijderen" danger onPress={confirmLogout} />
+              <View style={styles.dangerCardSubtitleWrap}>
+                <Text style={styles.dangerCardSubtitle}>Je WhatsApp-koppeling wordt verwijderd. Data blijft bewaard.</Text>
+              </View>
+              <View style={[styles.divider, { backgroundColor: '#FEE2E2' }]} />
+              <SettingsRow icon="trash-outline" label="Account verwijderen" danger onPress={confirmDeleteAccount} />
+              <View style={styles.dangerCardSubtitleWrap}>
+                <Text style={styles.dangerCardSubtitle}>Al je data wordt permanent verwijderd.</Text>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </SpringModal>
+
+      {/* ── Info modal ───────────────────────────────────────────────── */}
+      <SpringModal
+        visible={infoModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setInfoModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setInfoModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Over Sous-Chef</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 12 }}>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
+              <SettingsRow
+                icon="chatbubble-outline"
+                label="Hulp of feedback"
+                onPress={() => Linking.openURL('whatsapp://send?phone=31684965318&text=Hoi%2C%20ik%20heb%20een%20vraag%20over%20Sous-Chef')}
+              />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="shield-outline"
+                label="Privacybeleid"
+                onPress={() => Linking.openURL('https://sous-chef.nl/privacy')}
+              />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="document-outline"
+                label="Gebruiksvoorwaarden"
+                onPress={() => Linking.openURL('https://sous-chef.nl/terms')}
+              />
+            </View>
+            <Text style={[styles.versionText, { color: colors.gray400, marginTop: 8 }]}>Sous-Chef v{appVersion}</Text>
+          </ScrollView>
         </SafeAreaView>
       </SpringModal>
     </View>

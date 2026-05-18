@@ -750,7 +750,7 @@ export default function HabitsTab() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={Colors.yellow} />}
       >
         {/* ── Banner ── */}
-        <View style={[s.banner, { paddingTop: insets.top + 40 }]}>
+        <View style={[s.banner, { paddingTop: insets.top + 40, paddingBottom: 28 }]}>
           <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
 
