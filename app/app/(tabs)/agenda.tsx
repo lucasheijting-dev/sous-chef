@@ -50,7 +50,7 @@ type TimePeriod = 'today' | 'tomorrow' | 'thisweek' | 'nextweek';
 const TODAY              = new Date().toISOString().split('T')[0];
 const SECTION_H          = 48;
 const CARD_H             = 84;
-const MONTH_H            = 356;
+const MONTH_H            = 560;
 const MONTHS_BEFORE      = 6;
 const MONTHS_AFTER       = 18;
 const { width: screenWidth } = Dimensions.get('window');
@@ -103,6 +103,24 @@ function isPast(dateStr: string): boolean {
   return new Date(dateStr + 'T23:59:59') < new Date();
 }
 
+function getWeekNumber(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+function getEventColor(event: MergedEvent, streams: CalendarStream[]): string {
+  if (event.source === 'phone') return '#007AFF';
+  const stream = streams.find(s => s.claude_key === event.calendar_stream);
+  return stream?.color ?? '#4A90D9';
+}
+
+function parseTime(t: string): { h: number; m: number } {
+  const [hStr, mStr] = t.split(':');
+  return { h: parseInt(hStr) || 0, m: parseInt(mStr) || 0 };
+}
+
 function groupByDate(events: MergedEvent[]): Section[] {
   const map = new Map<string, MergedEvent[]>();
   for (const e of events) {
@@ -132,47 +150,85 @@ async function fetchPhoneEvents(): Promise<MergedEvent[]> {
 
 // ── Month grid ─────────────────────────────────────────────────────────────────
 
-function MonthGrid({ year, month, eventDates, selectedDate, onDayPress }: {
-  year: number; month: number; eventDates: Set<string>; selectedDate: string; onDayPress: (k: string) => void;
+function MonthGrid({ year, month, eventsByDate, selectedDate, onDayPress, streams }: {
+  year: number; month: number; eventsByDate: Map<string, MergedEvent[]>;
+  selectedDate: string; onDayPress: (k: string) => void; streams: CalendarStream[];
 }) {
   const { colors } = useTheme();
   const firstDow      = new Date(year, month, 1).getDay();
   const leadingBlanks = firstDow === 0 ? 6 : firstDow - 1;
   const daysInMonth   = new Date(year, month + 1, 0).getDate();
 
-  const cells: (null | { key: string; num: number; isToday: boolean; hasEvent: boolean })[] = [];
-  for (let b = 0; b < leadingBlanks; b++) cells.push(null);
+  const allDays: (null | { key: string; num: number; isToday: boolean; isWeekend: boolean })[] = [];
+  for (let b = 0; b < leadingBlanks; b++) allDays.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const key = toKey(new Date(year, month, d));
-    cells.push({ key, num: d, isToday: key === TODAY, hasEvent: eventDates.has(key) });
+    const dow = new Date(year, month, d).getDay();
+    allDays.push({ key, num: d, isToday: key === TODAY, isWeekend: dow === 0 || dow === 6 });
   }
-  while (cells.length % 7 !== 0) cells.push(null);
+  while (allDays.length % 7 !== 0) allDays.push(null);
+
+  const weeks: typeof allDays[] = [];
+  for (let i = 0; i < allDays.length; i += 7) weeks.push(allDays.slice(i, i + 7));
 
   const label = new Date(year, month, 1).toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' });
 
   return (
-    <View style={cal.monthBlock}>
-      <Text style={[cal.monthLabel, { color: colors.black }]}>{label[0].toUpperCase() + label.slice(1)}</Text>
-      <View style={cal.weekRow}>
-        {['Ma','Di','Wo','Do','Vr','Za','Zo'].map(n => <Text key={n} style={[cal.weekDay, { color: colors.gray400 }]}>{n}</Text>)}
+    <View style={{ backgroundColor: colors.white, marginBottom: 1 }}>
+      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: colors.black, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 10 }}>
+        {label[0].toUpperCase() + label.slice(1)}
+      </Text>
+      <View style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+        <View style={{ width: 28 }} />
+        {['Ma','Di','Wo','Do','Vr','Za','Zo'].map((n, i) => (
+          <Text key={n} style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter_600SemiBold', fontSize: 11, color: i >= 5 ? '#FF3B30' : colors.gray400, paddingBottom: 6 }}>{n}</Text>
+        ))}
       </View>
-      <View style={cal.grid}>
-        {cells.map((cell, i) =>
-          cell === null ? <View key={`b${i}`} style={cal.cell} /> : (
-            <TouchableOpacity key={cell.key} style={cal.cell} onPress={() => onDayPress(cell.key)} activeOpacity={0.7}>
-              <View style={[cal.circle, cell.isToday && cal.circleToday, selectedDate === cell.key && !cell.isToday && { backgroundColor: colors.black }]}>
-                <Text style={[cal.num, { color: colors.black }, cell.isToday && { color: Colors.black }, selectedDate === cell.key && !cell.isToday && { color: colors.white }, cell.key < TODAY && !cell.isToday && { color: colors.gray200 }]}>
-                  {cell.num}
-                </Text>
-              </View>
-              {cell.hasEvent
-                ? <View style={[cal.dot, cell.isToday ? { backgroundColor: Colors.black } : (selectedDate === cell.key ? { backgroundColor: colors.white } : (cell.key < TODAY ? { backgroundColor: colors.gray200 } : { backgroundColor: Colors.yellow }))]} />
-                : <View style={cal.dotEmpty} />
-              }
-            </TouchableOpacity>
-          )
-        )}
-      </View>
+      {weeks.map((week, wi) => {
+        const firstValid = week.find(d => d !== null);
+        const weekNum = firstValid ? getWeekNumber(new Date(firstValid.key + 'T12:00:00')) : null;
+        return (
+          <View key={wi} style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, minHeight: 76 }}>
+            <View style={{ width: 28, paddingTop: 10, alignItems: 'center' }}>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 9, color: colors.gray200 }}>{weekNum}</Text>
+            </View>
+            {week.map((day, di) => {
+              if (day === null) return <View key={di} style={{ flex: 1 }} />;
+              const events = eventsByDate.get(day.key) ?? [];
+              const isSelected = selectedDate === day.key;
+              const isPastDay = day.key < TODAY;
+              return (
+                <TouchableOpacity key={day.key} style={{ flex: 1, paddingTop: 6, paddingBottom: 4, paddingHorizontal: 1, alignItems: 'stretch' }} onPress={() => onDayPress(day.key)} activeOpacity={0.7}>
+                  <View style={{
+                    width: 26, height: 26, borderRadius: 13,
+                    backgroundColor: day.isToday ? '#FF3B30' : (isSelected && !day.isToday ? colors.black : 'transparent'),
+                    justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 3,
+                  }}>
+                    <Text style={{
+                      fontFamily: (day.isToday || isSelected) ? 'Inter_700Bold' : 'Inter_400Regular',
+                      fontSize: 13,
+                      color: (day.isToday || isSelected) ? '#fff' : isPastDay ? colors.gray200 : day.isWeekend ? '#FF3B30' : colors.black,
+                    }}>{day.num}</Text>
+                  </View>
+                  {events.slice(0, 2).map((e) => {
+                    const color = getEventColor(e, streams);
+                    return (
+                      <View key={e.id} style={{ backgroundColor: color, borderRadius: 3, paddingHorizontal: 3, paddingVertical: 1.5, marginBottom: 2, marginHorizontal: 1 }}>
+                        <Text numberOfLines={1} style={{ fontFamily: 'Inter_600SemiBold', fontSize: 8.5, color: '#fff', lineHeight: 11 }}>
+                          {e.time ? e.time.slice(0, 5) + ' ' : ''}{e.title}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                  {events.length > 2 && (
+                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 9, color: colors.gray400, paddingHorizontal: 3 }}>+{events.length - 2}</Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -325,7 +381,15 @@ function AgendaLite() {
     });
   }, []);
 
-  const eventDates   = useMemo(() => new Set(allEvents.filter(e => !!e.date).map(e => e.date!)), [allEvents]);
+  const eventsByDate = useMemo(() => {
+    const m = new Map<string, MergedEvent[]>();
+    for (const e of allEvents) {
+      if (!e.date) continue;
+      if (!m.has(e.date)) m.set(e.date, []);
+      m.get(e.date)!.push(e);
+    }
+    return m;
+  }, [allEvents]);
   const selectedDayEvents = useMemo(() => allEvents.filter(e => e.date === selectedDate), [allEvents, selectedDate]);
 
   function selectPeriod(p: TimePeriod) {
@@ -621,7 +685,7 @@ function AgendaLite() {
           renderItem={({ item: m }) => (
             <MonthGrid
               year={m.year} month={m.month}
-              eventDates={eventDates} selectedDate={selectedDate}
+              eventsByDate={eventsByDate} streams={streams} selectedDate={selectedDate}
               onDayPress={(d) => {
                 setSelectedDate(d);
                 setDayDetailMode(true);
@@ -632,51 +696,87 @@ function AgendaLite() {
         />
       )}
 
-      {/* ── Calendar: day detail ─────────────────────────────────────── */}
+      {/* ── Calendar: day detail (timeline) ─────────────────────────── */}
       {viewMode === 'calendar' && dayDetailMode && (
         <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
-          <View style={[cal.dayDetailHeader, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
-            <TouchableOpacity onPress={() => setDayDetailMode(false)} style={cal.dayDetailBack} activeOpacity={0.7}>
-              <Ionicons name="chevron-back" size={22} color={Colors.black} />
-              <Text style={[cal.dayDetailBackText, { color: Colors.black }]}>Terug</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+            <TouchableOpacity onPress={() => setDayDetailMode(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, width: 70 }} activeOpacity={0.7}>
+              <Ionicons name="chevron-back" size={22} color={colors.black} />
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.black }}>Terug</Text>
             </TouchableOpacity>
-            <Text style={[cal.dayDetailTitle, { color: colors.black }]}>{sectionLabel(selectedDate)}</Text>
-            <TouchableOpacity onPress={() => setQuickAddVisible(true)} style={{ width: 70, alignItems: 'flex-end', paddingRight: 4 }}>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black, flex: 1, textAlign: 'center' }}>{sectionLabel(selectedDate)}</Text>
+            <TouchableOpacity onPress={() => setQuickAddVisible(true)} style={{ width: 70, alignItems: 'flex-end' }}>
               <Ionicons name="add-circle-outline" size={24} color={Colors.yellow} />
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }} showsVerticalScrollIndicator={false}>
-            {selectedDayEvents.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
+
+          <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }} showsVerticalScrollIndicator={false}>
+            {/* All-day events */}
+            {selectedDayEvents.filter(e => !e.time).length > 0 && (
+              <View style={{ backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, padding: 10, paddingHorizontal: 14 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Hele dag</Text>
+                {selectedDayEvents.filter(e => !e.time).map(e => {
+                  const color = getEventColor(e, streams);
+                  return (
+                    <TouchableOpacity key={e.id} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.8}
+                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '22', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 6, padding: 10, marginBottom: 4 }}>
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.black, flex: 1 }}>{e.title}</Text>
+                      {e.source === 'phone' && <Text style={{ fontSize: 10, color: colors.gray400 }}>iPhone</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Hour timeline */}
+            <View style={{ position: 'relative', paddingTop: 4 }}>
+              {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
+                <View key={h} style={{ height: 60, flexDirection: 'row' }}>
+                  <View style={{ width: 52, paddingRight: 10, alignItems: 'flex-end', justifyContent: 'flex-start' }}>
+                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400, marginTop: -7 }}>
+                      {String(h).padStart(2, '0')}:00
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray100 }} />
+                </View>
+              ))}
+
+              {/* Current time indicator */}
+              {selectedDate === TODAY && (() => {
+                const now = new Date();
+                const top = 4 + (now.getHours() - 6 + now.getMinutes() / 60) * 60;
+                if (top < 4 || top > 4 + 17 * 60) return null;
+                return (
+                  <View style={{ position: 'absolute', left: 46, right: 0, top, flexDirection: 'row', alignItems: 'center', zIndex: 2, pointerEvents: 'none' }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF3B30', marginLeft: -4 }} />
+                    <View style={{ flex: 1, height: 1.5, backgroundColor: '#FF3B30' }} />
+                  </View>
+                );
+              })()}
+
+              {/* Timed event blocks */}
+              {selectedDayEvents.filter(e => e.time).map(e => {
+                const { h, m } = parseTime(e.time!);
+                const top = 4 + (h - 6 + m / 60) * 60;
+                const color = getEventColor(e, streams);
+                return (
+                  <TouchableOpacity key={e.id} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.85}
+                    style={{ position: 'absolute', left: 58, right: 8, top: Math.max(4, top), height: 56, backgroundColor: color + 'D0', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: color, padding: 8, zIndex: 1 }}>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }} numberOfLines={1}>{e.title}</Text>
+                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>{e.time}{e.source === 'phone' ? ' · iPhone' : ''}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {selectedDayEvents.length === 0 && (
+              <View style={{ alignItems: 'center', paddingTop: 40, gap: 12 }}>
                 <View style={[s.emptyIconBox, { backgroundColor: colors.gray100 }]}>
                   <Text style={{ fontSize: 32 }}>📅</Text>
                 </View>
                 <Text style={[s.emptyTitle, { color: colors.black }]}>Geen afspraken</Text>
-                <Text style={[s.emptyText, { color: colors.gray400 }]}>Geen afspraken op {sectionLabel(selectedDate).toLowerCase()}</Text>
               </View>
-            ) : selectedDayEvents.map(e => {
-              const sc = e.source === 'sous-chef' ? streams.find(st => st.claude_key === e.calendar_stream)?.color : undefined;
-              return (
-                <TouchableOpacity
-                  key={e.id}
-                  onLongPress={() => setDeleteTarget(e)}
-                  style={[cal.dayEventCard, { backgroundColor: colors.white }]}
-                  activeOpacity={0.8}
-                >
-                  {sc && <View style={{ width: 4, borderRadius: 2, backgroundColor: sc, marginRight: 12, alignSelf: 'stretch' }} />}
-                  <Text style={cal.eventEmoji}>{eventEmoji(e.title)}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[cal.eventTitle, { color: colors.black }]}>{e.title}</Text>
-                    {(e.time || e.source === 'phone') && (
-                      <Text style={[cal.eventSub, { color: colors.gray400 }]}>
-                        {[e.time, e.source === 'phone' ? 'iPhone-agenda' : null].filter(Boolean).join(' · ')}
-                      </Text>
-                    )}
-                  </View>
-                  <Ionicons name="trash-outline" size={16} color={colors.gray200} />
-                </TouchableOpacity>
-              );
-            })}
+            )}
           </ScrollView>
         </View>
       )}
@@ -766,10 +866,9 @@ export default function AgendaTab() {
   return <AgendaLite />;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _AgendaTabFull() {
-  const { settings } = useModuleSettings();
-  if (settings.calendar_mode === 'lite') return <AgendaLite />;
+function _AgendaTabFull_REMOVED() {
+  // dead code removed
+  return null;
 
   const { user }   = useUser();
   const { colors } = useTheme();
@@ -1168,7 +1267,7 @@ function _AgendaTabFull() {
           renderItem={({ item: m }) => (
             <MonthGrid
               year={m.year} month={m.month}
-              eventDates={eventDates} selectedDate={selectedDate}
+              eventsByDate={eventsByDate} streams={streams} selectedDate={selectedDate}
               onDayPress={(d) => {
                 setSelectedDate(d);
                 setDayDetailMode(true);
