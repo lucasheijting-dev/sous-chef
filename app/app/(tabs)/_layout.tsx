@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,10 +14,10 @@ const ALL_TABS = [
   { name: 'index',        label: 'Lijsten', icon: 'layers',        iconOff: 'layers-outline'        },
   { name: 'agenda',       label: 'Agenda',  icon: 'calendar',      iconOff: 'calendar-outline'      },
   { name: 'habits',       label: 'Habits',  icon: 'trophy',        iconOff: 'trophy-outline'        },
-  { name: 'instellingen', label: 'Instellingen', icon: 'person-circle', iconOff: 'person-circle-outline' },
+  { name: 'instellingen', label: 'Instellingen', icon: 'settings-sharp', iconOff: 'settings-outline' },
 ] as const;
 
-function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean; label: string }) {
+function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label: string }) {
   const prevFocused = useRef(focused);
 
   useEffect(() => {
@@ -29,8 +29,7 @@ function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean
 
   return (
     <View style={styles.iconCol}>
-      <Ionicons name={name} size={19} color={focused ? Colors.yellow : '#666'} />
-      <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7} style={[styles.label, focused && styles.labelActive]}>{label}</Text>
+      <Ionicons name={name} size={24} color={focused ? Colors.yellow : 'rgba(255,255,255,0.82)'} />
     </View>
   );
 }
@@ -38,8 +37,8 @@ function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean
 function GlassBar() {
   return (
     <BlurView
-      intensity={Platform.OS === 'web' ? 60 : 80}
-      tint="dark"
+      intensity={Platform.OS === 'web' ? 70 : 95}
+      tint="systemUltraThinMaterialDark"
       style={StyleSheet.absoluteFill}
     />
   );
@@ -90,24 +89,23 @@ const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
     bottom: Platform.OS === 'web' ? 16 : 32,
-    left: 65,
-    right: 65,
-    marginHorizontal: 12,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(12,12,12,0.85)',
+    left: 60,
+    right: 60,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: 'rgba(10,10,10,0.65)',
     borderTopWidth: 0,
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.10)',
+    borderColor: 'rgba(255,255,255,0.12)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.5,
-    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
     elevation: 20,
     overflow: 'hidden',
   },
   tabBarItem: {
-    height: 68,
+    height: 62,
     paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
@@ -124,17 +122,6 @@ const styles = StyleSheet.create({
   iconCol: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
     height: 44,
-  },
-  label: {
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 8,
-    color: '#666',
-    letterSpacing: 0,
-    textTransform: 'uppercase',
-  },
-  labelActive: {
-    color: Colors.yellow,
   },
 });

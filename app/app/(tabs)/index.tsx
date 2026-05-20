@@ -11,12 +11,15 @@ import {
   Platform,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
   ScrollView,
   SafeAreaView,
   Linking,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,11 +31,20 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { List, Note } from '@/lib/types';
-import { Colors, Shadow, Radius } from '@/constants/Design';
+import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { SkeletonListCard } from '@/components/SkeletonCard';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  const day = new Date().getDay(); // 0=Sun, 6=Sat
+  const weekend = day === 0 || day === 6;
+  if (h >= 5  && h < 12) return weekend ? 'Goed weekend' : 'Goedemorgen';
+  if (h >= 12 && h < 18) return 'Goedemiddag';
+  return 'Goedenavond';
+}
 
 const TILE_ACCENTS  = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
 const TILE_TEXT_FG  = ['#0A0A0A', '#FFFFFF',  '#FFFFFF',  '#FFFFFF'];
@@ -114,11 +126,13 @@ function AnimatedCard({
   index,
   onPress,
   onDeleteConfirm,
+  onLongPress,
 }: {
   item: List & { item_count: number; open_count: number };
   index: number;
   onPress: () => void;
   onDeleteConfirm: () => void;
+  onLongPress?: () => void;
   colors: any;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -162,6 +176,7 @@ function AnimatedCard({
       <Swipeable ref={swipeRef} renderLeftActions={renderLeftActions} leftThreshold={60} overshootLeft={false}>
         <Pressable
           onPress={onPress}
+          onLongPress={onLongPress}
           onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
           onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
           style={[styles.tile, { backgroundColor: bg }]}
@@ -351,10 +366,10 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
         <TouchableOpacity
           key={opt.key}
           onPress={() => onChange(opt.key)}
-          style={[sortStyles.pill, value === opt.key && sortStyles.pillActive]}
+          style={[sortStyles.pill, { backgroundColor: value === opt.key ? Colors.yellow : '#DDDCDC' }]}
           activeOpacity={0.75}
         >
-          <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : colors.gray400 }]}>{opt.label}</Text>
+          <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : '#555' }]}>{opt.label}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -362,9 +377,8 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
 }
 
 const sortStyles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
-  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: Radius.pill, backgroundColor: 'transparent' },
-  pillActive: { backgroundColor: Colors.yellow },
+  row: { flexDirection: 'row', gap: 6, paddingTop: 20, paddingBottom: 20 },
+  pill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.pill },
   pillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
 });
 
@@ -431,10 +445,21 @@ export default function LijstenTab() {
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [deleteSheet, setDeleteSheet] = useState<{ listId: string; listName: string } | null>(null);
+  const [pendingListDelete, setPendingListDelete] = useState<{ listId: string; listName: string; items: typeof lists } | null>(null);
+  const [listUndoVisible, setListUndoVisible] = useState(false);
+  const listUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [peekTarget, setPeekTarget] = useState<{ list: (typeof lists)[0]; x: number; y: number } | null>(null);
+  const [peekItems, setPeekItems] = useState<{ id: string; text: string; checked: boolean }[]>([]);
+  const [reorderModalVisible, setReorderModalVisible] = useState(false);
+  const [reorderList, setReorderList] = useState<typeof lists>([]);
+  const [newListModalVisible, setNewListModalVisible] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [newListCreating, setNewListCreating] = useState(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const emptyBreath = useRef(new Animated.Value(1)).current;
   const breathLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const fetchListsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showBanner = settings.onboarding_done && !settings.getting_started_dismissed;
 
@@ -476,7 +501,10 @@ export default function LijstenTab() {
     if (!user || user.id === 'dev') return;
     const ch = supabase.channel('lists-notes-ch')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lists', filter: `user_id=eq.${user.id}` }, fetchLists)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items' }, fetchLists)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items' }, () => {
+        if (fetchListsDebounceRef.current) clearTimeout(fetchListsDebounceRef.current);
+        fetchListsDebounceRef.current = setTimeout(fetchLists, 400);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'notes', filter: `user_id=eq.${user.id}` }, fetchNotes)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -494,8 +522,14 @@ export default function LijstenTab() {
       const pb = b.item_count > 0 ? (b.item_count - b.open_count) / b.item_count : 0;
       return pb - pa;
     }
+    // Sink fully-done lists to the bottom
+    const aDone = a.item_count > 0 && a.open_count === 0 ? 1 : 0;
+    const bDone = b.item_count > 0 && b.open_count === 0 ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
+  const activeLists = sortedLists.filter(l => !(l.item_count > 0 && l.open_count === 0));
+  const doneLists   = sortedLists.filter(l => l.item_count > 0 && l.open_count === 0);
 
   const fetchReceipts = useCallback(async () => {
     if (!user || user.id === 'dev') return;
@@ -542,10 +576,65 @@ export default function LijstenTab() {
     setAssignModalReceipt(null);
   }
 
-  async function deleteList(listId: string) {
+  function deleteList(listId: string, listName: string) {
+    const snapshot = lists;
     setLists(prev => prev.filter(l => l.id !== listId));
     setDeleteSheet(null);
-    await supabase.from('lists').delete().eq('id', listId);
+    setPendingListDelete({ listId, listName, items: snapshot });
+    setListUndoVisible(true);
+    if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
+    listUndoTimer.current = setTimeout(async () => {
+      setListUndoVisible(false);
+      setPendingListDelete(null);
+      await supabase.from('lists').delete().eq('id', listId);
+    }, 4000);
+  }
+
+  function undoListDelete() {
+    if (!pendingListDelete) return;
+    if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
+    setLists(pendingListDelete.items);
+    setPendingListDelete(null);
+    setListUndoVisible(false);
+  }
+
+  async function openPeek(list: (typeof lists)[0]) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const { data } = await supabase
+      .from('list_items').select('id, text, checked').eq('list_id', list.id).order('created_at', { ascending: true }).limit(5);
+    setPeekItems(data ?? []);
+    setPeekTarget({ list, x: 0, y: 0 });
+  }
+
+  function openReorder() {
+    setReorderList([...sortedLists]);
+    setReorderModalVisible(true);
+  }
+
+  async function saveReorder() {
+    const updated = reorderList.map((l, i) => ({ ...l, sort_order: i }));
+    setLists(updated);
+    setReorderModalVisible(false);
+    for (const l of updated) {
+      await supabase.from('lists').update({ sort_order: l.sort_order }).eq('id', l.id);
+    }
+  }
+
+  async function createNewList() {
+    if (!newListName.trim() || !user || user.id === 'dev') return;
+    setNewListCreating(true);
+    const { data } = await supabase.from('lists').insert({
+      user_id: user.id,
+      name: newListName.trim(),
+      emoji: '📝',
+      sort_order: lists.length,
+    }).select('id, name, emoji, sort_order, list_type, user_id, created_at').single();
+    if (data) {
+      setLists(prev => [...prev, { ...data, item_count: 0, open_count: 0 }]);
+    }
+    setNewListCreating(false);
+    setNewListModalVisible(false);
+    setNewListName('');
   }
 
   useEffect(() => { if (settings.receipts_enabled) fetchReceipts(); }, [fetchReceipts, settings.receipts_enabled]);
@@ -575,11 +664,11 @@ export default function LijstenTab() {
     <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
       {/* Banner */}
-      <Animated.View style={[styles.banner, { paddingTop: insets.top + 40, paddingBottom: 28, transform: [{ translateY: bannerTranslateY }] }]}>
+      <Animated.View style={[styles.banner, { paddingTop: insets.top + 44, transform: [{ translateY: bannerTranslateY }] }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
         <Text style={styles.bannerEyebrow}>
-          {settings.user_name ? `Goedemorgen, ${settings.user_name} 👋` : 'Goedemorgen 👋'}
+          {settings.user_name ? `${getGreeting()}, ${settings.user_name} 👋` : `${getGreeting()} 👋`}
         </Text>
         <Text style={styles.bannerTitle}>
           {activeTab === 'lists' ? 'Mijn lijsten' : activeTab === 'notes' ? 'Notities' : 'Bonnetjes'}
@@ -699,36 +788,54 @@ export default function LijstenTab() {
             </View>
           </ScrollView>
         ) : (
-          <FlatList
-            data={sortedLists}
-            keyExtractor={(l) => l.id}
-            numColumns={2}
-            columnWrapperStyle={styles.tileRow}
-            contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }]}
+          <ScrollView
             style={{ backgroundColor: colors.offWhite }}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
             scrollEventThrottle={16}
-            ListHeaderComponent={
-              <>
-                {showBanner && (
-                  <GettingStartedBanner
-                    userId={user?.id ?? null}
-                    onDismiss={() => updateSetting('getting_started_dismissed', true)}
-                    colors={colors}
-                  />
-                )}
-                <SortToggle value={sortMode} onChange={setSortMode} colors={colors} />
-              </>
-            }
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
-            renderItem={({ item, index }) => (
-              <AnimatedCard
-                item={item} index={index} colors={colors}
-                onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
-              />
+            contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }]}
+          >
+            {showBanner && (
+              <GettingStartedBanner userId={user?.id ?? null} onDismiss={() => updateSetting('getting_started_dismissed', true)} colors={colors} />
             )}
-          />
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <SortToggle value={sortMode} onChange={setSortMode} colors={colors} />
+              <TouchableOpacity onPress={openReorder} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="swap-vertical-outline" size={18} color={colors.gray400} />
+              </TouchableOpacity>
+            </View>
+            {/* Active lists */}
+            {activeLists.length > 0 && (
+              <View style={styles.tileRow}>
+                {activeLists.map((item, index) => (
+                  <AnimatedCard key={item.id} item={item} index={index} colors={colors}
+                    onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                    onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
+                    onLongPress={() => openPeek(item)}
+                  />
+                ))}
+              </View>
+            )}
+            {/* Done lists sink to bottom */}
+            {doneLists.length > 0 && (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 14, gap: 10 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Klaar ({doneLists.length})</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                </View>
+                <View style={styles.tileRow}>
+                  {doneLists.map((item, index) => (
+                    <AnimatedCard key={item.id} item={item} index={activeLists.length + index} colors={colors}
+                      onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                      onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
+                      onLongPress={() => openPeek(item)}
+                    />
+                  ))}
+                </View>
+              </>
+            )}
+          </ScrollView>
         )
       )}
 
@@ -1074,13 +1181,177 @@ export default function LijstenTab() {
         title={`"${deleteSheet?.listName}" verwijderen?`}
         subtitle="Deze lijst en alle items worden permanent verwijderd."
         destructiveLabel="Verwijder lijst"
-        onConfirm={() => deleteSheet && deleteList(deleteSheet.listId)}
+        onConfirm={() => deleteSheet && deleteList(deleteSheet.listId, deleteSheet.listName)}
         onCancel={() => setDeleteSheet(null)}
       />
+
+      {/* Undo snackbar */}
+      {listUndoVisible && (
+        <View style={[undoStyles.snackbar, { bottom: insets.bottom + 90 }]}>
+          <Text style={undoStyles.snackbarText}>"{pendingListDelete?.listName}" verwijderd</Text>
+          <TouchableOpacity onPress={undoListDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={undoStyles.undoBtn}>Ongedaan maken</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Peek modal */}
+      <Modal visible={!!peekTarget} transparent animationType="fade" onRequestClose={() => setPeekTarget(null)}>
+        <Pressable style={peekStyles.overlay} onPress={() => setPeekTarget(null)}>
+          <Pressable style={[peekStyles.card, { backgroundColor: colors.white }]} onPress={() => {}}>
+            <View style={peekStyles.header}>
+              <Text style={peekStyles.emoji}>{peekTarget?.list.emoji || '📝'}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[peekStyles.title, { color: colors.black }]} numberOfLines={1}>{peekTarget?.list.name}</Text>
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400 }}>
+                  {peekTarget?.list.open_count} open · {peekTarget?.list.item_count} totaal
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => {
+                setPeekTarget(null);
+                if (peekTarget) router.push({ pathname: '/list/[id]', params: { id: peekTarget.list.id, name: peekTarget.list.name, emoji: peekTarget.list.emoji, list_type: peekTarget.list.list_type ?? 'checklist' } });
+              }} style={peekStyles.openBtn}>
+                <Text style={peekStyles.openBtnText}>Open</Text>
+              </TouchableOpacity>
+            </View>
+            {peekItems.length === 0 ? (
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, paddingVertical: 8 }}>Geen items</Text>
+            ) : (
+              peekItems.map(pi => (
+                <View key={pi.id} style={peekStyles.peekRow}>
+                  <Ionicons name={pi.checked ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={pi.checked ? '#4CAF50' : colors.gray400} />
+                  <Text style={[peekStyles.peekText, { color: colors.black, opacity: pi.checked ? 0.4 : 1, textDecorationLine: pi.checked ? 'line-through' : 'none' }]}>{pi.text}</Text>
+                </View>
+              ))
+            )}
+            {(peekTarget?.list.item_count ?? 0) > 5 && (
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginTop: 6 }}>
+                + {(peekTarget?.list.item_count ?? 0) - 5} meer items
+              </Text>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Reorder modal */}
+      <Modal visible={reorderModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setReorderModalVisible(false)}>
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setReorderModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Ionicons name="close" size={18} color={colors.black} />
+            </TouchableOpacity>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.black, flex: 1, textAlign: 'center' }}>Volgorde wijzigen</Text>
+            <TouchableOpacity onPress={saveReorder} style={{ paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.yellow }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black }}>Opslaan</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
+            {reorderList.map((item, index) => (
+              <View key={item.id} style={[reorderStyles.row, { backgroundColor: colors.offWhite }]}>
+                <Text style={{ fontSize: 20 }}>{item.emoji || '📝'}</Text>
+                <Text style={[reorderStyles.name, { color: colors.black }]} numberOfLines={1}>{item.name}</Text>
+                <View style={reorderStyles.arrows}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (index === 0) return;
+                      const next = [...reorderList];
+                      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                      setReorderList(next);
+                    }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    disabled={index === 0}
+                  >
+                    <Ionicons name="chevron-up" size={20} color={index === 0 ? colors.gray200 : colors.gray400} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (index === reorderList.length - 1) return;
+                      const next = [...reorderList];
+                      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                      setReorderList(next);
+                    }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    disabled={index === reorderList.length - 1}
+                  >
+                    <Ionicons name="chevron-down" size={20} color={index === reorderList.length - 1 ? colors.gray200 : colors.gray400} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
+      {/* Bottom fade */}
+      {activeTab === 'lists' && (
+        <LinearGradient
+          colors={[`${colors.offWhite}00`, colors.offWhite]}
+          style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 100, pointerEvents: 'none' }}
+        />
+      )}
+
+      {/* New list FAB */}
+      {activeTab === 'lists' && (
+        <TouchableOpacity
+          style={[fabStyles.fab, { bottom: insets.bottom + 90 }]}
+          onPress={() => { setNewListName(''); setNewListModalVisible(true); }}
+          activeOpacity={0.85}
+        >
+          <LinearGradient colors={['#FCC10C', '#E5A800']} style={fabStyles.fabGrad}>
+            <Ionicons name="add" size={26} color={Colors.black} />
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {/* New list modal */}
+      <Modal visible={newListModalVisible} transparent animationType="slide" onRequestClose={() => setNewListModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Pressable style={sheetStyles.overlay} onPress={() => setNewListModalVisible(false)}>
+          <Pressable style={[sheetStyles.sheet, { backgroundColor: colors.white, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32 }]} onPress={() => {}}>
+            <View style={sheetStyles.handle} />
+            <Text style={[sheetStyles.title, { color: colors.black }]}>Nieuwe lijst</Text>
+            <View style={[fabStyles.inputWrap, { backgroundColor: colors.gray100 }]}>
+              <TextInput
+                style={[fabStyles.input, { color: colors.black }]}
+                value={newListName}
+                onChangeText={setNewListName}
+                placeholder="Naam van de lijst..."
+                placeholderTextColor={colors.gray400}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={createNewList}
+                selectionColor={Colors.yellow}
+              />
+            </View>
+            <TouchableOpacity
+              style={[sheetStyles.destructiveBtn, { backgroundColor: newListName.trim() ? Colors.yellow : colors.gray200 }]}
+              onPress={createNewList}
+              disabled={!newListName.trim() || newListCreating}
+              activeOpacity={0.85}
+            >
+              {newListCreating
+                ? <ActivityIndicator size="small" color={Colors.black} />
+                : <Text style={[sheetStyles.destructiveBtnText, { color: Colors.black }]}>Lijst aanmaken</Text>
+              }
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
     </GestureHandlerRootView>
   );
 }
+
+const fabStyles = StyleSheet.create({
+  fab: {
+    position: 'absolute', right: 20, width: 56, height: 56,
+    borderRadius: 28, overflow: 'hidden',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+  },
+  fabGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  inputWrap: { borderRadius: Radius.pill, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 4 },
+  input: { fontFamily: 'Inter_400Regular', fontSize: 16, paddingVertical: 12 },
+});
 
 const rStyles = StyleSheet.create({
   chip:      { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, borderWidth: 1, borderColor: '#E0E0E0' },
@@ -1090,18 +1361,18 @@ const rStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  banner: { paddingHorizontal: 32, paddingBottom: 28, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
-  bannerEyebrow: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 6 },
-  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 32, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 },
+  banner: { paddingHorizontal: 28, paddingBottom: 32, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' },
+  bannerEyebrow: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 8 },
+  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 34, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 },
   bannerStats: { flexDirection: 'row', gap: 10, marginTop: 4 },
   statTile: {
-    paddingHorizontal: 18, paddingVertical: 12,
-    backgroundColor: '#FFFFFF12', borderRadius: Radius.md,
-    borderWidth: 1, borderColor: '#FFFFFF18', minWidth: 90,
+    paddingHorizontal: 20, paddingVertical: 14,
+    backgroundColor: '#FFFFFF0F', borderRadius: 16,
+    borderWidth: 1, borderColor: '#FFFFFF16', minWidth: 96,
   },
   statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
-  statNum: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.white, letterSpacing: -0.5 },
-  statLabel: { fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 1 },
+  statNum: { fontFamily: 'Inter_700Bold', fontSize: 24, color: Colors.white, letterSpacing: -0.5 },
+  statLabel: { fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
@@ -1112,34 +1383,34 @@ const styles = StyleSheet.create({
   searchBarFocused: { borderColor: Colors.yellow + '60' },
   searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: Colors.white },
 
-  tabToggleWrap: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 4, gap: 20 },
+  tabToggleWrap: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 20, paddingBottom: 8, gap: 24 },
   tabTextBtn: { alignItems: 'center', paddingBottom: 8 },
   tabTextLabel: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3 },
-  tabTextUnderline: { height: 3, width: '80%', borderRadius: 2, marginTop: 4 },
+  tabTextUnderline: { height: 3, width: '100%', borderRadius: 2, marginTop: 5 },
 
-  skeletonList: { padding: 16 },
-  tileGrid: { padding: 16, paddingBottom: 120 },
-  tileRow: { gap: 12, marginBottom: 12 },
-  tileWrap: { flex: 1 },
-  tile: { flex: 1, borderRadius: Radius.xl, overflow: 'hidden', padding: 18, minHeight: 150, justifyContent: 'space-between', ...Shadow.card },
-  tileEmoji: { fontSize: 26, marginBottom: 12 },
+  skeletonList: { padding: 20 },
+  tileGrid: { padding: 20, paddingTop: 0, paddingBottom: TAB_BAR_CLEARANCE },
+  tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 16 },
+  tileWrap: { flex: 1, minWidth: '46%' },
+  tile: { flex: 1, borderRadius: 20, overflow: 'hidden', padding: 22, minHeight: 172, justifyContent: 'space-between', ...Shadow.card },
+  tileEmoji: { fontSize: 30, marginBottom: 16 },
   tileBottom: {},
-  tileName: { fontFamily: 'Inter_700Bold', fontSize: 15, letterSpacing: -0.2, marginBottom: 6 },
-  tileCountRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tileCount: { fontFamily: 'Inter_400Regular', fontSize: 12 },
-  typeBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: Radius.pill },
-  typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.3 },
-  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, backgroundColor: 'rgba(0,0,0,0.15)', borderBottomLeftRadius: Radius.xl, borderBottomRightRadius: Radius.xl, overflow: 'hidden' },
-  tileProgressFill: { height: 4, borderBottomLeftRadius: Radius.xl },
+  tileName: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3, marginBottom: 7 },
+  tileCountRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  tileCount: { fontFamily: 'Inter_400Regular', fontSize: 13 },
+  typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill },
+  typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.4 },
+  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(0,0,0,0.12)', borderBottomLeftRadius: 22, borderBottomRightRadius: 22, overflow: 'hidden' },
+  tileProgressFill: { height: 5, borderBottomLeftRadius: 22 },
   retryBtn: { borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   retryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },
 
-  noteGrid: { padding: 20, paddingBottom: 120 },
-  noteRow: { gap: 10, marginBottom: 10 },
-  noteCard: { flex: 1, borderRadius: Radius.lg, padding: 16, minHeight: 130, ...Shadow.card },
-  noteCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 14, marginBottom: 8, letterSpacing: -0.2 },
-  noteCardBody: { fontFamily: 'Inter_300Light', fontSize: 13, lineHeight: 19, flex: 1 },
-  noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+  noteGrid: { padding: 20, paddingBottom: TAB_BAR_CLEARANCE },
+  noteRow: { gap: 14, marginBottom: 14 },
+  noteCard: { flex: 1, borderRadius: 20, padding: 18, minHeight: 140, ...Shadow.card },
+  noteCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, marginBottom: 9, letterSpacing: -0.3 },
+  noteCardBody: { fontFamily: 'Inter_300Light', fontSize: 13, lineHeight: 20, flex: 1 },
+  noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
   noteCardDate: { fontFamily: 'Inter_300Light', fontSize: 11 },
 
   emptyScrollContent: { flexGrow: 1, paddingBottom: 60 },
@@ -1157,11 +1428,11 @@ const styles = StyleSheet.create({
   emptyActionBtnText: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black },
 
   gettingStartedCard: {
-    marginHorizontal: 24,
-    marginTop: 16,
-    marginBottom: 4,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 8,
     borderRadius: Radius.lg,
-    padding: 16,
+    padding: 18,
     ...Shadow.card,
   },
   gettingStartedHeader: {
@@ -1200,4 +1471,33 @@ const styles = StyleSheet.create({
   modalContent: { padding: 28, paddingBottom: 60 },
   modalTitle: { fontFamily: 'Inter_700Bold', fontSize: 28, marginBottom: 16, letterSpacing: -0.8 },
   modalBody: { fontFamily: 'Inter_400Regular', fontSize: 17, lineHeight: 30 },
+});
+
+const undoStyles = StyleSheet.create({
+  snackbar: {
+    position: 'absolute', left: 16, right: 16, backgroundColor: '#1A1A1A',
+    borderRadius: Radius.pill, paddingHorizontal: 20, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    zIndex: 9999, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+  },
+  snackbarText: { fontFamily: 'Inter_400Regular', fontSize: 14, color: Colors.white, flex: 1 },
+  undoBtn: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow, marginLeft: 12 },
+});
+
+const peekStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  card: { width: '100%', borderRadius: Radius.xl, padding: 20, gap: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 10 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
+  emoji: { fontSize: 28 },
+  title: { fontFamily: 'Inter_700Bold', fontSize: 16 },
+  openBtn: { backgroundColor: Colors.yellow, paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill },
+  openBtnText: { fontFamily: 'Inter_700Bold', fontSize: 13, color: Colors.black },
+  peekRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
+  peekText: { fontFamily: 'Inter_400Regular', fontSize: 14, flex: 1 },
+});
+
+const reorderStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg },
+  name: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  arrows: { flexDirection: 'row', gap: 8, flexShrink: 0 },
 });

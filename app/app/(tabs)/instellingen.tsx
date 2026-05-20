@@ -17,6 +17,7 @@ import {
   Animated,
   Pressable,
   Easing,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -216,6 +217,10 @@ export default function InstellingenTab() {
   const [agendaModalVisible, setAgendaModalVisible] = useState(false);
   const [accountModalVisible, setAccountModalVisible] = useState(false);
   const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [cheatSheetVisible, setCheatSheetVisible] = useState(false);
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSaving, setFeedbackSaving] = useState(false);
 
   // Profiel context
   const [profileBirthYear, setProfileBirthYear] = useState('');
@@ -223,6 +228,10 @@ export default function InstellingenTab() {
   const [profileFriends, setProfileFriends] = useState('');
   const [profileExtra, setProfileExtra] = useState('');
   const [profileSaving, setProfileSaving] = useState(false);
+  const [profileWoonsituatie, setProfileWoonsituatie] = useState('');
+  const [profileKinderen, setProfileKinderen] = useState('');
+  const [profileLeefomgeving, setProfileLeefomgeving] = useState('');
+  const [profileInteresses, setProfileInteresses] = useState<string[]>([]);
 
   // Inline name edit in banner
   const [editingName, setEditingName] = useState(false);
@@ -300,7 +309,16 @@ export default function InstellingenTab() {
       setProfileBirthYear(String(prefsRow.data.profile_birth_year ?? ''));
       setProfileEmployer(prefsRow.data.profile_employer ?? '');
       setProfileFriends(prefsRow.data.profile_friends ?? '');
-      setProfileExtra(prefsRow.data.profile_extra ?? '');
+      try {
+        const parsed = JSON.parse(prefsRow.data.profile_extra ?? '{}');
+        setProfileWoonsituatie(parsed.woonsituatie ?? '');
+        setProfileKinderen(parsed.kinderen ?? '');
+        setProfileLeefomgeving(parsed.leefomgeving ?? '');
+        setProfileInteresses(Array.isArray(parsed.interesses) ? parsed.interesses : []);
+        setProfileExtra(parsed.vrij ?? '');
+      } catch {
+        setProfileExtra(prefsRow.data.profile_extra ?? '');
+      }
     }
   }, [user?.id]);
 
@@ -339,13 +357,20 @@ export default function InstellingenTab() {
     if (!user || user.id === 'dev') return;
     setProfileSaving(true);
     const birthYearNum = parseInt(profileBirthYear, 10);
+    const extraJson = JSON.stringify({
+      woonsituatie: profileWoonsituatie || undefined,
+      kinderen: profileKinderen || undefined,
+      leefomgeving: profileLeefomgeving || undefined,
+      interesses: profileInteresses.length > 0 ? profileInteresses : undefined,
+      vrij: profileExtra.trim() || undefined,
+    });
     await Promise.all([
       supabase.from('user_prefs').upsert({
         user_id: user.id,
         profile_birth_year: isNaN(birthYearNum) ? null : birthYearNum,
         profile_employer: profileEmployer.trim() || null,
         profile_friends: profileFriends.trim() || null,
-        profile_extra: profileExtra.trim() || null,
+        profile_extra: extraJson,
       }, { onConflict: 'user_id' }),
       updateSetting('user_name', nameValue.trim()),
     ]);
@@ -551,6 +576,19 @@ export default function InstellingenTab() {
     }
   }
 
+  async function sendFeedback() {
+    if (!feedbackText.trim()) return;
+    setFeedbackSaving(true);
+    await supabase.from('feedback').insert({
+      user_id: user?.id ?? null,
+      message: feedbackText.trim(),
+    });
+    setFeedbackSaving(false);
+    setFeedbackModalVisible(false);
+    setFeedbackText('');
+    showToast('Feedback verstuurd, dankjewel! 🙏', 'success');
+  }
+
   function confirmDeleteAccount() {
     Alert.alert(
       'Account verwijderen?',
@@ -739,16 +777,8 @@ export default function InstellingenTab() {
         <View style={[styles.card, { backgroundColor: colors.white }]}>
           <SettingsRow
             icon="calendar-outline"
-            label="iPhone Agenda koppelen"
-            value={caldavConnected ? 'Verbonden' : 'Niet gekoppeld'}
-            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
-            onPress={() => setAgendaModalVisible(true)}
-          />
-          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-          <SettingsRow
-            icon="folder-outline"
-            label="Agenda categorieën"
-            value={streams.length > 0 ? `${streams.length} categorie${streams.length !== 1 ? 'ën' : ''}` : 'Geen'}
+            label="Agenda & categorieën"
+            subtitle={caldavConnected ? 'iPhone Agenda: Verbonden' : 'Koppelen + categorie-instellingen'}
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setAgendaModalVisible(true)}
           />
@@ -769,6 +799,22 @@ export default function InstellingenTab() {
         {/* ── Info ───────────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Info</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
+          <SettingsRow
+            icon="chatbubble-ellipses-outline"
+            label="Feedback geven"
+            subtitle="Stuur een suggestie of melding"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => { setFeedbackText(''); setFeedbackModalVisible(true); }}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          <SettingsRow
+            icon="help-circle-outline"
+            label="Wat kan ik vragen?"
+            subtitle="Overzicht van alle WhatsApp-commando's"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => setCheatSheetVisible(true)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
           <SettingsRow
             icon="information-circle-outline"
             label="Over Sous-Chef"
@@ -794,6 +840,12 @@ export default function InstellingenTab() {
           <Ionicons name="chevron-up" size={22} color={Colors.black} />
         </TouchableOpacity>
       ) : null}
+
+      {/* Bottom fade */}
+      <LinearGradient
+        colors={[`${colors.offWhite}00`, colors.offWhite]}
+        style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 100, pointerEvents: 'none' }}
+      />
 
       <Toast {...toastProps} />
 
@@ -954,25 +1006,8 @@ export default function InstellingenTab() {
                   <Ionicons name="calendar-outline" size={18} color={colors.black} />
                 </View>
                 <View style={styles.moduleRowInner}>
-                  <View style={styles.moduleRowTop}>
-                    <Text style={[styles.rowLabel, { color: colors.black }]}>Agenda</Text>
-                    <View style={styles.modeToggle}>
-                      {(['lite', 'full'] as const).map(m => (
-                        <TouchableOpacity
-                          key={m}
-                          style={[styles.modeBtn, { backgroundColor: colors.gray100 }, settings.calendar_mode === m && styles.modeBtnActive]}
-                          onPress={() => handleCalendarMode(m)}
-                        >
-                          <Text style={[styles.modeBtnText, { color: colors.gray400 }, settings.calendar_mode === m && styles.modeBtnTextActive]}>
-                            {m === 'lite' ? 'Simpel' : 'Uitgebreid'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <Text style={[styles.modeDesc, { color: colors.gray400 }]}>
-                    {settings.calendar_mode === 'lite' ? 'Komende afspraken op een rij, zonder kalender' : 'Volledig kalenderrooster + lijst met filters'}
-                  </Text>
+                  <Text style={[styles.rowLabel, { color: colors.black }]}>Agenda</Text>
+                  <Text style={[styles.modeDesc, { color: colors.gray400 }]}>Afspraken met kalender- en lijstweergave</Text>
                 </View>
               </View>
               <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
@@ -1283,33 +1318,173 @@ export default function InstellingenTab() {
               <Text style={[styles.saveBtnText, { color: Colors.black }]}>{profileSaving ? '...' : 'Opslaan'}</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 20, gap: 20, paddingBottom: 40 }}>
-            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, lineHeight: 18 }}>
-              Claude gebruikt dit als context bij elke conversatie, zodat hij jou beter leert kennen.
-            </Text>
-            {[
-              { label: 'Naam', value: nameValue, setter: setNameValue, placeholder: 'Jouw naam', hint: 'Wordt ook in de banner getoond' },
-              { label: 'Geboortejaar', value: profileBirthYear, setter: setProfileBirthYear, placeholder: '1990', hint: 'Claude berekent je leeftijd hieruit', keyboardType: 'number-pad' as const },
-              { label: 'Werkgever', value: profileEmployer, setter: setProfileEmployer, placeholder: 'Bijv. Google, eigen bedrijf, zzp...', hint: '' },
-              { label: 'Vrienden & mensen', value: profileFriends, setter: setProfileFriends, placeholder: 'Bijv. Jan, Emma, Thomas...', hint: 'Komma-gescheiden — Claude herkent deze namen' },
-              { label: 'Extra context', value: profileExtra, setter: setProfileExtra, placeholder: 'Bijv. hobby\'s, dieetwensen, andere context...', hint: 'Vrij tekstveld voor Claude' },
-            ].map(({ label, value, setter, placeholder, hint, keyboardType }) => (
-              <View key={label} style={{ gap: 6 }}>
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>{label}</Text>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={{ padding: 20, gap: 24, paddingBottom: 60 }}>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, lineHeight: 18 }}>
+                Claude gebruikt dit als context bij elke conversatie, zodat hij jou beter leert kennen.
+              </Text>
+
+              {/* Naam */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Naam</Text>
                 <TextInput
                   style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
-                  value={value}
-                  onChangeText={setter}
-                  placeholder={placeholder}
+                  value={nameValue}
+                  onChangeText={setNameValue}
+                  placeholder="Jouw naam"
                   placeholderTextColor={colors.gray400}
                   selectionColor={Colors.yellow}
                   returnKeyType="done"
-                  keyboardType={keyboardType ?? 'default'}
                 />
-                {hint ? <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>{hint}</Text> : null}
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>Wordt ook in de banner getoond</Text>
               </View>
-            ))}
-          </ScrollView>
+
+              {/* Geboortejaar – chips per decennium */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Geboortejaar</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {['1960–1969','1970–1979','1980–1989','1985–1989','1990–1994','1995–1999','2000–2004','2005–2009'].map(decade => {
+                    const yr = decade.split('–')[0];
+                    const selected = profileBirthYear === yr;
+                    return (
+                      <TouchableOpacity
+                        key={decade}
+                        onPress={() => setProfileBirthYear(selected ? '' : yr)}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: selected ? Colors.yellow : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: selected ? Colors.black : colors.gray400 }}>{decade}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>Claude berekent je leeftijd hieruit</Text>
+              </View>
+
+              {/* Werkgever – type chips */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Situatie</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {['Student','Werknemer','ZZP\'er','Manager','Ondernemer','Gepensioneerd','Anders'].map(opt => {
+                    const selected = profileEmployer === opt;
+                    return (
+                      <TouchableOpacity
+                        key={opt}
+                        onPress={() => setProfileEmployer(selected ? '' : opt)}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: selected ? Colors.yellow : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: selected ? Colors.black : colors.gray400 }}>{opt}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Woonsituatie */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Woonsituatie</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {['Alleenstaand', 'Met partner', 'Getrouwd', 'Gescheiden', 'Weduwe/Weduwnaar'].map(opt => {
+                    const selected = profileWoonsituatie === opt;
+                    return (
+                      <TouchableOpacity key={opt} onPress={() => setProfileWoonsituatie(selected ? '' : opt)}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: selected ? Colors.yellow : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: selected ? Colors.black : colors.gray400 }}>{opt}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Kinderen */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Kinderen</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {['Geen kinderen', 'Baby/peuter', 'Basisschool', 'Middelbare school', 'Volwassen kinderen'].map(opt => {
+                    const selected = profileKinderen === opt;
+                    return (
+                      <TouchableOpacity key={opt} onPress={() => setProfileKinderen(selected ? '' : opt)}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: selected ? Colors.yellow : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: selected ? Colors.black : colors.gray400 }}>{opt}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Leefomgeving */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Leefomgeving</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {['Grote stad', 'Middelgrote stad', 'Dorp', 'Platteland'].map(opt => {
+                    const selected = profileLeefomgeving === opt;
+                    return (
+                      <TouchableOpacity key={opt} onPress={() => setProfileLeefomgeving(selected ? '' : opt)}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: selected ? Colors.yellow : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: selected ? Colors.black : colors.gray400 }}>{opt}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Interesses */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Interesses (meerdere mogelijk)</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  {['Sport', 'Koken', 'Reizen', 'Muziek', 'Film & TV', 'Lezen', 'Natuur', 'Technologie', 'Gezondheid', 'Kunst', 'Gaming'].map(opt => {
+                    const selected = profileInteresses.includes(opt);
+                    return (
+                      <TouchableOpacity key={opt}
+                        onPress={() => setProfileInteresses(prev => selected ? prev.filter(i => i !== opt) : [...prev, opt])}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: selected ? Colors.yellow : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: selected ? Colors.black : colors.gray400 }}>{opt}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Vrienden */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Vrienden & mensen</Text>
+                <TextInput
+                  style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
+                  value={profileFriends}
+                  onChangeText={setProfileFriends}
+                  placeholder="Bijv. Jan, Emma, Thomas..."
+                  placeholderTextColor={colors.gray400}
+                  selectionColor={Colors.yellow}
+                  returnKeyType="done"
+                />
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>Komma-gescheiden — Claude herkent deze namen</Text>
+              </View>
+
+              {/* Extra */}
+              <View style={{ gap: 8 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Extra context</Text>
+                <TextInput
+                  style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black, minHeight: 80, textAlignVertical: 'top' }]}
+                  value={profileExtra}
+                  onChangeText={setProfileExtra}
+                  placeholder="Bijv. hobby's, dieetwensen, andere context..."
+                  placeholderTextColor={colors.gray400}
+                  selectionColor={Colors.yellow}
+                  multiline
+                />
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>Vrij tekstveld voor Claude</Text>
+              </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </SpringModal>
 
@@ -1441,6 +1616,114 @@ export default function InstellingenTab() {
         </SafeAreaView>
       </SpringModal>
 
+      {/* ── Cheat Sheet modal ───────────────────────────────────────── */}
+      <SpringModal
+        visible={cheatSheetVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCheatSheetVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setCheatSheetVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Sluiten</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Wat kan ik vragen?</Text>
+            <View style={{ width: 72 }} />
+          </View>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 60, gap: 20 }}>
+            {[
+              { emoji: '📋', title: 'Lijsten', items: [
+                '"maak een boodschappenlijst"',
+                '"voeg melk, brood en kaas toe"',
+                '"verwijder alles wat afgevinkt is"',
+                '"maak een links-lijst met favoriete websites"',
+              ]},
+              { emoji: '📅', title: 'Agenda', items: [
+                '"tandarts vrijdag 10 uur"',
+                '"verjaardag mama 15 maart"',
+                '"verwijder de tandarts afspraak"',
+                '"wat staat er morgen op de planning?"',
+              ]},
+              { emoji: '🏋️', title: 'Habits', items: [
+                '"voeg habit toe: mediteren"',
+                '"mini=5min, goed=15min, elite=30min"',
+                '"mijn mediteren streak?"',
+              ]},
+              { emoji: '📝', title: 'Notities', items: [
+                '"onthoud: altijd bellen voor bezoek aan Jan"',
+                '"noteer: wifi wachtwoord is Appel123"',
+                '"wat heb ik over Jan opgeslagen?"',
+              ]},
+              { emoji: '🧾', title: 'Bonnetjes', items: [
+                'Stuur een foto van een kassabon',
+                '"hoeveel heb ik deze maand uitgegeven?"',
+              ]},
+              { emoji: '💬', title: 'Algemeen', items: [
+                '"wat kun je allemaal?"',
+                '"toon mijn agenda van deze week"',
+                '"toon alle openstaande lijsten"',
+              ]},
+            ].map(section => (
+              <View key={section.title} style={[styles.card, { backgroundColor: colors.white, padding: 16 }]}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black, marginBottom: 12 }}>
+                  {section.emoji} {section.title}
+                </Text>
+                {section.items.map((item, i) => (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
+                    <Text style={{ color: Colors.yellow, fontSize: 14, lineHeight: 20 }}>›</Text>
+                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray600 ?? '#555', flex: 1, lineHeight: 20, fontStyle: 'italic' }}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </SpringModal>
+
+      {/* ── Feedback modal ──────────────────────────────────────────── */}
+      <SpringModal
+        visible={feedbackModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setFeedbackModalVisible(false)}
+      >
+        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => setFeedbackModalVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Annuleer</Text>
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>Feedback</Text>
+            <TouchableOpacity
+              onPress={sendFeedback}
+              disabled={!feedbackText.trim() || feedbackSaving}
+              style={[styles.closeBtn, { backgroundColor: feedbackText.trim() ? Colors.yellow : colors.gray200 }]}
+            >
+              {feedbackSaving
+                ? <ActivityIndicator size="small" color={Colors.black} />
+                : <Text style={[styles.saveBtnText, { color: Colors.black }]}>Stuur</Text>}
+            </TouchableOpacity>
+          </View>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <View style={{ padding: 20, gap: 12, flex: 1 }}>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, lineHeight: 18 }}>
+                Wat kun je verbeteren? Wat mist er? Elk bericht helpt.
+              </Text>
+              <TextInput
+                style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black, minHeight: 140, textAlignVertical: 'top', padding: 14 }]}
+                value={feedbackText}
+                onChangeText={setFeedbackText}
+                placeholder="Schrijf hier je feedback..."
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                multiline
+                autoFocus
+              />
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </SpringModal>
+
       {/* ── Info modal ───────────────────────────────────────────────── */}
       <SpringModal
         visible={infoModalVisible}
@@ -1493,10 +1776,10 @@ const styles = StyleSheet.create({
   // Banner
   banner: {
     alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 36,
-    borderBottomLeftRadius: 28,
-    borderBottomRightRadius: 28,
+    paddingTop: 28,
+    paddingBottom: 40,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
     overflow: 'hidden',
   },
   avatarBox: { marginBottom: 14 },
@@ -1547,16 +1830,16 @@ const styles = StyleSheet.create({
     color: Colors.gray400,
     textTransform: 'uppercase',
     letterSpacing: 1,
-    marginTop: 32,
-    marginBottom: 8,
+    marginTop: 36,
+    marginBottom: 10,
     marginLeft: 20,
   },
 
   // Card
   card: {
     backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    marginHorizontal: 24,
+    borderRadius: 16,
+    marginHorizontal: 20,
     overflow: 'hidden',
     ...Shadow.card,
   },
@@ -1565,19 +1848,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 12,
   },
-  dangerCardSubtitleWrap: { paddingHorizontal: 16, paddingBottom: 12 },
+  dangerCardSubtitleWrap: { paddingHorizontal: 18, paddingBottom: 14 },
   dangerCardSubtitle: {
     fontFamily: 'Inter_300Light',
     fontSize: 12,
     color: '#EF4444',
-    marginLeft: 46,
+    marginLeft: 48,
   },
 
   // Row
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
-  rowTall: { paddingVertical: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 16, gap: 14 },
+  rowTall: { paddingVertical: 14 },
   rowIcon: {
-    width: 34, height: 34, borderRadius: 10,
+    width: 36, height: 36, borderRadius: 11,
     backgroundColor: Colors.gray100,
     justifyContent: 'center', alignItems: 'center',
     flexShrink: 0,
@@ -1589,7 +1872,7 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontFamily: 'Inter_300Light', fontSize: 12, color: Colors.gray400, lineHeight: 16 },
   rowValue: { fontFamily: 'Inter_300Light', fontSize: 14, color: Colors.gray400 },
 
-  divider: { height: 1, backgroundColor: Colors.gray100, marginHorizontal: 16 },
+  divider: { height: 1, backgroundColor: Colors.gray100, marginHorizontal: 18 },
 
   // Module rows
   moduleRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },

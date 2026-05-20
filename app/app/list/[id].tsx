@@ -17,6 +17,8 @@ import {
   Linking,
   Pressable,
   InputAccessoryView,
+  Share,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -242,6 +244,15 @@ export default function ListDetailScreen() {
   const newItemAnim = useRef(new Animated.Value(0)).current;
   const newItemSlide = useRef(new Animated.Value(40)).current;
 
+  const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
+  const batchDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showBatchDeleteBanner() {
+    setBatchDeleteVisible(true);
+    if (batchDeleteTimerRef.current) clearTimeout(batchDeleteTimerRef.current);
+    batchDeleteTimerRef.current = setTimeout(() => setBatchDeleteVisible(false), 7000);
+  }
+
   const isGroceryList = isBoodschappenlijst(name ?? '');
   const [geoEnabled, setGeoEnabled] = useState(false);
   const [geoToggling, setGeoToggling] = useState(false);
@@ -252,10 +263,23 @@ export default function ListDetailScreen() {
     isGeoAlertEnabled().then(setGeoEnabled);
   }, [isGroceryList]);
 
+  function shareList() {
+    const lines = items.map(i => `${i.checked ? '✓' : '○'} ${i.text}`).join('\n');
+    const text = `${emoji || '📝'} ${name}\n\n${lines}`;
+    Share.share({ message: text, title: name });
+  }
+
   useEffect(() => {
     const badge = listType === 'links' ? ' 🔗' : listType === 'tips' ? ' 💡' : '';
-    navigation.setOptions({ title: `${emoji || '📝'} ${name}${badge}` });
-  }, [name, emoji, listType]);
+    navigation.setOptions({
+      title: `${emoji || '📝'} ${name}${badge}`,
+      headerRight: () => (
+        <TouchableOpacity onPress={shareList} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 4 }}>
+          <Ionicons name="share-outline" size={22} color={Colors.black} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [name, emoji, listType, items]);
 
   useEffect(() => {
     if (!id) return;
@@ -294,7 +318,10 @@ export default function ListDetailScreen() {
   async function toggleItem(item: ListItem) {
     haptic('light');
     await supabase.from('list_items').update({ checked: !item.checked }).eq('id', item.id);
-    if (!item.checked) showToast('Afgevinkt ✓', 'success');
+    if (!item.checked) {
+      showToast('Afgevinkt ✓', 'success');
+      showBatchDeleteBanner();
+    }
     fetchItems();
   }
 
@@ -308,6 +335,7 @@ export default function ListDetailScreen() {
     setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, checked: true } : i));
     await supabase.from('list_items').update({ checked: true }).in('id', ids);
     showToast(`${ids.length} item${ids.length > 1 ? 's' : ''} afgevinkt`, 'success');
+    showBatchDeleteBanner();
   }
 
   function deleteItem(itemId: string) {
@@ -430,6 +458,13 @@ export default function ListDetailScreen() {
   const checked = items.filter(i => i.checked);
   const allDone = items.length > 0 && unchecked.length === 0;
 
+  useEffect(() => {
+    if (checked.length === 0) {
+      setBatchDeleteVisible(false);
+      if (batchDeleteTimerRef.current) clearTimeout(batchDeleteTimerRef.current);
+    }
+  }, [checked.length]);
+
   const totalCount = items.length;
   const checkedCount = checked.length;
   const progress = totalCount > 0 ? checkedCount / totalCount : 0;
@@ -440,13 +475,17 @@ export default function ListDetailScreen() {
   const filteredChecked = searchQuery.trim()
     ? checked.filter(i => i.text.toLowerCase().includes(searchQuery.toLowerCase()))
     : checked;
-  const flatItems = [
+  const DONE_SENTINEL_ID = '__done_header__';
+  const doneSentinel = { id: DONE_SENTINEL_ID, text: '', checked: false, list_id: '', created_at: '' };
+  const flatItems: any[] = [
     ...filteredUnchecked,
+    ...(filteredChecked.length > 0 ? [doneSentinel] : []),
     ...(doneExpanded ? filteredChecked : []),
   ];
 
   return (
     <GestureHandlerRootView style={styles.root}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         {isGroceryList && (
           <View style={[styles.geoBanner, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
@@ -471,7 +510,7 @@ export default function ListDetailScreen() {
 
         {/* Progress bar */}
         {!loading && totalCount > 0 && (
-          <View style={{ height: 4, backgroundColor: '#E0E0E0', marginHorizontal: 16, borderRadius: 2, marginTop: 8, marginBottom: 4 }}>
+          <View style={{ height: 4, backgroundColor: '#E0E0E0', marginHorizontal: 20, borderRadius: 2, marginTop: 8, marginBottom: 4 }}>
             <View style={{ height: 4, backgroundColor: progress === 1 ? '#4CAF50' : '#FCC10C', width: `${progress * 100}%` as any, borderRadius: 2 }} />
           </View>
         )}
@@ -505,7 +544,7 @@ export default function ListDetailScreen() {
         )}
 
         {/* Batch delete button */}
-        {!loading && checked.length > 0 && (
+        {!loading && batchDeleteVisible && checked.length > 0 && (
           <TouchableOpacity
             style={[styles.batchDeleteBtn, { backgroundColor: '#FEE2E2' }]}
             onPress={confirmBatchDelete}
@@ -556,13 +595,28 @@ export default function ListDetailScreen() {
               )
             }
             renderItem={({ item, index }) => {
+              if (item.id === DONE_SENTINEL_ID) {
+                return (
+                  <TouchableOpacity
+                    style={[styles.doneSectionHeader, { marginTop: 28 }]}
+                    onPress={() => setDoneExpanded(v => !v)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.sectionLabel}>Gedaan ({filteredChecked.length})</Text>
+                    <Ionicons
+                      name={doneExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={Colors.gray400}
+                    />
+                  </TouchableOpacity>
+                );
+              }
               if (listType === 'links') {
                 return <LinkItemRow item={item} colors={colors} />;
               }
               if (listType === 'tips') {
                 return <TipItemRow item={item} colors={colors} />;
               }
-              const isFirstChecked = item.checked && index === filteredUnchecked.length;
               const isLastItem = index === flatItems.length - 1;
               const itemView = (
                 <SwipeableItem
@@ -574,34 +628,16 @@ export default function ListDetailScreen() {
                   onEditSubmit={saveInlineEdit}
                 />
               );
-              return (
-                <>
-                  {isFirstChecked && filteredChecked.length > 0 && (
-                    <TouchableOpacity
-                      style={[styles.doneSectionHeader, { marginTop: 20 }]}
-                      onPress={() => setDoneExpanded(v => !v)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.sectionLabel}>Gedaan ({filteredChecked.length})</Text>
-                      <Ionicons
-                        name={doneExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={16}
-                        color={Colors.gray400}
-                      />
-                    </TouchableOpacity>
-                  )}
-                  {isLastItem ? (
-                    <Animated.View style={{ opacity: newItemAnim, transform: [{ translateX: newItemSlide }] }}>
-                      {itemView}
-                    </Animated.View>
-                  ) : itemView}
-                </>
-              );
+              return isLastItem ? (
+                <Animated.View style={{ opacity: newItemAnim, transform: [{ translateX: newItemSlide }] }}>
+                  {itemView}
+                </Animated.View>
+              ) : itemView;
             }}
           />
         )}
 
-        <View style={[styles.addRow, { backgroundColor: colors.white, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14 }]}>
+        <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14 }]}>
           <View style={[styles.addPill, { backgroundColor: colors.gray100 }]}>
             <TextInput
               style={[styles.addInput, { color: colors.black }]}
@@ -667,6 +703,7 @@ export default function ListDetailScreen() {
           </View>
         </Modal>
       </View>
+      </KeyboardAvoidingView>
     </GestureHandlerRootView>
   );
 }
@@ -702,27 +739,27 @@ const styles = StyleSheet.create({
   geoIcon: { fontSize: 22 },
   geoTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginBottom: 2 },
   geoSub: { fontFamily: 'Inter_300Light', fontSize: 12 },
-  skeletonList: { padding: 16 },
-  list: { padding: 16, paddingBottom: 16 },
+  skeletonList: { padding: 20 },
+  list: { padding: 20, paddingBottom: 20 },
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11,
-    color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10,
+    color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12,
   },
   allDoneBanner: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, paddingVertical: 16, marginBottom: 4,
+    gap: 8, paddingVertical: 20, marginBottom: 6,
   },
-  allDoneEmoji: { fontSize: 24 },
+  allDoneEmoji: { fontSize: 26 },
   allDoneText: { fontFamily: 'Inter_700Bold', fontSize: 18, color: Colors.black },
   item: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white,
-    borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 15, marginBottom: 8,
-    minHeight: 56,
+    borderRadius: 16, paddingHorizontal: 16, paddingVertical: 16, marginBottom: 10,
+    minHeight: 60,
     ...Shadow.card,
   },
   itemCheckedContainer: { opacity: 0.7 },
   checkbox: {
-    width: 26, height: 26, borderRadius: 8, borderWidth: 2,
+    width: 28, height: 28, borderRadius: 9, borderWidth: 2,
     borderColor: Colors.gray200, marginRight: 14,
     justifyContent: 'center', alignItems: 'center',
   },
@@ -774,7 +811,7 @@ const styles = StyleSheet.create({
   snackbarUndo: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginHorizontal: 16, marginTop: 8, marginBottom: 4,
+    marginHorizontal: 20, marginTop: 12, marginBottom: 6,
   },
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -803,7 +840,7 @@ const styles = StyleSheet.create({
   },
   doneSectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   klaarBar: {
     flexDirection: 'row', justifyContent: 'flex-end',
