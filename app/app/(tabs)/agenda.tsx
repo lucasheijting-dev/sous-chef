@@ -19,6 +19,7 @@ import {
   LayoutAnimation,
   Dimensions,
   TextInput as TextInputRN,
+  KeyboardAvoidingView,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -181,7 +182,7 @@ function MonthGrid({ year, month, eventsByDate, selectedDate, onDayPress, stream
       <View style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
         <View style={{ width: 28 }} />
         {['Ma','Di','Wo','Do','Vr','Za','Zo'].map((n, i) => (
-          <Text key={n} style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter_600SemiBold', fontSize: 11, color: i >= 5 ? '#FF3B30' : colors.gray400, paddingBottom: 6 }}>{n}</Text>
+          <Text key={n} style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter_600SemiBold', fontSize: 11, color: i >= 5 ? colors.gray200 : colors.gray400, paddingBottom: 6 }}>{n}</Text>
         ))}
       </View>
       {weeks.map((week, wi) => {
@@ -201,13 +202,13 @@ function MonthGrid({ year, month, eventsByDate, selectedDate, onDayPress, stream
                 <TouchableOpacity key={day.key} style={{ flex: 1, paddingTop: 6, paddingBottom: 4, paddingHorizontal: 1, alignItems: 'stretch' }} onPress={() => onDayPress(day.key)} activeOpacity={0.7}>
                   <View style={{
                     width: 26, height: 26, borderRadius: 13,
-                    backgroundColor: day.isToday ? '#FF3B30' : (isSelected && !day.isToday ? colors.black : 'transparent'),
+                    backgroundColor: day.isToday ? Colors.yellow : (isSelected && !day.isToday ? colors.black : 'transparent'),
                     justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 3,
                   }}>
                     <Text style={{
                       fontFamily: (day.isToday || isSelected) ? 'Inter_700Bold' : 'Inter_400Regular',
                       fontSize: 13,
-                      color: (day.isToday || isSelected) ? '#fff' : isPastDay ? colors.gray200 : day.isWeekend ? '#FF3B30' : colors.black,
+                      color: (day.isToday || isSelected) ? Colors.black : isPastDay ? colors.gray200 : day.isWeekend ? colors.gray400 : colors.black,
                     }}>{day.num}</Text>
                   </View>
                   {events.slice(0, 2).map((e) => {
@@ -303,7 +304,7 @@ function AgendaLite() {
     fetch(`${API_BASE}/calendar-sync/${user.id}`, { method: 'POST' }).catch(() => {});
 
     const now = new Date(); now.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setDate(end.getDate() + 14);
+    const end = new Date(now); end.setFullYear(end.getFullYear() + 1);
     const endKey = toKey(end);
 
     Promise.all([
@@ -318,7 +319,7 @@ function AgendaLite() {
           if (status !== 'granted') { setAllEvents(scEvents); setLoading(false); return; }
           Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT).then(cals => {
             const start2 = new Date(now); start2.setHours(0, 0, 0, 0);
-            const end2   = new Date(now); end2.setDate(end2.getDate() + 14);
+            const end2   = new Date(now); end2.setFullYear(end2.getFullYear() + 1);
             Calendar.getEventsAsync(cals.map(c => c.id), start2, end2).then(phoneEvts => {
               const scKeys = new Set(scEvents.map(e => `${e.title?.toLowerCase()}|${e.date}`));
               const merged: MergedEvent[] = phoneEvts
@@ -464,49 +465,6 @@ function AgendaLite() {
     setQuickAddTitle(''); setQuickAddTime('');
     setQuickAddVisible(false);
     setQuickAddSaving(false);
-  }
-
-  function QuickAddModal() {
-    return (
-      <Modal visible={quickAddVisible} transparent animationType="slide" onRequestClose={() => setQuickAddVisible(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={() => setQuickAddVisible(false)}>
-          <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 24, gap: 16 }} onPress={() => {}}>
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 4 }} />
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Nieuwe afspraak</Text>
-            <TextInputRN
-              style={{ borderWidth: 1, borderColor: Colors.yellow + '60', borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, color: colors.black, fontFamily: 'Inter_400Regular', fontSize: 16, backgroundColor: colors.offWhite }}
-              value={quickAddTitle}
-              onChangeText={setQuickAddTitle}
-              placeholder="Wat is de afspraak?"
-              placeholderTextColor={colors.gray400}
-              autoFocus
-              selectionColor={Colors.yellow}
-            />
-            <TextInputRN
-              style={{ borderWidth: 1, borderColor: colors.gray200, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, color: colors.black, fontFamily: 'Inter_400Regular', fontSize: 16, backgroundColor: colors.offWhite }}
-              value={quickAddTime}
-              onChangeText={setQuickAddTime}
-              placeholder="Tijd (bijv. 14:30) — optioneel"
-              placeholderTextColor={colors.gray400}
-              keyboardType="numbers-and-punctuation"
-              selectionColor={Colors.yellow}
-            />
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              {(['today', 'tomorrow'] as const).map(d => (
-                <TouchableOpacity key={d} onPress={() => setQuickAddDate(d)} style={{ flex: 1, paddingVertical: 12, borderRadius: Radius.pill, backgroundColor: quickAddDate === d ? Colors.yellow : colors.gray100, alignItems: 'center' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: quickAddDate === d ? Colors.black : colors.gray400 }}>
-                    {d === 'today' ? 'Vandaag' : 'Morgen'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <TouchableOpacity onPress={saveQuickEvent} disabled={!quickAddTitle.trim() || quickAddSaving} style={{ backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center', opacity: quickAddTitle.trim() ? 1 : 0.4 }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black }}>Opslaan</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    );
   }
 
   return (
@@ -748,8 +706,8 @@ function AgendaLite() {
                 if (top < 4 || top > 4 + 17 * 60) return null;
                 return (
                   <View style={{ position: 'absolute', left: 46, right: 0, top, flexDirection: 'row', alignItems: 'center', zIndex: 2, pointerEvents: 'none' }}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF3B30', marginLeft: -4 }} />
-                    <View style={{ flex: 1, height: 1.5, backgroundColor: '#FF3B30' }} />
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.yellow, marginLeft: -4 }} />
+                    <View style={{ flex: 1, height: 1.5, backgroundColor: Colors.yellow }} />
                   </View>
                 );
               })()}
@@ -851,7 +809,57 @@ function AgendaLite() {
         </View>
       </Modal>
 
-      <QuickAddModal />
+      {/* QuickAdd modal — same pattern as list modal */}
+      <Modal visible={quickAddVisible} transparent animationType="slide" onRequestClose={() => { setQuickAddVisible(false); setQuickAddTitle(''); setQuickAddTime(''); }}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => { setQuickAddVisible(false); setQuickAddTitle(''); setQuickAddTime(''); }}>
+            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 12 }} onPress={() => {}}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 4 }} />
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Nieuwe afspraak</Text>
+              <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 4 }}>
+                <TextInputRN
+                  style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, paddingVertical: 12 }}
+                  value={quickAddTitle}
+                  onChangeText={setQuickAddTitle}
+                  placeholder="Wat is de afspraak?"
+                  placeholderTextColor={colors.gray400}
+                  autoFocus
+                  returnKeyType="next"
+                  selectionColor={Colors.yellow}
+                />
+              </View>
+              <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 4 }}>
+                <TextInputRN
+                  style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, paddingVertical: 12 }}
+                  value={quickAddTime}
+                  onChangeText={setQuickAddTime}
+                  placeholder="Tijd (bijv. 14:30) — optioneel"
+                  placeholderTextColor={colors.gray400}
+                  keyboardType="numbers-and-punctuation"
+                  returnKeyType="done"
+                  onSubmitEditing={saveQuickEvent}
+                  selectionColor={Colors.yellow}
+                />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['today', 'tomorrow'] as const).map(d => (
+                  <TouchableOpacity key={d} onPress={() => setQuickAddDate(d)} style={{ flex: 1, paddingVertical: 12, borderRadius: Radius.pill, backgroundColor: quickAddDate === d ? Colors.yellow : colors.gray100, alignItems: 'center' }}>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: quickAddDate === d ? Colors.black : colors.gray400 }}>
+                      {d === 'today' ? 'Vandaag' : 'Morgen'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TouchableOpacity onPress={saveQuickEvent} disabled={!quickAddTitle.trim() || quickAddSaving} style={{ backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center', opacity: quickAddTitle.trim() ? 1 : 0.4 }}>
+                {quickAddSaving
+                  ? <ActivityIndicator size="small" color={Colors.black} />
+                  : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black }}>Opslaan</Text>
+                }
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Bottom fade */}
       <LinearGradient
