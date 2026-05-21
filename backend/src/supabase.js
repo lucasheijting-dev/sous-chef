@@ -521,7 +521,11 @@ async function getEventsByTitle(userId, title) {
     .select('id, title, date, time, recurrence, caldav_uid, calendar_stream')
     .eq('user_id', userId)
     .ilike('title', `%${title}%`);
-  return data ?? [];
+  return (data ?? []).map(e => ({ ...e, caldavUid: e.caldav_uid, calendarStream: e.calendar_stream }));
+}
+
+async function updateEventTitle(eventId, title) {
+  await supabase.from('events').update({ title, updated_at: new Date().toISOString() }).eq('id', eventId);
 }
 
 async function updateEvent(userId, eventId, { date, time }) {
@@ -813,6 +817,7 @@ module.exports = {
   getEventsForDate,
   getEventsByTitle,
   updateEvent,
+  updateEventTitle,
   deleteEventById,
   getNotes,
   appendToNote,

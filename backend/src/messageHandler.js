@@ -280,6 +280,18 @@ async function handleUndo(userId) {
         undo.clear(userId);
         return `↩️ Ongedaan: terugkerend item *${last.data.content}* verwijderd.`;
       }
+      case 'add_event': {
+        const { eventId, caldavUid, calendarStream, title } = last.data;
+        await db.deleteEventById(userId, eventId);
+        if (caldavUid && caldav.isConfigured()) {
+          const caldavCreds = await db.getCalDAVCredentials(userId).catch(() => null);
+          if (caldavCreds) {
+            await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, calendarStream ?? 'personal', caldavUid).catch(() => {});
+          }
+        }
+        undo.clear(userId);
+        return `↩️ Ongedaan: afspraak *${title}* verwijderd.`;
+      }
       default:
         return 'Kan die actie niet ongedaan maken.';
     }
@@ -493,16 +505,26 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
     case 'correct_last': {
       const last = undo.get(userId);
-      if (!last || !['add_item'].includes(last.action)) {
-        return 'Er is geen recent toegevoegd item om te corrigeren.';
-      }
-      const newText = intent.correct_to;
-      if (!newText) return 'Wat moet het item zijn?';
+      if (!last) return 'Er is niets om te corrigeren.';
 
-      await db.updateListItemText(last.data.itemId, newText);
-      const oldText = last.data.text;
-      undo.record(userId, 'add_item', { ...last.data, text: newText });
-      return `✏️ *${oldText}* → *${newText}*.`;
+      const newText = intent.correct_to;
+      if (!newText) return 'Wat moet het worden?';
+
+      if (last.action === 'add_item') {
+        await db.updateListItemText(last.data.itemId, newText);
+        const oldText = last.data.text;
+        undo.record(userId, 'add_item', { ...last.data, text: newText });
+        return `✏️ *${oldText}* → *${newText}*.`;
+      }
+
+      if (last.action === 'add_event') {
+        await db.updateEventTitle(last.data.eventId, newText);
+        const oldTitle = last.data.title;
+        undo.record(userId, 'add_event', { ...last.data, title: newText });
+        return `✏️ Afspraak *${oldTitle}* → *${newText}*.`;
+      }
+
+      return 'Kan die actie niet corrigeren.';
     }
 
     // ── New list ─────────────────────────────────────────────────────────────
@@ -544,13 +566,15 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const eventList = Array.isArray(intent.events) && intent.events.length > 0
         ? intent.events
         : [{
-            title:                  intent.event_title ?? originalText,
-            date:                   intent.event_date,
-            time:                   intent.event_time ?? null,
-            recurrence:             intent.event_recurrence ?? null,
-            reminder_days_before:   intent.reminder_days_before ?? null,
+            title:                   intent.event_title ?? originalText,
+            date:                    intent.event_date,
+            time:                    intent.event_time ?? null,
+            recurrence:              intent.event_recurrence ?? null,
+            reminder_days_before:    intent.reminder_days_before ?? null,
             reminder_minutes_before: intent.reminder_minutes_before ?? null,
-            calendar_stream:        intent.calendar_stream ?? 'personal',
+            calendar_stream:         intent.calendar_stream ?? 'personal',
+            duration_minutes:        intent.event_duration_minutes ?? null,
+            attendees:               intent.event_attendees ?? null,
           }];
 
       // Ensure CalDAV user is provisioned (lazy)
@@ -577,6 +601,8 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         const reminderDays    = ev.reminder_days_before ?? null;
         const reminderMinutes = ev.reminder_minutes_before ?? 30;
         const stream          = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
+        const durationMinutes = ev.duration_minutes ?? null;
+        const attendees       = Array.isArray(ev.attendees) && ev.attendees.length > 0 ? ev.attendees : null;
 
         // Conflict check: warn if another timed event exists at same time
         if (ev.time && ev.date) {
@@ -594,7 +620,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
               caldavCreds.username,
               caldavCreds.password,
               stream,
-              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes },
+              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes, durationMinutes, attendees },
             );
           } catch (err) {
             console.error('CalDAV event creation failed, queuing retry:', err.message);
@@ -616,6 +642,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         });
 
         lastSavedEvent = { id: saved.id, title: evTitle, date: ev.date, time: ev.time ?? null, caldavUid, calendarStream: stream };
+        undo.record(userId, 'add_event', { eventId: saved.id, title: evTitle, caldavUid, calendarStream: stream });
 
         if (stream === 'birthdays') {
           hasBirthday = true;
@@ -632,7 +659,9 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           : ev.recurrence?.startsWith('monthly:') ? ' _(maandelijks)_'
           : '';
         const reminderStr = reminderMinutes ? ` _(reminder ${reminderMinutes} min van tevoren)_` : reminderDays ? ` _(reminder ${reminderDays} dag${reminderDays !== 1 ? 'en' : ''} van tevoren)_` : '';
-        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${reminderStr}`);
+        const durationStr = durationMinutes ? ` _(${durationMinutes >= 60 ? `${durationMinutes / 60}u` : `${durationMinutes}min`})_` : '';
+        const attendeeStr = attendees ? ` _(met ${attendees.join(', ')})_` : '';
+        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${durationStr}${attendeeStr}${reminderStr}`);
       }
 
       if (lastSavedEvent) {

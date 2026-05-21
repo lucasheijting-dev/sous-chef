@@ -47,7 +47,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **new_list** — nieuwe lijst aanmaken; vul emoji en list_type in
 
 **Agenda:**
-- **calendar** — afspraak(en) vastleggen; vul calendar_stream in
+- **calendar** — afspraak(en) vastleggen; vul calendar_stream in; optioneel: event_duration_minutes (duur in minuten), event_attendees (array van namen)
 - **event_update_reminder** — reminder toevoegen aan een al geplande afspraak (bijv. "herinner me eraan", "stuur me een reminder", "remind me" als follow-up op een eerder geplande afspraak); vul event_title, event_date en reminder_minutes_before in
 - **event_reschedule** — afspraak verplaatsen naar andere datum/tijd (bijv. "verplaats tandarts naar donderdag", "zet mijn vergadering een uur later"); vul event_title, event_date_new, event_time_new in
 - **event_search** — controleren of een afspraak ingepland staat (bijv. "is mijn tandarts al ingepland?", "wanneer is mijn vergadering?"); vul event_search_query in
@@ -85,6 +85,7 @@ Gebruik **multi_action** als het bericht twee of meer duidelijk verschillende ac
 - "melk kopen en tandarts woensdag 14u" → list + calendar
 - "gesport en morgen vergadering om 10u" → habit_log + calendar
 - "boodschappen: melk en eieren, en herinner me zaterdag aan verjaardag Jan" → list_items + calendar
+- "verjaardag van Sara op 15 maart, en zet ook cadeau kopen voor haar op mijn lijst" → calendar (birthdays, yearly) + list ("cadeau Sara")
 
 Vul dan het veld "actions" in als array. Elk object heeft dezelfde velden als een normaal intent-object, inclusief "category". Max 4 acties per bericht.
 
@@ -243,10 +244,23 @@ Als geen aangepaste kalenders zijn maar het bericht bevat:
 
 Bij events[] array: elk object ook "calendar_stream" meegeven.
 
+## Agenda-details
+
+**Duur:**
+- "vergadering van 2 uur" → event_duration_minutes: 120
+- "afspraak van 45 minuten" → event_duration_minutes: 45
+- "3 kwartier" → event_duration_minutes: 45
+- Geen duur vermeld → event_duration_minutes: null (standaard 60 minuten in CalDAV)
+
+**Deelnemers:**
+- "vergadering met Tom en Sara" → event_attendees: ["Tom", "Sara"]
+- "etentje met Jan" → event_attendees: ["Jan"]
+- Geen deelnemers → event_attendees: null
+
 ## Meerdere agenda-afspraken (events array)
 
 Als het bericht meerdere data of tijden noemt, gebruik events[]:
-{ "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM" of null, "recurrence": null of "yearly" of "weekly:N" of "monthly:N", "reminder_days_before": null, "calendar_stream": "..." }
+{ "title": "...", "date": "YYYY-MM-DD", "time": "HH:MM" of null, "recurrence": null of "yearly" of "weekly:N" of "monthly:N", "reminder_days_before": null, "calendar_stream": "...", "duration_minutes": null, "attendees": null }
 
 ## Reminder-regels
 
@@ -254,8 +268,12 @@ reminder_minutes_before: 30 = **standaard voor ALLE agenda-afspraken** (gebruik 
 reminder_minutes_before: null = geen reminder — ALLEEN als gebruiker dit expliciet zegt: "geen alarm", "zonder herinnering", "geen reminder"
 reminder_minutes_before: N = N minuten van tevoren (als gebruiker een andere tijd noemt)
 
-reminder_days_before: null = geen reminder (standaard)
-reminder_days_before: N = N dagen van tevoren (alleen bij expliciete "N dagen van tevoren"-verzoeken)
+reminder_days_before: null = geen reminder in dagen (standaard)
+reminder_days_before: N = N **hele** dagen van tevoren — gebruik dit als de gebruiker "dagen van tevoren" zegt:
+- "2 dagen van tevoren herinneren" → reminder_days_before: 2 (stel reminder_minutes_before dan in op null)
+- "een dag eerder" / "een dag van tevoren" → reminder_days_before: 1
+- "een week van tevoren" → reminder_days_before: 7
+- "de avond ervoor" → reminder_days_before: 1
 
 **Standaard: zet reminder_minutes_before altijd op 30 bij calendar events, tenzij de gebruiker anders vraagt.**
 
@@ -269,6 +287,8 @@ reminder_days_before: N = N dagen van tevoren (alleen bij expliciete "N dagen va
 - "ik bedoelde X", "niet X maar Y" → correct_last, vul correct_to in
 - "toch niet X" + X op lijst → list_check checked=false
 - "toch niet" zonder item → correct_last
+- "ik bedoelde vergadering met Tom" (na het plannen van een afspraak) → correct_last, correct_to: "vergadering met Tom"
+- "nee, maak dat ongedaan" / "undo" / "ongedaan maken" → correct_last zonder correct_to (of de gebruiker zegt dit los → undo trigger)
 
 ## Note vs list
 

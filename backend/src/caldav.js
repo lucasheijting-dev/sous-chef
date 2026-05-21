@@ -141,7 +141,8 @@ function buildIcal(event, uid, reminderMinutesBefore = null) {
     const [year, month, day] = event.date.split('-').map(Number);
     const [hour, minute] = event.time.split(':').map(Number);
     const start = new Date(year, month - 1, day, hour, minute);
-    const end   = new Date(year, month - 1, day, hour + 1, minute);
+    const durationMins = event.durationMinutes ?? 60;
+    const end   = new Date(start.getTime() + durationMins * 60 * 1000);
     dtstart = `DTSTART:${toLocalStamp(start)}`;
     dtend   = `DTEND:${toLocalStamp(end)}`;
   } else {
@@ -163,6 +164,12 @@ function buildIcal(event, uid, reminderMinutesBefore = null) {
 
   if (event.recurrence === 'yearly') {
     lines.push('RRULE:FREQ=YEARLY');
+  }
+
+  if (Array.isArray(event.attendees) && event.attendees.length > 0) {
+    for (const name of event.attendees) {
+      lines.push(`ATTENDEE;CN=${name}:invalid:nomail`);
+    }
   }
 
   if (reminderMinutesBefore !== null && reminderMinutesBefore !== undefined) {
