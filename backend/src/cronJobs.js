@@ -121,11 +121,13 @@ function calcNextDue(recurrence, fromDate) {
   return d.toISOString().split('T')[0];
 }
 
-// ── Habit Reminders — every hour ──────────────────────────────────────────────
+// ── Habit Reminders + WhatsApp Timed Reminders — every hour ──────────────────
 
 cron.schedule('0 * * * *', async () => {
-  const currentHour = new Date().getHours();
-  console.log(`[Habits] Checking reminders for hour ${currentHour}...`);
+  const now = new Date();
+  const currentHour = now.getHours();
+  const today = now.toISOString().split('T')[0];
+  console.log(`[Hourly] Hour ${currentHour} — checking habits + timed reminders...`);
 
   try {
     const users = await db.getHabitReminderUsers(currentHour);
@@ -141,6 +143,19 @@ cron.schedule('0 * * * *', async () => {
     }
   } catch (err) {
     console.error('[Habits] Error:', err);
+  }
+
+  // WhatsApp timed reminders (stored as events with calendar_stream='wa_reminder')
+  try {
+    const reminders = await db.getWhatsAppRemindersForHour(today, currentHour);
+    for (const r of reminders) {
+      if (!r.whatsapp_number) continue;
+      await sendMessage(r.whatsapp_number, `⏰ *Herinnering: ${r.title}*`);
+      await db.markEventReminderSent(r.id);
+      console.log(`[Reminder] Sent "${r.title}" to ${r.whatsapp_number}`);
+    }
+  } catch (err) {
+    console.error('[Reminder] Error:', err);
   }
 });
 
@@ -163,6 +178,26 @@ cron.schedule('0 8 * * *', async () => {
     console.error('[Events] Error:', err);
   }
 });
+
+// ── Birthday Reminders — every day at 08:30 ──────────────────────────────────
+
+cron.schedule('30 8 * * *', async () => {
+  console.log('[Birthdays] Checking birthday reminders...');
+  try {
+    const birthdays = await db.getTodayBirthdayEvents();
+    for (const e of birthdays) {
+      if (!e.whatsapp_number) continue;
+      const personName = e.title.replace(/verjaardag\s*/i, '').trim();
+      await sendMessage(e.whatsapp_number, `🎂 *Vandaag is het de verjaardag van ${personName}!* Vergeet niet te feliciteren 🎉`);
+      await db.markEventReminderSent(e.id);
+      console.log(`[Birthdays] Sent reminder for "${e.title}" to ${e.whatsapp_number}`);
+    }
+  } catch (err) {
+    console.error('[Birthdays] Error:', err);
+  }
+});
+
+// ── Timed WhatsApp Reminders — checked every hour ─────────────────────────────
 
 // ── Weekly Suggestions — every Thursday at 10:00 ──────────────────────────────
 
@@ -250,7 +285,7 @@ cron.schedule('*/13 * * * *', async () => {
 });
 
 function start() {
-  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit reminders hourly | event reminders daily 08:00 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | keepalive every 13min');
+  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | keepalive every 13min');
 }
 
 module.exports = { start, syncUserCalendar };

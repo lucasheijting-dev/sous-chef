@@ -58,7 +58,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **events_conflict** — controleer op dubbel geplande afspraken (bijv. "heb ik iets dubbel gepland?", "staat er iets te veel op vrijdag?"); vul conflict_date in als YYYY-MM-DD (of gebruik vandaag als standaard)
 - **event_search** — opzoeken wanneer een specifieke afspraak is (bijv. "wanneer is mijn tandarts?", "hoe laat is mijn vergadering?", "is mijn afspraak al ingepland?"); vul event_search_query in. Gebruik dit ook als de gebruiker vraagt naar een specifiek event op naam — NIET events_today
 - **events_summary** — samenvatting opvragen voor andere periode dan vandaag/week (bijv. "wat heb ik volgende week?", "wat staat er in juni?"); vul summary_start en summary_end in als YYYY-MM-DD
-- **reminder** — losse herinnering (bijv. "herinner me maandag aan de belasting")
+- **reminder** — losse WhatsApp-herinnering op een bepaald tijdstip (bijv. "herinner me maandag aan de belasting", "stuur me morgen om 9u een berichtje over X", "herinner me vrijdag om 15u aan de vergadering"); vul reminder_text, reminder_date en reminder_time (HH:MM) in
 - **events_today** — afspraken vandaag opvragen (gebruik dit ALLEEN als er geen specifieke naam/titel in de vraag zit)
 - **events_week** — afspraken deze week opvragen
 - **event_delete** — afspraak verwijderen; DESTRUCTIEF
@@ -67,11 +67,12 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **receipt_query** — vragen over uitgaven (bijv. "hoeveel heb ik deze maand uitgegeven?", "wat was mijn duurste aankoop?"); vul query_period in: "this_month", "last_month", "this_week", of "all"
 
 **Notities:**
-- **note** — notitie opslaan
+- **note** — notitie opslaan; ook als gebruiker via voicenote zegt "bewaar dit als notitie", "noteer dit", "sla dit op" → sla de volledige tekst op als note_body
 - **note_append** — toevoegen aan bestaande notitie
 - **note_read** — notitie teruglezen (bijv. "lees mijn notitie over X", "wat staat er in mijn notitie?"); vul note_title in
 - **note_search** — zoeken in notities (bijv. "zoek in mijn notities naar X"); vul note_query in
 - **note_delete** — notitie verwijderen; DESTRUCTIEF
+- **note_to_list** — actiepunten/taken uit een notitie halen en als lijst-items opslaan (bijv. "maak een to-do lijst van mijn notitie X", "zet de taken uit notitie Y op mijn takenlijst"); vul note_title en optioneel list_id in
 
 **Habits:**
 - **habit_log** — één habit loggen; vul log_date of log_dates[] in
@@ -84,6 +85,8 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **learn_context** — bericht geeft alleen context/info zonder actie (bijv. "Tom is mijn vriend"); vul context_fact + reply_text in; bij verjaardag ook birthday_person (naam) en birthday_date (MM-DD formaat) invullen
 - **profile_query** — gebruiker vraagt wat je over hem/haar weet (bijv. "wat weet je over mij?", "welke info heb je van me?")
 - **smart_summary** — gebruiker vraagt een overzicht van alles (bijv. "wat moet ik niet vergeten?", "geef me een overzicht", "wat staat er allemaal open?")
+- **find_free_slots** — gebruiker vraagt wanneer hij/zij tijd heeft op een dag (bijv. "wanneer heb ik tijd vrijdag?", "heb ik ruimte voor een afspraak morgen?", "wanneer ben ik vrij deze week?"); vul slot_date in als YYYY-MM-DD
+- **list_categorize** — boodschappenlijst gesorteerd op categorie tonen (bijv. "toon mijn boodschappenlijst gesorteerd", "geef me een overzicht per categorie", "orden mijn boodschappen"); vul list_id in
 - **setting_change** — instelling wijzigen
 - **greeting** — begroeting zonder actie
 - **clarification** — bericht is ambigu; stel één concrete vraag
@@ -316,6 +319,13 @@ reminder_days_before: N = N **hele** dagen van tevoren — gebruik dit als de ge
 - "ik bedoelde vergadering met Tom" (na het plannen van een afspraak) → correct_last, correct_to: "vergadering met Tom"
 - "nee, maak dat ongedaan" / "undo" / "ongedaan maken" → correct_last zonder correct_to (of de gebruiker zegt dit los → undo trigger)
 
+**Impliciete correctie — detecteer op basis van conversatiegeschiedenis:**
+- Als het vorige bericht een item/afspraak toevoegde EN het huidige bericht begint met "nee" / "wacht" / "eigenlijk" → correct_last
+- "nee, [dag]" na het plannen op een andere dag → correct_last, correct_to: de gecorrigeerde datum/naam
+- "[woord]" als kort antwoord direct na "welke lijst bedoel je?" → gebruik dat woord om de juiste lijst te kiezen (geen correct_last nodig)
+- "eigenlijk [X]" → correct_last, correct_to: X
+- "bedoel ik [X]" → correct_last, correct_to: X
+
 ## Note vs list
 
 **note:** begint met "onthoud/noteer/tip/weet je wat/sla op/adres van/wachtwoord", of feitelijke info zonder actie
@@ -420,7 +430,10 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "summary_start": null,
   "summary_end": null,
   "query_period": null,
-  "item_quantity": null
+  "item_quantity": null,
+  "slot_date": null,
+  "reminder_time": null,
+  "note_query": null
 }
 
 Vul alleen de relevante velden in en laat de rest null.`;

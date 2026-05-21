@@ -636,6 +636,37 @@ async function getHabitStreak(userId, habitId) {
   return streak;
 }
 
+async function getTodayBirthdayEvents() {
+  const today = new Date();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const thisYear = today.getFullYear().toString();
+
+  const { data } = await supabase
+    .from('events')
+    .select('id, user_id, title, date, reminder_sent_at, users(whatsapp_number)')
+    .eq('calendar_stream', 'birthdays')
+    .eq('recurrence', 'yearly')
+    .like('date', `%-${mm}-${dd}`);
+
+  return (data ?? [])
+    .filter(e => !e.reminder_sent_at || !e.reminder_sent_at.startsWith(thisYear))
+    .map(e => ({ ...e, whatsapp_number: e.users?.whatsapp_number }));
+}
+
+async function getWhatsAppRemindersForHour(date, hour) {
+  const hourStr = String(hour).padStart(2, '0');
+  const { data } = await supabase
+    .from('events')
+    .select('id, user_id, title, time, users(whatsapp_number)')
+    .eq('calendar_stream', 'wa_reminder')
+    .eq('date', date)
+    .like('time', `${hourStr}:%`)
+    .is('reminder_sent_at', null);
+
+  return (data ?? []).map(e => ({ ...e, whatsapp_number: e.users?.whatsapp_number }));
+}
+
 // ── CalDAV Sync Queue ──────────────────────────────────────────────────────────
 
 async function enqueueCalDAVOperation(userId, operation, payload) {
@@ -888,6 +919,8 @@ module.exports = {
   createCalendarStream,
   updateCalendarStream,
   deleteCalendarStream,
+  getTodayBirthdayEvents,
+  getWhatsAppRemindersForHour,
   uploadReceiptImage,
   createReceipt,
   getReceipts,

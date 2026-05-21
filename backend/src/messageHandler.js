@@ -258,27 +258,27 @@ async function handleUndo(userId) {
     switch (last.action) {
       case 'add_item': {
         await db.deleteListItem(last.data.itemId);
-        undo.clear(userId);
+        undo.pop(userId);
         return `↩️ Ongedaan: *${last.data.text}* verwijderd uit ${last.data.listEmoji} ${last.data.listName}.`;
       }
       case 'add_items': {
         for (const id of last.data.itemIds) await db.deleteListItem(id);
-        undo.clear(userId);
+        undo.pop(userId);
         return `↩️ Ongedaan: ${last.data.count} items verwijderd uit ${last.data.listEmoji} ${last.data.listName}.`;
       }
       case 'add_note': {
         await db.deleteNote(last.data.noteId);
-        undo.clear(userId);
+        undo.pop(userId);
         return `↩️ Ongedaan: notitie *${last.data.title}* verwijderd.`;
       }
       case 'create_list': {
         await db.deleteList(last.data.listId);
-        undo.clear(userId);
+        undo.pop(userId);
         return `↩️ Ongedaan: lijst *${last.data.name}* verwijderd.`;
       }
       case 'add_recurring': {
         await db.deleteRecurringItem(last.data.itemId);
-        undo.clear(userId);
+        undo.pop(userId);
         return `↩️ Ongedaan: terugkerend item *${last.data.content}* verwijderd.`;
       }
       case 'add_event': {
@@ -290,7 +290,7 @@ async function handleUndo(userId) {
             await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, calendarStream ?? 'personal', caldavUid).catch(() => {});
           }
         }
-        undo.clear(userId);
+        undo.pop(userId);
         return `↩️ Ongedaan: afspraak *${title}* verwijderd.`;
       }
       default:
@@ -514,6 +514,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (last.action === 'add_item') {
         await db.updateListItemText(last.data.itemId, newText);
         const oldText = last.data.text;
+        undo.pop(userId);
         undo.record(userId, 'add_item', { ...last.data, text: newText });
         return `✏️ *${oldText}* → *${newText}*.`;
       }
@@ -521,6 +522,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (last.action === 'add_event') {
         await db.updateEventTitle(last.data.eventId, newText);
         const oldTitle = last.data.title;
+        undo.pop(userId);
         undo.record(userId, 'add_event', { ...last.data, title: newText });
         return `✏️ Afspraak *${oldTitle}* → *${newText}*.`;
       }
@@ -665,7 +667,8 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         const durationStr = durationMinutes ? ` _(${durationMinutes % 60 === 0 ? `${durationMinutes / 60}u` : `${durationMinutes}min`})_` : '';
         const attendeeStr = attendees ? ` _(met ${attendees.join(', ')})_` : '';
         const locationStr = location ? ` _(📍 ${location})_` : '';
-        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${durationStr}${attendeeStr}${locationStr}${reminderStr}`);
+        const mapsUrl    = location ? `\nhttps://maps.google.com/?q=${encodeURIComponent(location)}` : '';
+        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${durationStr}${attendeeStr}${locationStr}${reminderStr}${mapsUrl}`);
       }
 
       if (lastSavedEvent) {
@@ -926,6 +929,115 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       return `📅 ${events.length} afspraak${events.length !== 1 ? 'en' : ''} verplaatst van ${formatDate(fromDate)} naar ${formatDate(toDate)}.`;
     }
 
+    // ── Find free slots ───────────────────────────────────────────────────────
+
+    case 'find_free_slots': {
+      const slotDate = intent.slot_date ?? new Date().toISOString().split('T')[0];
+      const events = await db.getEventsForDate(userId, slotDate);
+      const timed  = events.filter(e => e.time).sort((a, b) => a.time > b.time ? 1 : -1);
+
+      const slots   = [];
+      const dayStart = '09:00';
+      const dayEnd   = '20:00';
+      let prevEnd = dayStart;
+
+      for (const e of timed) {
+        if (e.time > prevEnd) slots.push(`${prevEnd} – ${e.time}`);
+        const [h, m] = e.time.split(':').map(Number);
+        const endH = (h + 1) % 24;
+        prevEnd = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      }
+      if (prevEnd < dayEnd) slots.push(`${prevEnd} – ${dayEnd}`);
+
+      if (slots.length === 0) return `📅 Geen vrije slots op ${formatDate(slotDate)} (09:00–20:00). Je agenda zit vol!`;
+      return `📅 *Vrije slots op ${formatDate(slotDate)}:*\n\n${slots.map(s => `• ${s}`).join('\n')}`;
+    }
+
+    // ── List categorize ───────────────────────────────────────────────────────
+
+    case 'list_categorize': {
+      if (!intent.list_id) return 'Welke lijst wil je gecategoriseerd zien?';
+      const list = lists.find(l => l.id === intent.list_id);
+      if (!list) return 'Die lijst kon ik niet vinden.';
+      const items = await db.getListItems(intent.list_id);
+      const open  = items.filter(i => !i.checked);
+      if (open.length === 0) return `${list.emoji ?? '📝'} ${list.name} heeft geen open items.`;
+
+      const CAT_MAP = {
+        '🥦 Groenten & fruit':    ['appel', 'peer', 'banaan', 'sinaasappel', 'citroen', 'tomaat', 'komkommer', 'paprika', 'ui', 'knoflook', 'aardappel', 'wortel', 'broccoli', 'sla', 'spinazie', 'avocado', 'druiven', 'aardbei', 'mango', 'ananas', 'courgette', 'champignon', 'bloemkool', 'prei', 'sperzieboon', 'bospeen'],
+        '🥛 Zuivel & eieren':     ['melk', 'yoghurt', 'kwark', 'kaas', 'boter', 'room', 'ei', 'eieren', 'creme fraiche', 'vla', 'slagroom', 'halfvolle', 'skyr', 'karnemelk'],
+        '🍞 Brood & bakkerij':    ['brood', 'croissant', 'beschuit', 'cracker', 'pita', 'wrap', 'bagel', 'broodje', 'stokbrood', 'toast', 'knäckebröd'],
+        '🥩 Vlees & vis':         ['kip', 'gehakt', 'biefstuk', 'varkensvlees', 'lam', 'spek', 'worst', 'ham', 'zalm', 'tonijn', 'makreel', 'garnalen', 'mosselen', 'tartaar', 'kipfilet'],
+        '🥫 Houdbaar':            ['pasta', 'rijst', 'bonen', 'kikkererwten', 'linzen', 'tomatensaus', 'soep', 'bouillon', 'havermout', 'müsli', 'pindakaas', 'jam', 'honing', 'olie', 'azijn', 'ketjap', 'kokosmelk', 'meel', 'suiker', 'zout', 'peper', 'noten'],
+        '🧃 Dranken':             ['water', 'sap', 'limonade', 'cola', 'bier', 'wijn', 'koffie', 'thee', 'frisdrank', 'smoothie', 'chocolademelk', 'spa'],
+        '🧴 Verzorging':          ['shampoo', 'zeep', 'tandpasta', 'deodorant', 'wasmiddel', 'afwasmiddel', 'schoonmaakmiddel', 'toiletpapier', 'wc-papier', 'conditioner'],
+        '🍫 Snacks & zoet':       ['chips', 'chocolade', 'koekje', 'snoep', 'drop', 'popcorn', 'cake', 'stroopwafel', 'kauwgom'],
+        '🧊 Diepvries':           ['frietjes', 'pizza', 'diepvries', 'ijs', 'sorbet'],
+      };
+
+      const categorized = {};
+      const uncategorized = [];
+
+      for (const item of open) {
+        const lc = item.text.toLowerCase();
+        let found = false;
+        for (const [cat, keywords] of Object.entries(CAT_MAP)) {
+          if (keywords.some(k => lc.includes(k))) {
+            (categorized[cat] ??= []).push(item.text);
+            found = true;
+            break;
+          }
+        }
+        if (!found) uncategorized.push(item.text);
+      }
+
+      const parts = Object.entries(categorized).map(([cat, its]) =>
+        `${cat}\n${its.map(t => `• ${t}`).join('\n')}`
+      );
+      if (uncategorized.length > 0) {
+        parts.push(`📦 Overig\n${uncategorized.map(t => `• ${t}`).join('\n')}`);
+      }
+
+      return `${list.emoji ?? '📝'} *${list.name} — per categorie*\n\n${parts.join('\n\n')}`;
+    }
+
+    // ── Note to list ──────────────────────────────────────────────────────────
+
+    case 'note_to_list': {
+      const n2lTitle = intent.note_title;
+      if (!n2lTitle) return 'Welke notitie wil je omzetten naar actiepunten?';
+      const notes  = await db.getNotes(userId);
+      const target = fuzzyFindByTitle(notes, n2lTitle);
+      if (!target) return `Geen notitie gevonden met "${n2lTitle}".`;
+
+      const Anthropic = require('@anthropic-ai/sdk');
+      const aiClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const aiRes = await aiClient.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        messages: [{
+          role: 'user',
+          content: `Haal alle concrete actiepunten/taken uit deze notitie. Geef ALLEEN een JSON array van korte taakomschrijvingen terug (max 10). Geen uitleg, geen markdown. Voorbeeld: ["Bellen met Jan","Contract opsturen"]\n\nNotitie:\n${target.body}`,
+        }],
+      });
+
+      let items = [];
+      try {
+        const raw = (aiRes.content[0]?.text ?? '[]').replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        items = JSON.parse(raw);
+      } catch {}
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return `📝 Geen actiepunten gevonden in notitie *${target.title}*.`;
+      }
+
+      const targetList = intent.list_id ? lists.find(l => l.id === intent.list_id) : lists[0];
+      if (!targetList) return 'Maak eerst een lijst aan om de actiepunten aan toe te voegen.';
+
+      await Promise.all(items.map(t => db.addListItem(targetList.id, String(t))));
+      return `✅ ${items.length} actiepunten uit *${target.title}* toegevoegd aan ${targetList.emoji ?? '📝'} *${targetList.name}*:\n${items.map(t => `• ${t}`).join('\n')}`;
+    }
+
     // ── List count ────────────────────────────────────────────────────────────
 
     case 'list_count': {
@@ -1049,14 +1161,20 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     // ── Reminder ─────────────────────────────────────────────────────────────
 
     case 'reminder': {
+      const reminderText = intent.reminder_text ?? originalText;
+      const reminderTime = intent.reminder_time ?? null;
       await db.createEvent(userId, {
-        title: intent.reminder_text ?? originalText,
+        title: reminderText,
         date: intent.reminder_date,
+        time: reminderTime,
         recurrence: null,
-        reminderDaysBefore: 0,
+        reminderDaysBefore: null,
+        caldavUid: null,
+        calendarStream: reminderTime ? 'wa_reminder' : 'personal',
       });
       const dateStr = intent.reminder_date ? ` op ${formatDate(intent.reminder_date)}` : '';
-      return `⏰ Herinnering ingesteld: *${intent.reminder_text}*${dateStr}.`;
+      const timeStr = reminderTime ? ` om ${reminderTime}` : '';
+      return `⏰ Herinnering ingesteld: *${reminderText}*${dateStr}${timeStr}. Ik stuur je dan een WhatsApp${timeStr ? '' : ' die ochtend'}.`;
     }
 
     // ── Note ─────────────────────────────────────────────────────────────────

@@ -164,6 +164,13 @@ function buildIcal(event, uid, reminderMinutesBefore = null) {
 
   if (event.recurrence === 'yearly') {
     lines.push('RRULE:FREQ=YEARLY');
+  } else if (event.recurrence?.startsWith('weekly:')) {
+    const dayNum = parseInt(event.recurrence.split(':')[1], 10);
+    const byDay = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][dayNum] ?? 'MO';
+    lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byDay}`);
+  } else if (event.recurrence?.startsWith('monthly:')) {
+    const dayOfMonth = parseInt(event.recurrence.split(':')[1], 10);
+    lines.push(`RRULE:FREQ=MONTHLY;BYMONTHDAY=${dayOfMonth}`);
   }
 
   if (Array.isArray(event.attendees) && event.attendees.length > 0) {
