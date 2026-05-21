@@ -63,6 +63,9 @@ async function handleVoiceMessage({ from, mediaId }) {
 
     console.log(`[Voice] Transcribed from ${from}: ${text}`);
 
+    // Show transcription so user knows what was understood
+    await sendMessage(from, `🎤 _"${text}"_`);
+
     // Process exactly like a text message
     await handleMessage({ from, text });
   } catch (err) {
