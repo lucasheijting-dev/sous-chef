@@ -33,8 +33,8 @@ router.post('/', async (req, res) => {
     const from    = message.from;
 
     if (message.type === 'audio') {
-      const { sendMessage } = require('./whatsapp');
-      await sendMessage(from, 'Voicenotes kan ik nog niet verwerken. Stuur me een tekstbericht! 😊');
+      const { handleVoiceMessage } = require('./voiceHandler');
+      await handleVoiceMessage({ from, mediaId: message.audio.id });
       return;
     }
 
