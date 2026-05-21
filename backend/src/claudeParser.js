@@ -233,29 +233,29 @@ Verwijzingen ("hem", "die", "het", "dat ook") → los op via conversatiegeschied
 
 ## Agenda-kalenders (calendar_stream)
 
-Gebruik de beschikbare kalender-streams van de gebruiker (zie ## Beschikbare kalenders onderaan). Kies de claude_key van de best passende kalender.
-
-Standaard fallback als geen aangepaste kalenders beschikbaar zijn:
-- **appointments** — dokter, tandarts, kapper, bezorging, afspraken met mensen
+De ingebouwde standaardkalenders zijn altijd beschikbaar, ook als de gebruiker aangepaste kalenders heeft:
+- **appointments** — dokter, tandarts, kapper, bezorging, fysieke afspraken
 - **birthdays** — verjaardagen, jubilea (+ event_recurrence="yearly")
 - **work** — vergadering, meeting, deadline, werkafspraak, zakelijk
-- **personal** — sport, hobby, reizen, privé — standaard
+- **personal** — sport, hobby, reizen, privé — **standaard als niets anders past**
+
+Gebruik deze standaarden tenzij er een aangepaste kalender is die écht beter past.
 
 ## Auto-categorisatie kalenderstream
-Als geen aangepaste kalenders zijn maar het bericht bevat:
-- sport/gym/fitness/hardlopen/zwemmen/yoga/mediteren → calendar_stream: "personal"
-- vergadering/meeting/deadline/klant/werk/presentatie → calendar_stream: "work"
-- tandarts/dokter/huisarts/apotheek/ziekenhuis/fysiotherapeut → calendar_stream: "appointments"
-- verjaardag/jubileum → calendar_stream: "birthdays" + event_recurrence: "yearly"
-- borrel/feest/etentje/afspreken met vrienden/vriendengroep → calendar_stream: "personal"
+- sport/gym/fitness/hardlopen/zwemmen/yoga/mediteren → **personal**
+- vergadering/meeting/deadline/klant/werk/presentatie → **work**
+- tandarts/dokter/huisarts/apotheek/ziekenhuis/fysiotherapeut → **appointments**
+- verjaardag/jubileum → **birthdays** + event_recurrence: "yearly"
+- overig → **personal**
 
-**Kies de best passende kalender op basis van de naam, emoji en beschrijving.**
+## Aangepaste kalenders (zie ## Beschikbare kalenders onderaan)
 
-**KRITISCH bij aangepaste kalenders:**
-- Gebruik een kalender ALLEEN als de afspraak er echt bij hoort. Wees conservatief.
-- Een "Vrienden" kalender → ALLEEN voor afspraken waarbij je daadwerkelijk met vrienden afspreekt (borrel, etentje, uitje samen, bezoek). NIET voor sport, werk, dokter, of andere persoonlijke activiteiten.
-- Een "Familie" kalender → ALLEEN voor afspraken met familie (verjaardagen familie, familiebezoek, uitjes met familie).
-- Bij twijfel of meerdere kalenders even plausibel: gebruik de meest voor de hand liggende of val terug op "personal". Kies NOOIT een te specifieke kalender als de afspraak niet duidelijk daartoe behoort.
+**KRITISCHE REGEL: Gebruik een aangepaste kalender ALLEEN als de afspraak er zonder twijfel bij hoort.**
+
+- Heeft de gebruiker een "Vrienden" kalender? → gebruik die ALLEEN als je daadwerkelijk met vrienden afspreekt (borrel, etentje, uitje, bezoek). NIET voor sport, werk, dokter, of andere eigen activiteiten.
+- Heeft de gebruiker een "Familie" kalender? → ALLEEN voor afspraken met familie.
+- Heeft de gebruiker maar één aangepaste kalender? → gebruik die NIET als catch-all. Val terug op de ingebouwde standaarden als de afspraak er niet duidelijk bij hoort.
+- Bij twijfel: **altijd terugvallen op de ingebouwde standaard** (personal/work/appointments/birthdays).
 
 Bij events[] array: elk object ook "calendar_stream" meegeven.
 
