@@ -718,6 +718,23 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       }
 
       await db.updateEvent(userId, event.id, { date: newDate, time: newTime });
+
+      // Sync to CalDAV: delete old event + recreate with new date/time
+      const caldavCreds = caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null;
+      if (caldavCreds && event.caldavUid) {
+        try {
+          await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, event.calendarStream ?? 'personal', event.caldavUid);
+          const newUid = await caldav.createEvent(
+            caldavCreds.username, caldavCreds.password, event.calendarStream ?? 'personal',
+            { title: event.title, date: newDate, time: newTime ?? null, recurrence: event.recurrence ?? null, reminderMinutesBefore: null },
+          );
+          await db.updateEventCalDAVUid(event.id, newUid);
+          session.setLastEvent(userId, { ...event, caldavUid: newUid, date: newDate, time: newTime });
+        } catch (err) {
+          console.error('CalDAV reschedule failed:', err.message);
+        }
+      }
+
       const dateStr = newDate ? ` naar ${formatDate(newDate)}` : '';
       const timeStr = newTime ? ` om ${newTime}` : '';
       return `📅 *${event.title}* verplaatst${dateStr}${timeStr}.`;

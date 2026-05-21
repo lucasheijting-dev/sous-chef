@@ -231,9 +231,15 @@ Als geen aangepaste kalenders zijn maar het bericht bevat:
 - vergadering/meeting/deadline/klant/werk/presentatie → calendar_stream: "work"
 - tandarts/dokter/huisarts/apotheek/ziekenhuis/fysiotherapeut → calendar_stream: "appointments"
 - verjaardag/jubileum → calendar_stream: "birthdays" + event_recurrence: "yearly"
-- vrienden/borrel/feest/etentje/afspreken met → calendar_stream: "personal"
+- borrel/feest/etentje/afspreken met vrienden/vriendengroep → calendar_stream: "personal"
 
-**Kies de best passende kalender op basis van de naam, emoji en beschrijving.** Bijv. als er een "Vrienden" kalender is met claude_key "friends", gebruik die voor afspraken met vrienden. Bij twijfel: gebruik de meest voor de hand liggende of val terug op "personal".
+**Kies de best passende kalender op basis van de naam, emoji en beschrijving.**
+
+**KRITISCH bij aangepaste kalenders:**
+- Gebruik een kalender ALLEEN als de afspraak er echt bij hoort. Wees conservatief.
+- Een "Vrienden" kalender → ALLEEN voor afspraken waarbij je daadwerkelijk met vrienden afspreekt (borrel, etentje, uitje samen, bezoek). NIET voor sport, werk, dokter, of andere persoonlijke activiteiten.
+- Een "Familie" kalender → ALLEEN voor afspraken met familie (verjaardagen familie, familiebezoek, uitjes met familie).
+- Bij twijfel of meerdere kalenders even plausibel: gebruik de meest voor de hand liggende of val terug op "personal". Kies NOOIT een te specifieke kalender als de afspraak niet duidelijk daartoe behoort.
 
 Bij events[] array: elk object ook "calendar_stream" meegeven.
 
