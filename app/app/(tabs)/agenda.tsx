@@ -21,6 +21,7 @@ import {
   TextInput as TextInputRN,
   KeyboardAvoidingView,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -277,9 +278,24 @@ function AgendaLite() {
 
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [quickAddTitle, setQuickAddTitle]     = useState('');
-  const [quickAddDate, setQuickAddDate]       = useState<'today' | 'tomorrow'>('today');
-  const [quickAddTime, setQuickAddTime]       = useState('');
+  const [quickAddDate, setQuickAddDate]       = useState<Date>(new Date());
+  const [quickAddTime, setQuickAddTime]       = useState<Date | null>(null);
   const [quickAddSaving, setQuickAddSaving]   = useState(false);
+  const [showDatePicker, setShowDatePicker]   = useState(false);
+  const [showTimePicker, setShowTimePicker]   = useState(false);
+
+  const [editEvent, setEditEvent]             = useState<MergedEvent | null>(null);
+  const [editTitle, setEditTitle]             = useState('');
+  const [editDate, setEditDate]               = useState<Date>(new Date());
+  const [editTime, setEditTime]               = useState<Date | null>(null);
+  const [editShowDatePicker, setEditShowDatePicker] = useState(false);
+  const [editShowTimePicker, setEditShowTimePicker] = useState(false);
+  const [editSaving, setEditSaving]           = useState(false);
+
+  // drag state for timeline
+  const [dragEvent, setDragEvent]             = useState<MergedEvent | null>(null);
+  const [dragY, setDragY]                     = useState(0);
+  const dragTimeRef                           = useRef<string | null>(null);
 
   const [viewMode, setViewMode]           = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate]   = useState(TODAY);
@@ -485,23 +501,59 @@ function AgendaLite() {
     extrapolate: 'clamp',
   });
 
+  function openQuickAdd(prefillDate?: string) {
+    const d = prefillDate ? new Date(prefillDate + 'T12:00:00') : new Date();
+    setQuickAddTitle('');
+    setQuickAddDate(d);
+    setQuickAddTime(null);
+    setShowDatePicker(false);
+    setShowTimePicker(false);
+    setQuickAddVisible(true);
+  }
+
   async function saveQuickEvent() {
     if (!user || !quickAddTitle.trim() || quickAddSaving) return;
     setQuickAddSaving(true);
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    if (quickAddDate === 'tomorrow') now.setDate(now.getDate() + 1);
-    const dateStr = toKey(now);
+    const dateStr = toKey(quickAddDate);
+    const timeStr = quickAddTime
+      ? `${String(quickAddTime.getHours()).padStart(2,'0')}:${String(quickAddTime.getMinutes()).padStart(2,'0')}`
+      : null;
     const { data } = await supabase.from('events').insert({
-      user_id: user.id, title: quickAddTitle.trim(), date: dateStr,
-      time: quickAddTime.trim() || null,
+      user_id: user.id, title: quickAddTitle.trim(), date: dateStr, time: timeStr,
     }).select().single();
-    if (data) {
-      setAllEvents(prev => [...prev, { ...data, source: 'sous-chef' as const }]);
-      setTimePeriod(quickAddDate === 'today' ? 'today' : 'tomorrow');
-    }
-    setQuickAddTitle(''); setQuickAddTime('');
+    if (data) setAllEvents(prev => [...prev, { ...data, source: 'sous-chef' as const }]);
     setQuickAddVisible(false);
     setQuickAddSaving(false);
+  }
+
+  function openEditEvent(e: MergedEvent) {
+    setEditEvent(e);
+    setEditTitle(e.title);
+    setEditDate(e.date ? new Date(e.date + 'T12:00:00') : new Date());
+    if (e.time) {
+      const [h, m] = e.time.split(':').map(Number);
+      const t = new Date(); t.setHours(h, m, 0, 0);
+      setEditTime(t);
+    } else {
+      setEditTime(null);
+    }
+    setEditShowDatePicker(false);
+    setEditShowTimePicker(false);
+  }
+
+  async function saveEditEvent() {
+    if (!editEvent || !editTitle.trim() || editSaving) return;
+    setEditSaving(true);
+    const dateStr = toKey(editDate);
+    const timeStr = editTime
+      ? `${String(editTime.getHours()).padStart(2,'0')}:${String(editTime.getMinutes()).padStart(2,'0')}`
+      : null;
+    if (editEvent.source === 'sous-chef') {
+      await supabase.from('events').update({ title: editTitle.trim(), date: dateStr, time: timeStr }).eq('id', editEvent.id);
+    }
+    setAllEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, title: editTitle.trim(), date: dateStr, time: timeStr } : e));
+    setEditEvent(null);
+    setEditSaving(false);
   }
 
   return (
@@ -656,7 +708,7 @@ function AgendaLite() {
 
       {/* QuickAdd FAB */}
       <TouchableOpacity
-        onPress={() => setQuickAddVisible(true)}
+        onPress={() => openQuickAdd()}
         style={{ position: 'absolute', right: 20, bottom: TAB_BAR_CLEARANCE - 20, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
         activeOpacity={0.85}
       >
@@ -701,7 +753,7 @@ function AgendaLite() {
               <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, color: colors.black }}>Terug</Text>
             </TouchableOpacity>
             <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black, flex: 1, textAlign: 'center' }}>{sectionLabel(selectedDate)}</Text>
-            <TouchableOpacity onPress={() => setQuickAddVisible(true)} style={{ width: 70, alignItems: 'flex-end' }}>
+            <TouchableOpacity onPress={() => openQuickAdd(selectedDate)} style={{ width: 70, alignItems: 'flex-end' }}>
               <Ionicons name="add-circle-outline" size={24} color={Colors.yellow} />
             </TouchableOpacity>
           </View>
@@ -714,7 +766,7 @@ function AgendaLite() {
                 {selectedDayEvents.filter(e => !e.time).map(e => {
                   const color = getEventColor(e, streams);
                   return (
-                    <TouchableOpacity key={e.id} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.8}
+                    <TouchableOpacity key={e.id} onPress={() => openEditEvent(e)} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.8}
                       style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '22', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 6, padding: 10, marginBottom: 4 }}>
                       <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.black, flex: 1 }}>{e.title}</Text>
                       {e.source === 'phone' && <Text style={{ fontSize: 10, color: colors.gray400 }}>iPhone</Text>}
@@ -750,17 +802,45 @@ function AgendaLite() {
                 );
               })()}
 
-              {/* Timed event blocks */}
+              {/* Timed event blocks — tap=edit, long-press drag=reschedule */}
               {selectedDayEvents.filter(e => e.time).map(e => {
                 const { h, m } = parseTime(e.time!);
-                const top = 4 + (h - 6 + m / 60) * 60;
+                const baseTop = 4 + (h - 6 + m / 60) * 60;
                 const color = getEventColor(e, streams);
+                const isDragging = dragEvent?.id === e.id;
+                const displayTop = isDragging ? Math.max(4, dragY) : Math.max(4, baseTop);
+                const dragH = Math.round((displayTop - 4) / 60) + 6;
+                const dragMin = Math.round(((displayTop - 4) / 60 - (dragH - 6)) * 60 / 15) * 15;
+                const dragTimeLabel = `${String(dragH).padStart(2,'0')}:${String(Math.min(dragMin,59)).padStart(2,'0')}`;
+
+                const panResponder = PanResponder.create({
+                  onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+                  onPanResponderGrant: () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDragEvent(e); setDragY(baseTop); },
+                  onPanResponderMove: (_, g) => { setDragY(Math.max(4, baseTop + g.dy)); },
+                  onPanResponderRelease: async (_, g) => {
+                    const newTop = Math.max(4, baseTop + g.dy);
+                    const nh = Math.round((newTop - 4) / 60) + 6;
+                    const nm = Math.round(((newTop - 4) / 60 - (nh - 6)) * 60 / 15) * 15;
+                    const newTime = `${String(Math.min(nh,23)).padStart(2,'0')}:${String(Math.min(nm,59)).padStart(2,'0')}`;
+                    if (e.source === 'sous-chef') {
+                      await supabase.from('events').update({ time: newTime }).eq('id', e.id);
+                    }
+                    setAllEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, time: newTime } : ev));
+                    setDragEvent(null);
+                  },
+                  onPanResponderTerminate: () => setDragEvent(null),
+                });
+
                 return (
-                  <TouchableOpacity key={e.id} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.85}
-                    style={{ position: 'absolute', left: 58, right: 8, top: Math.max(4, top), height: 56, backgroundColor: color + 'D0', borderRadius: 8, borderLeftWidth: 3, borderLeftColor: color, padding: 8, zIndex: 1 }}>
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }} numberOfLines={1}>{e.title}</Text>
-                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>{e.time}{e.source === 'phone' ? ' · iPhone' : ''}</Text>
-                  </TouchableOpacity>
+                  <Animated.View key={e.id} {...panResponder.panHandlers}
+                    style={{ position: 'absolute', left: 58, right: 8, top: displayTop, height: 56, backgroundColor: color + (isDragging ? 'FF' : 'D0'), borderRadius: 8, borderLeftWidth: 3, borderLeftColor: color, padding: 8, zIndex: isDragging ? 10 : 1, shadowColor: '#000', shadowOpacity: isDragging ? 0.3 : 0, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: isDragging ? 8 : 0 }}>
+                    <TouchableOpacity onPress={() => !isDragging && openEditEvent(e)} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.85} style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }} numberOfLines={1}>{e.title}</Text>
+                      <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.85)' }}>
+                        {isDragging ? dragTimeLabel : e.time}{e.source === 'phone' ? ' · iPhone' : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  </Animated.View>
                 );
               })}
             </View>
@@ -847,11 +927,11 @@ function AgendaLite() {
         </View>
       </Modal>
 
-      {/* QuickAdd modal — same pattern as list modal */}
-      <Modal visible={quickAddVisible} transparent animationType="slide" onRequestClose={() => { setQuickAddVisible(false); setQuickAddTitle(''); setQuickAddTime(''); }}>
+      {/* QuickAdd modal */}
+      <Modal visible={quickAddVisible} transparent animationType="slide" onRequestClose={() => setQuickAddVisible(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => { setQuickAddVisible(false); setQuickAddTitle(''); setQuickAddTime(''); }}>
-            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 12 }} onPress={() => {}}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => setQuickAddVisible(false)}>
+            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 14 }} onPress={() => {}}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 4 }} />
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Nieuwe afspraak</Text>
               <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 4 }}>
@@ -862,38 +942,114 @@ function AgendaLite() {
                   placeholder="Wat is de afspraak?"
                   placeholderTextColor={colors.gray400}
                   autoFocus
-                  returnKeyType="next"
-                  selectionColor={Colors.yellow}
-                />
-              </View>
-              <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 4 }}>
-                <TextInputRN
-                  style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, paddingVertical: 12 }}
-                  value={quickAddTime}
-                  onChangeText={setQuickAddTime}
-                  placeholder="Tijd (bijv. 14:30) — optioneel"
-                  placeholderTextColor={colors.gray400}
-                  keyboardType="numbers-and-punctuation"
                   returnKeyType="done"
                   onSubmitEditing={saveQuickEvent}
                   selectionColor={Colors.yellow}
                 />
               </View>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {(['today', 'tomorrow'] as const).map(d => (
-                  <TouchableOpacity key={d} onPress={() => setQuickAddDate(d)} style={{ flex: 1, paddingVertical: 12, borderRadius: Radius.pill, backgroundColor: quickAddDate === d ? Colors.yellow : colors.gray100, alignItems: 'center' }}>
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: quickAddDate === d ? Colors.black : colors.gray400 }}>
-                      {d === 'today' ? 'Vandaag' : 'Morgen'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <TouchableOpacity onPress={saveQuickEvent} disabled={!quickAddTitle.trim() || quickAddSaving} style={{ backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center', opacity: quickAddTitle.trim() ? 1 : 0.4 }}>
-                {quickAddSaving
-                  ? <ActivityIndicator size="small" color={Colors.black} />
-                  : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black }}>Opslaan</Text>
+              {/* Date row */}
+              <TouchableOpacity onPress={() => { setShowDatePicker(v => !v); setShowTimePicker(false); }}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}>
+                <Ionicons name="calendar-outline" size={18} color={Colors.yellow} />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: colors.black, flex: 1 }}>
+                  {quickAddDate.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' })}
+                </Text>
+                <Ionicons name={showDatePicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker value={quickAddDate} mode="date" display="inline" locale="nl-NL" accentColor={Colors.yellow}
+                  onChange={(_, d) => { if (d) setQuickAddDate(d); }} minimumDate={new Date()} style={{ alignSelf: 'center' }} />
+              )}
+              {/* Time row */}
+              <TouchableOpacity onPress={() => { setShowTimePicker(v => !v); setShowDatePicker(false); }}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, gap: 10 }}>
+                <Ionicons name="time-outline" size={18} color={quickAddTime ? Colors.yellow : colors.gray400} />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: quickAddTime ? colors.black : colors.gray400, flex: 1 }}>
+                  {quickAddTime
+                    ? `${String(quickAddTime.getHours()).padStart(2,'0')}:${String(quickAddTime.getMinutes()).padStart(2,'0')}`
+                    : 'Tijd — optioneel'}
+                </Text>
+                {quickAddTime
+                  ? <TouchableOpacity onPress={(e) => { e.stopPropagation(); setQuickAddTime(null); setShowTimePicker(false); }}><Ionicons name="close-circle" size={18} color={colors.gray400} /></TouchableOpacity>
+                  : <Ionicons name={showTimePicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
                 }
               </TouchableOpacity>
+              {showTimePicker && (
+                <DateTimePicker value={quickAddTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
+                  onChange={(_, t) => { if (t) { setQuickAddTime(t); setShowTimePicker(false); } }} />
+              )}
+              <TouchableOpacity onPress={saveQuickEvent} disabled={!quickAddTitle.trim() || quickAddSaving}
+                style={{ backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center', opacity: quickAddTitle.trim() ? 1 : 0.4 }}>
+                {quickAddSaving
+                  ? <ActivityIndicator size="small" color={Colors.black} />
+                  : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black }}>Opslaan</Text>}
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Edit event modal */}
+      <Modal visible={!!editEvent} transparent animationType="slide" onRequestClose={() => setEditEvent(null)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => setEditEvent(null)}>
+            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 14 }} onPress={() => {}}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 4 }} />
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Afspraak bewerken</Text>
+              {editEvent?.source === 'phone' && (
+                <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, padding: 12, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                  <Ionicons name="information-circle-outline" size={16} color={colors.gray400} />
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400, flex: 1 }}>iPhone-agenda items kunnen niet worden bewerkt vanuit Sous-Chef.</Text>
+                </View>
+              )}
+              <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 4, opacity: editEvent?.source === 'phone' ? 0.5 : 1 }}>
+                <TextInputRN
+                  style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, paddingVertical: 12 }}
+                  value={editTitle}
+                  onChangeText={setEditTitle}
+                  placeholder="Naam afspraak"
+                  placeholderTextColor={colors.gray400}
+                  editable={editEvent?.source !== 'phone'}
+                  selectionColor={Colors.yellow}
+                />
+              </View>
+              <TouchableOpacity onPress={() => { setEditShowDatePicker(v => !v); setEditShowTimePicker(false); }}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, gap: 10, opacity: editEvent?.source === 'phone' ? 0.5 : 1 }}>
+                <Ionicons name="calendar-outline" size={18} color={Colors.yellow} />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: colors.black, flex: 1 }}>
+                  {editDate.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                </Text>
+                <Ionicons name={editShowDatePicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
+              </TouchableOpacity>
+              {editShowDatePicker && editEvent?.source !== 'phone' && (
+                <DateTimePicker value={editDate} mode="date" display="inline" locale="nl-NL" accentColor={Colors.yellow}
+                  onChange={(_, d) => { if (d) setEditDate(d); }} style={{ alignSelf: 'center' }} />
+              )}
+              <TouchableOpacity onPress={() => { setEditShowTimePicker(v => !v); setEditShowDatePicker(false); }}
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, gap: 10, opacity: editEvent?.source === 'phone' ? 0.5 : 1 }}>
+                <Ionicons name="time-outline" size={18} color={editTime ? Colors.yellow : colors.gray400} />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15, color: editTime ? colors.black : colors.gray400, flex: 1 }}>
+                  {editTime
+                    ? `${String(editTime.getHours()).padStart(2,'0')}:${String(editTime.getMinutes()).padStart(2,'0')}`
+                    : 'Geen tijdstip'}
+                </Text>
+                {editTime
+                  ? <TouchableOpacity onPress={(e) => { e.stopPropagation(); setEditTime(null); setEditShowTimePicker(false); }}><Ionicons name="close-circle" size={18} color={colors.gray400} /></TouchableOpacity>
+                  : <Ionicons name={editShowTimePicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.gray400} />
+                }
+              </TouchableOpacity>
+              {editShowTimePicker && editEvent?.source !== 'phone' && (
+                <DateTimePicker value={editTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
+                  onChange={(_, t) => { if (t) { setEditTime(t); setEditShowTimePicker(false); } }} />
+              )}
+              {editEvent?.source === 'sous-chef' && (
+                <TouchableOpacity onPress={saveEditEvent} disabled={!editTitle.trim() || editSaving}
+                  style={{ backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center', opacity: editTitle.trim() ? 1 : 0.4 }}>
+                  {editSaving
+                    ? <ActivityIndicator size="small" color={Colors.black} />
+                    : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black }}>Opslaan</Text>}
+                </TouchableOpacity>
+              )}
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>

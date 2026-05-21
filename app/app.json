@@ -18,7 +18,10 @@
       "bundleIdentifier": "com.lucasheijting.souschef",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": ["location", "remote-notification"],
+        "UIBackgroundModes": [
+          "location",
+          "remote-notification"
+        ],
         "NSLocationWhenInUseUsageDescription": "Sous-Chef gebruikt je locatie om te zien wanneer je bij de supermarkt bent.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Sous-Chef stuurt een herinnering via WhatsApp als je bij de supermarkt aankomt."
       }
@@ -68,7 +71,8 @@
         {
           "sounds": []
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

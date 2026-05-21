@@ -158,7 +158,7 @@ Gebruik deze standaardtijden ook als de gebruiker alleen "vanavond" of "morgenoc
 
 ## Datumregels
 
-Vandaag is ${new Date().toLocaleDateString('nl-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.
+Vandaag is ${new Date().toLocaleDateString('nl-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/Amsterdam' })}.
 Gebruik ISO 8601 (YYYY-MM-DD).
 
 **Relatieve datums:**
