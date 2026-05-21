@@ -12,6 +12,7 @@ export type ModuleSettings = {
   user_name: string;
   habits_onboarding_done: boolean;
   getting_started_dismissed: boolean;
+  week_start: 'monday' | 'sunday';
 };
 
 const DEFAULTS: ModuleSettings = {
@@ -23,6 +24,7 @@ const DEFAULTS: ModuleSettings = {
   user_name: '',
   habits_onboarding_done: false,
   getting_started_dismissed: false,
+  week_start: 'monday',
 };
 
 type ModuleSettingsContextType = {

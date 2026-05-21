@@ -1504,7 +1504,33 @@ export default function InstellingenTab() {
             <View style={{ width: 72 }} />
           </View>
           <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-            <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
+            {/* Week start setting */}
+            <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 20 }]}>Weergave</Text>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
+              <View style={[styles.row, { paddingVertical: 14 }]}>
+                <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
+                  <Ionicons name="today-outline" size={18} color={colors.black} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowLabel, { color: colors.black }]}>Eerste dag van de week</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  {(['monday', 'sunday'] as const).map(day => (
+                    <TouchableOpacity
+                      key={day}
+                      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); updateSetting('week_start', day); }}
+                      style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, backgroundColor: settings.week_start === day ? Colors.yellow : colors.gray100 }}
+                    >
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: settings.week_start === day ? Colors.black : colors.gray400 }}>
+                        {day === 'monday' ? 'Ma' : 'Zo'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </View>
+            <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Koppeling</Text>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
               <SettingsRow
                 icon="calendar-outline"
                 label="iPhone Agenda koppelen"

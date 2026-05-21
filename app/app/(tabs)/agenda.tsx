@@ -151,21 +151,34 @@ async function fetchPhoneEvents(): Promise<MergedEvent[]> {
 
 // ── Month grid ─────────────────────────────────────────────────────────────────
 
-function MonthGrid({ year, month, eventsByDate, selectedDate, onDayPress, streams }: {
+function MonthGrid({ year, month, eventsByDate, selectedDate, onDayPress, streams, weekStart }: {
   year: number; month: number; eventsByDate: Map<string, MergedEvent[]>;
   selectedDate: string; onDayPress: (k: string) => void; streams: CalendarStream[];
+  weekStart: 'monday' | 'sunday';
 }) {
   const { colors } = useTheme();
-  const firstDow      = new Date(year, month, 1).getDay();
-  const leadingBlanks = firstDow === 0 ? 6 : firstDow - 1;
-  const daysInMonth   = new Date(year, month + 1, 0).getDate();
+  const firstDow    = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // leadingBlanks: how many empty cells before the 1st of the month
+  const leadingBlanks = weekStart === 'monday'
+    ? (firstDow === 0 ? 6 : firstDow - 1)  // Mon-based: Sun→6
+    : firstDow;                              // Sun-based: Sun→0
+
+  const DAY_HEADERS = weekStart === 'monday'
+    ? ['Ma','Di','Wo','Do','Vr','Za','Zo']
+    : ['Zo','Ma','Di','Wo','Do','Vr','Za'];
+  const WEEKEND_INDICES = weekStart === 'monday' ? [5, 6] : [0, 6];
 
   const allDays: (null | { key: string; num: number; isToday: boolean; isWeekend: boolean })[] = [];
   for (let b = 0; b < leadingBlanks; b++) allDays.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const key = toKey(new Date(year, month, d));
     const dow = new Date(year, month, d).getDay();
-    allDays.push({ key, num: d, isToday: key === TODAY, isWeekend: dow === 0 || dow === 6 });
+    const colIndex = weekStart === 'monday'
+      ? (dow === 0 ? 6 : dow - 1)
+      : dow;
+    allDays.push({ key, num: d, isToday: key === TODAY, isWeekend: WEEKEND_INDICES.includes(colIndex) });
   }
   while (allDays.length % 7 !== 0) allDays.push(null);
 
@@ -181,8 +194,8 @@ function MonthGrid({ year, month, eventsByDate, selectedDate, onDayPress, stream
       </Text>
       <View style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
         <View style={{ width: 28 }} />
-        {['Ma','Di','Wo','Do','Vr','Za','Zo'].map((n, i) => (
-          <Text key={n} style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter_600SemiBold', fontSize: 11, color: i >= 5 ? colors.gray200 : colors.gray400, paddingBottom: 6 }}>{n}</Text>
+        {DAY_HEADERS.map((n, i) => (
+          <Text key={n} style={{ flex: 1, textAlign: 'center', fontFamily: 'Inter_600SemiBold', fontSize: 11, color: WEEKEND_INDICES.includes(i) ? colors.gray200 : colors.gray400, paddingBottom: 6 }}>{n}</Text>
         ))}
       </View>
       {weeks.map((week, wi) => {
@@ -272,6 +285,30 @@ function AgendaLite() {
   const [selectedDate, setSelectedDate]   = useState(TODAY);
   const [dayDetailMode, setDayDetailMode] = useState(false);
   const monthsRef = useRef<FlatList>(null);
+  const { settings } = useModuleSettings();
+
+  // Center on current month whenever calendar grid becomes visible
+  useEffect(() => {
+    if (viewMode === 'calendar' && !dayDetailMode) {
+      setTimeout(() => monthsRef.current?.scrollToIndex({ index: MONTHS_BEFORE, animated: false }), 60);
+    }
+  }, [viewMode, dayDetailMode]);
+
+  const daySwipePanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, g) =>
+        Math.abs(g.dx) > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.8,
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dx) < 50) return;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (g.dx < 0) {
+          setSelectedDate(prev => { const d = new Date(prev + 'T12:00:00'); d.setDate(d.getDate() + 1); return toKey(d); });
+        } else {
+          setSelectedDate(prev => { const d = new Date(prev + 'T12:00:00'); d.setDate(d.getDate() - 1); return toKey(d); });
+        }
+      },
+    })
+  ).current;
 
   const PERIOD_LABELS: [TimePeriod, string][] = [
     ['today', 'Vandaag'],
@@ -644,6 +681,7 @@ function AgendaLite() {
             <MonthGrid
               year={m.year} month={m.month}
               eventsByDate={eventsByDate} streams={streams} selectedDate={selectedDate}
+              weekStart={settings.week_start}
               onDayPress={(d) => {
                 setSelectedDate(d);
                 setDayDetailMode(true);
@@ -656,7 +694,7 @@ function AgendaLite() {
 
       {/* ── Calendar: day detail (timeline) ─────────────────────────── */}
       {viewMode === 'calendar' && dayDetailMode && (
-        <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
+        <View style={{ flex: 1, backgroundColor: colors.offWhite }} {...daySwipePanResponder.panHandlers}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
             <TouchableOpacity onPress={() => setDayDetailMode(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 2, width: 70 }} activeOpacity={0.7}>
               <Ionicons name="chevron-back" size={22} color={colors.black} />
@@ -874,488 +912,6 @@ export default function AgendaTab() {
   return <AgendaLite />;
 }
 
-function _AgendaTabFull_REMOVED() {
-  // dead code removed
-  return null;
-
-  const { user }   = useUser();
-  const { colors } = useTheme();
-  const insets     = useSafeAreaInsets();
-  const listRef    = useRef<FlatList<FlatItem>>(null);
-  const monthsRef  = useRef<FlatList>(null);
-  const chipScrollRef = useRef<ScrollView>(null);
-
-  const [allSections, setAllSections]   = useState<Section[]>([]);
-  const [timePeriod, setTimePeriod]     = useState<TimePeriod>('today');
-  const [streamFilter, setStreamFilter] = useState<string | null>(null);
-  const [loading, setLoading]           = useState(true);
-  const [refreshing, setRefreshing]       = useState(false);
-  const [calPermission, setCalPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
-  const [calHidden, setCalHidden]         = useState(false);
-  const [viewMode, setViewMode]         = useState<ViewMode>('calendar');
-  const [selectedDate, setSelectedDate] = useState(TODAY);
-  const [dayDetailMode, setDayDetailMode] = useState(false);
-  const [streams, setStreams]           = useState<CalendarStream[]>([]);
-  const [deleteTarget, setDeleteTarget] = useState<MergedEvent | null>(null);
-
-  const breatheAnim  = useRef(new Animated.Value(1)).current;
-  const scrollYAnim  = useRef(new Animated.Value(0)).current;
-
-  const PERIOD_LABELS: [TimePeriod, string][] = [
-    ['today', 'Vandaag'],
-    ['tomorrow', 'Morgen'],
-    ['thisweek', 'Deze week'],
-    ['nextweek', 'Volgende week'],
-  ];
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breatheAnim, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-        Animated.timing(breatheAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [breatheAnim]);
-
-  const swipePanResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dx) > Math.abs(g.dy),
-      onPanResponderRelease: (_, g) => {
-        if (g.dx < -60) {
-          setTimePeriod(prev => {
-            const idx = PERIOD_ORDER.indexOf(prev);
-            const next = PERIOD_ORDER[Math.min(idx + 1, PERIOD_ORDER.length - 1)];
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            const ni = PERIOD_ORDER.indexOf(next);
-            chipScrollRef.current?.scrollTo({ x: Math.max(0, ni * 90 - screenWidth / 2 + 45), animated: true });
-            return next;
-          });
-        } else if (g.dx > 60) {
-          setTimePeriod(prev => {
-            const idx = PERIOD_ORDER.indexOf(prev);
-            const next = PERIOD_ORDER[Math.max(idx - 1, 0)];
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-            const ni = PERIOD_ORDER.indexOf(next);
-            chipScrollRef.current?.scrollTo({ x: Math.max(0, ni * 90 - screenWidth / 2 + 45), animated: true });
-            return next;
-          });
-        }
-      },
-    })
-  ).current;
-
-  const fetchEvents = useCallback(async (overrideHidden = calHidden) => {
-    const results: MergedEvent[] = [];
-    if (user && user.id !== 'dev') {
-      const { data } = await supabase.from('events').select('*').eq('user_id', user.id).order('date', { ascending: true, nullsFirst: false });
-      if (data) results.push(...data.map((e: CalEvent) => ({ ...e, source: 'sous-chef' as const })));
-    }
-    if (!overrideHidden && Platform.OS !== 'web') {
-      const { status } = await Calendar.getCalendarPermissionsAsync();
-      if (status === 'granted') {
-        setCalPermission('granted');
-        const phoneEvts = await fetchPhoneEvents();
-        const scKeys = new Set(results.map(e => `${e.title?.toLowerCase()}|${e.date}`));
-        results.push(...phoneEvts.filter(e => !scKeys.has(`${e.title?.toLowerCase()}|${e.date}`)));
-      } else {
-        setCalPermission(status === 'denied' ? 'denied' : 'unknown');
-      }
-    }
-    setAllSections(groupByDate(results));
-    setLoading(false);
-    setRefreshing(false);
-  }, [user, calHidden]);
-
-  useEffect(() => {
-    fetchEvents();
-    if (!user || user.id === 'dev') return;
-    supabase.from('calendar_streams').select('*').eq('user_id', user.id)
-      .then(({ data }) => { if (data) setStreams(data); });
-    const ch = supabase.channel('events-ch')
-      .on('postgres_changes' as any, { event: '*', schema: 'public', table: 'events', filter: `user_id=eq.${user.id}` }, fetchEvents)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [user, fetchEvents]);
-
-  const months = useMemo(() => {
-    const now = new Date();
-    return Array.from({ length: MONTHS_BEFORE + 1 + MONTHS_AFTER }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - MONTHS_BEFORE + i, 1);
-      return { year: d.getFullYear(), month: d.getMonth(), index: i };
-    });
-  }, []);
-
-  const eventDates   = useMemo(() => new Set(allSections.map(s => s.dateKey)), [allSections]);
-  const eventsByDate = useMemo(() => { const m = new Map<string, MergedEvent[]>(); for (const s of allSections) m.set(s.dateKey, s.data); return m; }, [allSections]);
-  const phoneConnected = calPermission === 'granted' && !calHidden;
-
-  const periodCounts = useMemo(() => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
-    const ranges: Record<TimePeriod, [string, string]> = {
-      today:    [offsetDay(0), offsetDay(0)],
-      tomorrow: [offsetDay(1), offsetDay(1)],
-      thisweek: [offsetDay(0), offsetDay(6)],
-      nextweek: [offsetDay(7), offsetDay(13)],
-    };
-    const counts: Record<TimePeriod, number> = { today: 0, tomorrow: 0, thisweek: 0, nextweek: 0 };
-    const allEvents = allSections.flatMap(s => s.data);
-    for (const p of PERIOD_ORDER) {
-      const [start, end] = ranges[p];
-      counts[p] = allEvents.filter(e => e.date && e.date >= start && e.date <= end).length;
-    }
-    return counts;
-  }, [allSections]);
-
-  const sections = useMemo(() => {
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const offsetDay = (n: number) => { const d = new Date(now); d.setDate(d.getDate() + n); return toKey(d); };
-    const ranges: Record<TimePeriod, [string, string]> = {
-      today:    [offsetDay(0), offsetDay(0)],
-      tomorrow: [offsetDay(1), offsetDay(1)],
-      thisweek: [offsetDay(0), offsetDay(6)],
-      nextweek: [offsetDay(7), offsetDay(13)],
-    };
-    const [start, end] = ranges[timePeriod];
-    let base = allSections.filter(s => s.dateKey >= start && s.dateKey <= end);
-    if (streamFilter) {
-      base = base.map(s => ({ ...s, data: s.data.filter(e => e.calendar_stream === streamFilter || (streamFilter === '__phone' && e.source === 'phone')) })).filter(s => s.data.length > 0);
-    }
-    return base;
-  }, [allSections, timePeriod, streamFilter]);
-
-  const { flatData, stickyIndices } = useMemo(() => {
-    const items: FlatItem[] = []; const sticky: number[] = [];
-    for (const section of sections) {
-      sticky.push(items.length);
-      items.push({ type: 'header', section });
-      section.data.forEach((item, idx) => items.push({ type: 'item', item, section, isLast: idx === section.data.length - 1 }));
-    }
-    return { flatData: items, stickyIndices: sticky };
-  }, [sections]);
-
-  const upcomingCount = allSections.filter(s => !s.isPast).reduce((n, s) => n + s.data.length, 0);
-  const thisWeekCount = allSections.filter(s => !s.isPast && Math.round((new Date(s.dateKey + 'T00:00:00').getTime() - new Date().setHours(0,0,0,0)) / 86400000) <= 7).reduce((n, s) => n + s.data.length, 0);
-
-  if (loading) return <View style={[s.center, { backgroundColor: colors.offWhite }]}><ActivityIndicator size="large" color={Colors.yellow} /></View>;
-
-  const selectedEvents = eventsByDate.get(selectedDate) ?? [];
-
-  function selectPeriod(p: TimePeriod) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setTimePeriod(p as TimePeriod);
-    const index = PERIOD_ORDER.indexOf(p);
-    chipScrollRef.current?.scrollTo({ x: Math.max(0, index * 90 - screenWidth / 2 + 45), animated: true });
-  }
-
-  async function deleteEvent(event: MergedEvent) {
-    if (event.source !== 'sous-chef') return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    await supabase.from('events').delete().eq('id', event.id);
-    setAllSections(prev => prev.map(sec => ({ ...sec, data: sec.data.filter(e => e.id !== event.id) })).filter(sec => sec.data.length > 0));
-    setDeleteTarget(null);
-  }
-
-  const bannerTranslateY = scrollYAnim.interpolate({
-    inputRange: [0, 100],
-    outputRange: [0, -20],
-    extrapolate: 'clamp',
-  });
-
-  return (
-    <View style={[s.container, { backgroundColor: colors.offWhite }]}>
-
-      {/* ── Fixed header ─────────────────────────────────────────────────── */}
-      <View>
-        <Animated.View style={[s.banner, { paddingTop: insets.top + 44, transform: [{ translateY: bannerTranslateY }] }]}>
-          <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
-          <View style={s.bannerRow}>
-            <Text style={s.bannerTitle}>Agenda</Text>
-          </View>
-          <View style={s.bannerStats}>
-            <View style={s.statTile}>
-              <Text style={s.statNum}>{thisWeekCount}</Text>
-              <Text style={s.statLabel}>deze week</Text>
-            </View>
-            <View style={[s.statTile, s.statTileAccent]}>
-              <Text style={[s.statNum, { color: Colors.black }]}>{upcomingCount}</Text>
-              <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>aankomend</Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Time period pills */}
-        <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 8 }}>
-          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Periode</Text>
-          <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {PERIOD_LABELS.map(([p, label]) => {
-              const count = periodCounts[p];
-              const active = timePeriod === p;
-              return (
-                <TouchableOpacity
-                  key={p}
-                  onPress={() => selectPeriod(p)}
-                  style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: active ? Colors.yellow : '#DDDCDC' }}
-                >
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>
-                    {label}{' '}
-                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: count === 0 ? '#aaa' : '#333' }}>
-                      ({count})
-                    </Text>
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Separator */}
-        <View style={{ height: 1, backgroundColor: '#E8E8E8', marginHorizontal: 20, marginBottom: 8 }} />
-
-        {/* Stream category chips */}
-        {streams.length > 0 && (
-          <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, paddingBottom: 12 }}>
-            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Categorie</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <TouchableOpacity onPress={() => setStreamFilter(null)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
-              </TouchableOpacity>
-              {streams.map(st => (
-                <TouchableOpacity key={st.id} onPress={() => setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
-                </TouchableOpacity>
-              ))}
-              {phoneConnected && (
-                <TouchableOpacity onPress={() => setStreamFilter(streamFilter === '__phone' ? null : '__phone')} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === '__phone' ? '#333' : '#DDDCDC' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === '__phone' ? '#fff' : '#111', lineHeight: 18 }}>📱 iPhone</Text>
-                </TouchableOpacity>
-              )}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* View mode toggle */}
-        <View style={[s.toggleWrap, { backgroundColor: colors.offWhite }]}>
-          <TouchableOpacity style={s.tabTextBtn} onPress={() => { setViewMode('list'); setDayDetailMode(false); }}>
-            <Text style={[s.tabTextLabel, { color: viewMode === 'list' ? colors.black : colors.gray400 }]}>Lijst</Text>
-            {viewMode === 'list' && <View style={[s.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={s.tabTextBtn}
-            onPress={() => {
-              setViewMode('calendar');
-              setDayDetailMode(false);
-              setTimeout(() => monthsRef.current?.scrollToIndex({ index: MONTHS_BEFORE, animated: false }), 80);
-            }}
-          >
-            <Text style={[s.tabTextLabel, { color: viewMode === 'calendar' ? colors.black : colors.gray400 }]}>Kalender</Text>
-            {viewMode === 'calendar' && <View style={[s.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ── List view ─────────────────────────────────────────────────────── */}
-      {viewMode === 'list' && (
-        <FlatList
-          ref={listRef}
-          data={flatData}
-          keyExtractor={(item, i) => item.type === 'header' ? `h-${item.section.dateKey}` : `i-${item.item.id}-${i}`}
-          stickyHeaderIndices={stickyIndices}
-          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
-          onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollYAnim } } }], { useNativeDriver: false })}
-          scrollEventThrottle={16}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchEvents(); }} tintColor={Colors.yellow} />}
-          ListHeaderComponent={
-            <View {...swipePanResponder.panHandlers}>
-              {calPermission === 'unknown' && !calHidden && Platform.OS !== 'web' && (
-                <TouchableOpacity style={[s.permBanner, { backgroundColor: colors.yellowLight }]} onPress={async () => { await fetchPhoneEvents(); setCalPermission('granted'); fetchEvents(); }}>
-                  <Ionicons name="phone-portrait-outline" size={15} color={colors.black} />
-                  <Text style={[s.permText, { color: colors.black }]}>Toon ook je iPhone-agenda</Text>
-                  <Ionicons name="chevron-forward" size={13} color={colors.gray400} />
-                </TouchableOpacity>
-              )}
-              {sections.length === 0 && (
-                <View style={s.empty}>
-                  <Animated.View style={[s.emptyIconBox, { backgroundColor: colors.gray100, transform: [{ scale: breatheAnim }] }]}>
-                    <Text style={{ fontSize: 32 }}>📅</Text>
-                  </Animated.View>
-                  <Text style={[s.emptyTitle, { color: colors.black }]}>Niets gepland</Text>
-                  <Text style={[s.emptyText, { color: colors.gray400 }]}>Stuur "tandarts vrijdag 14u" via WhatsApp.</Text>
-                </View>
-              )}
-            </View>
-          }
-          renderItem={({ item }) => {
-            if (item.type === 'header') {
-              const { section } = item;
-              return (
-                <View style={[s.sectionHeader, { backgroundColor: colors.offWhite }, section.isPast && s.sectionHeaderPast]}>
-                  <View style={[s.dot, { backgroundColor: colors.gray200 }, section.isToday && s.dotToday]} />
-                  <Text style={[s.sectionLabel, { color: colors.gray400 }, section.isToday && s.sectionLabelToday, section.isPast && { color: colors.gray400 }]}>{section.label}</Text>
-                </View>
-              );
-            }
-            const { item: event, section, isLast } = item;
-            const cl = daysUntil(section.dateKey);
-            const streamColor = event.source === 'sous-chef'
-              ? streams.find(s => s.claude_key === event.calendar_stream)?.color
-              : undefined;
-            const eventPast = event.date ? isPast(event.date) : false;
-
-            const cardContent = (
-              <View style={[s.cardWrap, isLast && { marginBottom: 4 }, { opacity: eventPast ? 0.45 : 1 }]}>
-                <Pressable
-                  style={({ pressed }) => [s.card, { backgroundColor: colors.white, transform: [{ scale: pressed ? 0.97 : 1 }] }, section.isPast && s.cardPast]}
-                  onPress={() => {}}
-                >
-                  <View style={[s.accent, streamColor ? { backgroundColor: streamColor } : event.source === 'phone' ? { backgroundColor: colors.gray200 } : section.isToday ? s.accentToday : { backgroundColor: colors.gray200 }]} />
-                  <Text style={s.emoji}>{eventEmoji(event.title)}</Text>
-                  <View style={s.cardBody}>
-                    <Text style={[s.cardTitle, { color: colors.black }, section.isPast && { color: colors.gray400 }]} numberOfLines={1}>{event.title}</Text>
-                    <View style={s.metaRow}>
-                      {event.time && <View style={[s.tag, { backgroundColor: colors.gray100 }]}><Ionicons name="time-outline" size={10} color={colors.gray400} /><Text style={[s.tagText, { color: colors.gray600 }]}>{event.time}</Text></View>}
-                      {event.source === 'phone' && <View style={[s.tag, { backgroundColor: colors.gray100 }]}><Ionicons name="phone-portrait-outline" size={10} color={colors.gray400} /><Text style={[s.tagText, { color: colors.gray600 }]}>iPhone</Text></View>}
-                      {event.recurrence && event.source === 'sous-chef' && <View style={[s.tag, { backgroundColor: colors.gray100 }]}><Ionicons name="repeat" size={10} color={colors.gray600} /><Text style={[s.tagText, { color: colors.gray600 }]}>{event.recurrence === 'yearly' ? 'Jaarlijks' : event.recurrence === 'monthly' ? 'Maandelijks' : 'Wekelijks'}</Text></View>}
-                      {(event.reminder_days_before ?? 0) > 0 && event.source === 'sous-chef' && <View style={[s.tag, { backgroundColor: colors.gray100 }]}><Ionicons name="notifications-outline" size={10} color={colors.gray600} /><Text style={[s.tagText, { color: colors.gray600 }]}>{event.reminder_days_before}d reminder</Text></View>}
-                    </View>
-                  </View>
-                  {cl && <Text style={[s.countLabel, { color: colors.gray400 }, section.isPast && { color: colors.gray400 }]}>{cl}</Text>}
-                </Pressable>
-              </View>
-            );
-
-            if (event.source !== 'sous-chef') return cardContent;
-
-            return (
-              <Swipeable
-                key={event.id}
-                renderRightActions={() => (
-                  <View style={{ width: 72, justifyContent: 'center', alignItems: 'center', paddingBottom: isLast ? 4 : 8, paddingHorizontal: 8 }}>
-                    <View style={{ backgroundColor: '#E74C3C', borderRadius: Radius.lg, flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                      <Ionicons name="trash-outline" size={20} color="#fff" />
-                    </View>
-                  </View>
-                )}
-                onSwipeableOpen={() => setDeleteTarget(event)}
-              >
-                {cardContent}
-              </Swipeable>
-            );
-          }}
-        />
-      )}
-
-      {/* ── Calendar view ──────────────────────────────────────────────────── */}
-      {viewMode === 'list' && (
-        <LinearGradient
-          colors={[`${colors.offWhite}00`, colors.offWhite]}
-          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, pointerEvents: 'none' }}
-        />
-      )}
-
-
-      {/* ── Calendar: month grid ──────────────────────────────────────────── */}
-      {viewMode === 'calendar' && !dayDetailMode && (
-        <FlatList
-          ref={monthsRef}
-          data={months}
-          style={{ flex: 1, backgroundColor: colors.offWhite }}
-          keyExtractor={m => `${m.year}-${m.month}`}
-          initialScrollIndex={MONTHS_BEFORE}
-          getItemLayout={(_, index) => ({ length: MONTH_H, offset: MONTH_H * index, index })}
-          onScrollToIndexFailed={() => {}}
-          showsVerticalScrollIndicator={false}
-          extraData={selectedDate}
-          renderItem={({ item: m }) => (
-            <MonthGrid
-              year={m.year} month={m.month}
-              eventsByDate={eventsByDate} streams={streams} selectedDate={selectedDate}
-              onDayPress={(d) => {
-                setSelectedDate(d);
-                setDayDetailMode(true);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-            />
-          )}
-        />
-      )}
-
-      {/* ── Calendar: day detail ──────────────────────────────────────────── */}
-      {viewMode === 'calendar' && dayDetailMode && (
-        <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
-          <View style={[cal.dayDetailHeader, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
-            <TouchableOpacity onPress={() => setDayDetailMode(false)} style={cal.dayDetailBack} activeOpacity={0.7}>
-              <Ionicons name="chevron-back" size={22} color={Colors.black} />
-              <Text style={[cal.dayDetailBackText, { color: Colors.black }]}>Terug</Text>
-            </TouchableOpacity>
-            <Text style={[cal.dayDetailTitle, { color: colors.black }]}>{sectionLabel(selectedDate)}</Text>
-            <View style={{ width: 70 }} />
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }} showsVerticalScrollIndicator={false}>
-            {selectedEvents.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-                <View style={[s.emptyIconBox, { backgroundColor: colors.gray100 }]}>
-                  <Text style={{ fontSize: 32 }}>📅</Text>
-                </View>
-                <Text style={[s.emptyTitle, { color: colors.black }]}>Geen afspraken</Text>
-                <Text style={[s.emptyText, { color: colors.gray400 }]}>
-                  Geen afspraken op {sectionLabel(selectedDate).toLowerCase()}
-                </Text>
-              </View>
-            ) : selectedEvents.map(e => {
-              const sc = e.source === 'sous-chef' ? streams.find(st => st.claude_key === e.calendar_stream)?.color : undefined;
-              return (
-                <View key={e.id} style={[cal.dayEventCard, { backgroundColor: colors.white }]}>
-                  {sc && <View style={{ width: 4, borderRadius: 2, backgroundColor: sc, marginRight: 12, alignSelf: 'stretch' }} />}
-                  <Text style={cal.eventEmoji}>{eventEmoji(e.title)}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[cal.eventTitle, { color: colors.black }]}>{e.title}</Text>
-                    {(e.time || e.source === 'phone' || e.recurrence) && (
-                      <Text style={[cal.eventSub, { color: colors.gray400 }]}>
-                        {[e.time, e.source === 'phone' ? 'iPhone-agenda' : null, e.recurrence === 'yearly' ? 'Jaarlijks' : e.recurrence === 'monthly' ? 'Maandelijks' : e.recurrence === 'weekly' ? 'Wekelijks' : null].filter(Boolean).join(' · ')}
-                      </Text>
-                    )}
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.gray200} />
-                </View>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Delete confirmation bottom sheet */}
-      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 8 }}>Afspraak verwijderen?</Text>
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, marginBottom: 24 }}>
-              "{deleteTarget?.title}" wordt{deleteTarget?.source === 'phone' ? ' uit je iPhone-agenda verwijderd' : ' permanent verwijderd'}.
-            </Text>
-            <Pressable
-              onPress={() => { if (deleteTarget) deleteEvent(deleteTarget); }}
-              style={({ pressed }) => [{ backgroundColor: '#E74C3C', borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', marginBottom: 10, opacity: pressed ? 0.8 : 1 }]}
-            >
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: '#fff' }}>Verwijderen</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDeleteTarget(null)}
-              style={({ pressed }) => [{ backgroundColor: colors.gray100, borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>Annuleren</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-    </View>
-  );
-}
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 
