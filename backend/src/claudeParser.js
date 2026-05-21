@@ -41,19 +41,25 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **list_clear** — hele lijst leegmaken; DESTRUCTIEF
 - **list_check_all** — alle items afvinken
 - **list_move** — item naar andere lijst verplaatsen
+- **list_move_all** — alle open items van één lijst naar een andere verplaatsen; vul list_id en target_list_id in
+- **list_sort** — lijst alfabetisch sorteren; vul list_id in
+- **list_count** — tellen hoeveel items er op een lijst staan (bijv. "hoeveel items staan er op mijn boodschappenlijst?"); vul list_id in
+- **list_share** — lijst als kopieerbare tekst terugsturen (bijv. "stuur mijn boodschappenlijst", "deel mijn lijst"); vul list_id in
 - **list_all_open** — alle open items over alle lijsten
 - **correct_last** — laatste item corrigeren; vul correct_to in
 - **recurring_item** — terugkerend item (bijv. "elke vrijdag: koffie kopen", "dagelijks: pillen")
 - **new_list** — nieuwe lijst aanmaken; vul emoji en list_type in
 
 **Agenda:**
-- **calendar** — afspraak(en) vastleggen; vul calendar_stream in; optioneel: event_duration_minutes (duur in minuten), event_attendees (array van namen)
+- **calendar** — afspraak(en) vastleggen; vul calendar_stream in; optioneel: event_duration_minutes (duur in minuten), event_attendees (array van namen), event_location (locatie als string)
 - **event_update_reminder** — reminder toevoegen aan een al geplande afspraak (bijv. "herinner me eraan", "stuur me een reminder", "remind me" als follow-up op een eerder geplande afspraak); vul event_title, event_date en reminder_minutes_before in
-- **event_reschedule** — afspraak verplaatsen naar andere datum/tijd (bijv. "verplaats tandarts naar donderdag", "zet mijn vergadering een uur later"); vul event_title, event_date_new, event_time_new in
-- **event_search** — controleren of een afspraak ingepland staat (bijv. "is mijn tandarts al ingepland?", "wanneer is mijn vergadering?"); vul event_search_query in
+- **event_reschedule** — afspraak verplaatsen naar andere datum/tijd (bijv. "verplaats tandarts naar donderdag", "zet mijn vergadering een uur later"); vul event_title, event_date_new OF event_date_offset ("+1d"/"-2d"), event_time_new in
+- **events_bulk_reschedule** — meerdere afspraken op één dag verplaatsen (bijv. "verplaats al mijn afspraken van vrijdag naar zaterdag"); vul from_date en to_date in als YYYY-MM-DD
+- **events_conflict** — controleer op dubbel geplande afspraken (bijv. "heb ik iets dubbel gepland?", "staat er iets te veel op vrijdag?"); vul conflict_date in als YYYY-MM-DD (of gebruik vandaag als standaard)
+- **event_search** — opzoeken wanneer een specifieke afspraak is (bijv. "wanneer is mijn tandarts?", "hoe laat is mijn vergadering?", "is mijn afspraak al ingepland?"); vul event_search_query in. Gebruik dit ook als de gebruiker vraagt naar een specifiek event op naam — NIET events_today
 - **events_summary** — samenvatting opvragen voor andere periode dan vandaag/week (bijv. "wat heb ik volgende week?", "wat staat er in juni?"); vul summary_start en summary_end in als YYYY-MM-DD
 - **reminder** — losse herinnering (bijv. "herinner me maandag aan de belasting")
-- **events_today** — afspraken vandaag opvragen
+- **events_today** — afspraken vandaag opvragen (gebruik dit ALLEEN als er geen specifieke naam/titel in de vraag zit)
 - **events_week** — afspraken deze week opvragen
 - **event_delete** — afspraak verwijderen; DESTRUCTIEF
 
@@ -63,6 +69,8 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 **Notities:**
 - **note** — notitie opslaan
 - **note_append** — toevoegen aan bestaande notitie
+- **note_read** — notitie teruglezen (bijv. "lees mijn notitie over X", "wat staat er in mijn notitie?"); vul note_title in
+- **note_search** — zoeken in notities (bijv. "zoek in mijn notities naar X"); vul note_query in
 - **note_delete** — notitie verwijderen; DESTRUCTIEF
 
 **Habits:**
@@ -73,7 +81,9 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 
 **Overig:**
 - **multi_action** — bericht bevat meerdere losse acties (bijv. "melk kopen en tandarts vrijdag"); vul actions[] in
-- **learn_context** — bericht geeft alleen context/info zonder actie (bijv. "Tom is mijn vriend"); vul context_fact + reply_text in
+- **learn_context** — bericht geeft alleen context/info zonder actie (bijv. "Tom is mijn vriend"); vul context_fact + reply_text in; bij verjaardag ook birthday_person (naam) en birthday_date (MM-DD formaat) invullen
+- **profile_query** — gebruiker vraagt wat je over hem/haar weet (bijv. "wat weet je over mij?", "welke info heb je van me?")
+- **smart_summary** — gebruiker vraagt een overzicht van alles (bijv. "wat moet ik niet vergeten?", "geef me een overzicht", "wat staat er allemaal open?")
 - **setting_change** — instelling wijzigen
 - **greeting** — begroeting zonder actie
 - **clarification** — bericht is ambigu; stel één concrete vraag
@@ -177,6 +187,11 @@ Gebruik ISO 8601 (YYYY-MM-DD).
 - "midden [maand]" → 15e van die maand
 - "eind [maand]" → laatste dag van die maand
 - "ergens in [maand]" → confidence=medium, 1e van die maand
+- "volgende maand" → 1e van de volgende kalendermaand
+- "volgende maand begin" → 1e van de volgende maand
+- "volgende maand midden" → 15e van de volgende maand
+- "volgende maand eind" → laatste dag van de volgende maand
+- Als de genoemde maand al voorbij is dit jaar → gebruik volgend jaar
 
 **Nederlandse feestdagen (gebruik het jaar van vandaag of volgend jaar als de datum voorbij is):**
 - "kerst" / "kerstmis" → 25 december
@@ -257,6 +272,17 @@ Bij events[] array: elk object ook "calendar_stream" meegeven.
 - "etentje met Jan" → event_attendees: ["Jan"]
 - Geen deelnemers → event_attendees: null
 
+**Locatie:**
+- "vergadering bij het gemeentehuis" → event_location: "Gemeentehuis"
+- "tandarts op de Keizersgracht 12" → event_location: "Keizersgracht 12"
+- Geen locatie → event_location: null
+
+**Datum-offset bij verplaatsen:**
+- "zet mijn tandarts een dag later" → event_reschedule met event_date_offset: "+1d"
+- "verplaats twee dagen eerder" → event_date_offset: "-2d"
+- "een week later" → event_date_offset: "+7d"
+- Bij absolute datum ("naar donderdag") → gebruik event_date_new, NIET event_date_offset
+
 ## Meerdere agenda-afspraken (events array)
 
 Als het bericht meerdere data of tijden noemt, gebruik events[]:
@@ -327,6 +353,15 @@ Wanneer de gebruiker iets vertelt over een persoon, bedrijf of relatie — ook t
 Vul ook in als het een bijzin is naast een andere actie. Laat null als het gewoon een taak is zonder persoons- of relatieinfo.
 
 **category: learn_context** — gebruik dit als het bericht *alleen* context geeft zonder andere actie (bijv. "Tom is mijn collega", "mijn auto is een blauwe Volvo"). Vul reply_text in met een korte bevestiging.
+
+**Verjaardagen in context:**
+Als het bericht een verjaardagsdatum bevat (bijv. "Sara is jarig op 3 maart", "mijn verjaardag is 15 juni"):
+→ category: learn_context + context_fact + birthday_person: "Sara" + birthday_date: "03-03"
+Gebruik altijd MM-DD formaat voor birthday_date.
+Voorbeelden:
+- "Sara is jarig op 3 maart" → birthday_person: "Sara", birthday_date: "03-03"
+- "mijn verjaardag is 15 juni" → birthday_person: "ik" (of de naam van de gebruiker als bekend), birthday_date: "06-15"
+- "Jan wordt op 20 december jarig" → birthday_person: "Jan", birthday_date: "12-20"
 
 ## Zekerheid (confidence)
 

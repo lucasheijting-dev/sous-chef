@@ -113,15 +113,16 @@ async function handleMessage({ from, text }) {
     return;
   }
 
-  // Greeting shortcut — morning summary
+  // Greeting shortcut — smart morning summary
   if (GREETING_TRIGGERS.some(t => lc === t || lc === t + '!' || lc === t + '!!' )) {
     if (user.onboarding_completed) {
-      const [lists, activeHabits, todayEvents] = await Promise.all([
+      const [greetLists, greetHabits, greetEvents, greetUnchecked] = await Promise.all([
         db.getLists(userId),
         db.getActiveHabits(userId),
         db.getTodayEvents(userId),
+        db.getAllUncheckedItems(userId),
       ]);
-      const reply = buildGreetingReply(lists, activeHabits, todayEvents);
+      const reply = buildGreetingReply(greetLists, greetHabits, greetEvents, greetUnchecked);
       session.addExchange(userId, text, reply);
       await sendSplit(from, reply);
     }
@@ -575,6 +576,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
             calendar_stream:         intent.calendar_stream ?? 'personal',
             duration_minutes:        intent.event_duration_minutes ?? null,
             attendees:               intent.event_attendees ?? null,
+            location:                intent.event_location ?? null,
           }];
 
       // Ensure CalDAV user is provisioned (lazy)
@@ -603,6 +605,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         const stream          = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
         const durationMinutes = ev.duration_minutes ?? null;
         const attendees       = Array.isArray(ev.attendees) && ev.attendees.length > 0 ? ev.attendees : null;
+        const location        = ev.location ?? null;
 
         // Conflict check: warn if another timed event exists at same time
         if (ev.time && ev.date) {
@@ -620,7 +623,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
               caldavCreds.username,
               caldavCreds.password,
               stream,
-              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes, durationMinutes, attendees },
+              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes, durationMinutes, attendees, location },
             );
           } catch (err) {
             console.error('CalDAV event creation failed, queuing retry:', err.message);
@@ -659,9 +662,10 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           : ev.recurrence?.startsWith('monthly:') ? ' _(maandelijks)_'
           : '';
         const reminderStr = reminderMinutes ? ` _(reminder ${reminderMinutes} min van tevoren)_` : reminderDays ? ` _(reminder ${reminderDays} dag${reminderDays !== 1 ? 'en' : ''} van tevoren)_` : '';
-        const durationStr = durationMinutes ? ` _(${durationMinutes >= 60 ? `${durationMinutes / 60}u` : `${durationMinutes}min`})_` : '';
+        const durationStr = durationMinutes ? ` _(${durationMinutes % 60 === 0 ? `${durationMinutes / 60}u` : `${durationMinutes}min`})_` : '';
         const attendeeStr = attendees ? ` _(met ${attendees.join(', ')})_` : '';
-        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${durationStr}${attendeeStr}${reminderStr}`);
+        const locationStr = location ? ` _(📍 ${location})_` : '';
+        lines.push(`• *${streamLabel}* — *${evTitle}*${dateStr}${recurStr}${durationStr}${attendeeStr}${locationStr}${reminderStr}`);
       }
 
       if (lastSavedEvent) {
@@ -730,7 +734,16 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (matches.length === 0) return `Geen afspraak gevonden met "${title}".`;
       const event = matches[0];
 
-      const newDate = intent.event_date_new ?? event.date;
+      // Support date offsets like "+1d", "-2d"
+      let newDate = intent.event_date_new ?? event.date;
+      if (intent.event_date_offset && event.date) {
+        const match = String(intent.event_date_offset).match(/^([+-])(\d+)d$/);
+        if (match) {
+          const d = new Date(event.date);
+          d.setDate(d.getDate() + parseInt(match[1] + match[2]));
+          newDate = d.toISOString().split('T')[0];
+        }
+      }
       let newTime = intent.event_time_new ?? event.time;
 
       // Handle relative time: "relatief:+1h"
@@ -885,6 +898,154 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       return `⚠️ *${event.title}* verwijderen uit je agenda?\n\nStuur *ja* om te bevestigen.`;
     }
 
+    // ── Events conflict check ─────────────────────────────────────────────────
+
+    case 'events_conflict': {
+      const checkDate = intent.conflict_date ?? new Date().toISOString().split('T')[0];
+      const events = await db.getEventsForDate(userId, checkDate);
+      const timed = events.filter(e => e.time).sort((a, b) => (a.time > b.time ? 1 : -1));
+      const conflicts = [];
+      for (let i = 0; i < timed.length - 1; i++) {
+        if (timed[i].time === timed[i + 1].time) {
+          conflicts.push(`• *${timed[i].title}* en *${timed[i + 1].title}* — beiden om ${timed[i].time}`);
+        }
+      }
+      if (conflicts.length === 0) return `✅ Geen dubbel geplande afspraken op ${formatDate(checkDate)}.`;
+      return `⚠️ *Dubbel geplande afspraken op ${formatDate(checkDate)}:*\n\n${conflicts.join('\n')}`;
+    }
+
+    // ── Bulk reschedule ───────────────────────────────────────────────────────
+
+    case 'events_bulk_reschedule': {
+      const fromDate = intent.from_date;
+      const toDate   = intent.to_date;
+      if (!fromDate || !toDate) return 'Geef op: van welke datum en naar welke datum.';
+      const events = await db.getEventsForDateRange(userId, fromDate, fromDate);
+      if (events.length === 0) return `📅 Geen afspraken gevonden op ${formatDate(fromDate)}.`;
+      await db.bulkUpdateEventDate(userId, events.map(e => e.id), toDate);
+      return `📅 ${events.length} afspraak${events.length !== 1 ? 'en' : ''} verplaatst van ${formatDate(fromDate)} naar ${formatDate(toDate)}.`;
+    }
+
+    // ── List count ────────────────────────────────────────────────────────────
+
+    case 'list_count': {
+      if (!intent.list_id) return 'Welke lijst bedoel je?';
+      const list = lists.find(l => l.id === intent.list_id);
+      if (!list) return 'Die lijst kon ik niet vinden.';
+      const items = await db.getListItems(intent.list_id);
+      const open  = items.filter(i => !i.checked).length;
+      const done  = items.filter(i => i.checked).length;
+      if (items.length === 0) return `${list.emoji ?? '📝'} ${list.name} is leeg.`;
+      return `${list.emoji ?? '📝'} *${list.name}*: ${items.length} item${items.length !== 1 ? 's' : ''} — ${open} open, ${done} klaar.`;
+    }
+
+    // ── List sort ─────────────────────────────────────────────────────────────
+
+    case 'list_sort': {
+      if (!intent.list_id) return 'Welke lijst wil je sorteren?';
+      const list = lists.find(l => l.id === intent.list_id);
+      if (!list) return 'Die lijst kon ik niet vinden.';
+      const items = await db.getListItems(intent.list_id);
+      if (items.length < 2) return `${list.emoji ?? '📝'} ${list.name} heeft te weinig items om te sorteren.`;
+      await db.sortListItemsAlphabetically(intent.list_id);
+      return `✅ ${list.emoji ?? '📝'} *${list.name}* gesorteerd op alfabet (${items.length} items).`;
+    }
+
+    // ── List move all ─────────────────────────────────────────────────────────
+
+    case 'list_move_all': {
+      if (!intent.list_id || !intent.target_list_id) return 'Geef op: van welke lijst en naar welke lijst.';
+      const srcList = lists.find(l => l.id === intent.list_id);
+      const dstList = lists.find(l => l.id === intent.target_list_id);
+      if (!srcList || !dstList) return 'Een van de lijsten kon ik niet vinden.';
+      const items = await db.getListItems(intent.list_id);
+      const open  = items.filter(i => !i.checked);
+      if (open.length === 0) return `${srcList.emoji ?? '📝'} ${srcList.name} heeft geen open items om te verplaatsen.`;
+      await db.moveAllListItems(intent.list_id, intent.target_list_id);
+      return `↗️ ${open.length} item${open.length !== 1 ? 's' : ''} verplaatst van ${srcList.emoji ?? '📝'} *${srcList.name}* naar ${dstList.emoji ?? '📝'} *${dstList.name}*.`;
+    }
+
+    // ── List share ────────────────────────────────────────────────────────────
+
+    case 'list_share': {
+      if (!intent.list_id) return 'Welke lijst wil je delen?';
+      const list = lists.find(l => l.id === intent.list_id);
+      if (!list) return 'Die lijst kon ik niet vinden.';
+      const items = await db.getListItems(intent.list_id);
+      const open  = items.filter(i => !i.checked);
+      if (open.length === 0) return `${list.emoji ?? '📝'} ${list.name} heeft geen open items.`;
+      const lines = open.map(i => `• ${i.text}`).join('\n');
+      return `${list.emoji ?? '📝'} *${list.name}*\n\n${lines}\n\n_(Kopieer deze tekst om te delen)_`;
+    }
+
+    // ── Note search ───────────────────────────────────────────────────────────
+
+    case 'note_search': {
+      const query = intent.note_query ?? intent.note_title;
+      if (!query) return 'Waar wil je naar zoeken in je notities?';
+      const results = await db.searchNotes(userId, query);
+      if (results.length === 0) return `📝 Geen notities gevonden voor "${query}".`;
+      const lines = results.slice(0, 5).map(n => `• *${n.title}*`).join('\n');
+      return `📝 *Gevonden notities:*\n\n${lines}`;
+    }
+
+    // ── Note read ─────────────────────────────────────────────────────────────
+
+    case 'note_read': {
+      const readTitle = intent.note_title;
+      if (!readTitle) return 'Welke notitie wil je lezen?';
+      const notes  = await db.getNotes(userId);
+      const target = fuzzyFindByTitle(notes, readTitle);
+      if (!target) return `Geen notitie gevonden met "${readTitle}".`;
+      return `📝 *${target.title}*\n\n${target.body}`;
+    }
+
+    // ── Profile query ─────────────────────────────────────────────────────────
+
+    case 'profile_query': {
+      const ctx = await db.getUserContext(userId);
+      const facts = ctx.split('\n').filter(l => l && !l.startsWith('Totaal berichten:'));
+      if (facts.length === 0) return 'Ik heb nog geen persoonlijke informatie over je opgeslagen.';
+      return `👤 *Wat ik over je weet:*\n\n${facts.map(f => `• ${f}`).join('\n')}`;
+    }
+
+    // ── Smart summary ─────────────────────────────────────────────────────────
+
+    case 'smart_summary': {
+      const [todayEvts, unchecked] = await Promise.all([
+        db.getTodayEvents(userId),
+        db.getAllUncheckedItems(userId),
+      ]);
+
+      const parts = [];
+
+      if (todayEvts.length > 0) {
+        const evLines = todayEvts.map(e => `• *${e.title}*${e.time ? ` om ${e.time}` : ''}`).join('\n');
+        parts.push(`📅 *Vandaag:*\n${evLines}`);
+      }
+
+      if (unchecked.length > 0) {
+        const byList = {};
+        for (const i of unchecked) {
+          const key = i.list?.name ?? 'Onbekend';
+          const emoji = i.list?.emoji ?? '📝';
+          if (!byList[key]) byList[key] = { emoji, items: [] };
+          byList[key].items.push(i.text);
+        }
+        const listLines = Object.entries(byList).slice(0, 3).map(([name, { emoji, items }]) =>
+          `${emoji} *${name}*: ${items.slice(0, 3).join(', ')}${items.length > 3 ? ` +${items.length - 3}` : ''}`
+        ).join('\n');
+        parts.push(`📋 *Open items:*\n${listLines}`);
+      }
+
+      if (activeHabits.length > 0) {
+        parts.push(`🏋️ *Habits vandaag:* ${activeHabits.map(h => h.name).join(', ')}`);
+      }
+
+      if (parts.length === 0) return '✅ Alles lijkt op orde — geen open items of afspraken vandaag.';
+      return `*Hier is een overzicht:*\n\n${parts.join('\n\n')}`;
+    }
+
     // ── Reminder ─────────────────────────────────────────────────────────────
 
     case 'reminder': {
@@ -1021,8 +1182,28 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
     // ── Greeting (fallback via Claude) ───────────────────────────────────────
 
-    case 'learn_context':
+    case 'learn_context': {
+      // Auto-create yearly calendar event for birthday facts
+      if (intent.birthday_date && intent.birthday_person) {
+        const [bMonth, bDay] = intent.birthday_date.split('-').map(Number);
+        const year = new Date().getMonth() + 1 > bMonth ||
+          (new Date().getMonth() + 1 === bMonth && new Date().getDate() > bDay)
+          ? new Date().getFullYear() + 1
+          : new Date().getFullYear();
+        const dateStr = `${year}-${String(bMonth).padStart(2, '0')}-${String(bDay).padStart(2, '0')}`;
+        const evTitle = `Verjaardag ${intent.birthday_person}`;
+        let caldavUid = null;
+        const caldavCreds = caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null;
+        if (caldavCreds) {
+          caldavUid = await caldav.createEvent(caldavCreds.username, caldavCreds.password, 'birthdays', {
+            title: evTitle, date: dateStr, time: null, recurrence: 'yearly', reminderDaysBefore: 7,
+          }).catch(() => null);
+        }
+        await db.createEvent(userId, { title: evTitle, date: dateStr, recurrence: 'yearly', reminderDaysBefore: 7, caldavUid, calendarStream: 'birthdays' });
+        return `✅ Onthouden — en verjaardag *${intent.birthday_person}* (${intent.birthday_date}) jaarlijks in je agenda gezet! 🎂`;
+      }
       return intent.reply_text ?? `✅ Onthouden: _${intent.context_fact}_`;
+    }
 
     case 'greeting':
       return intent.reply_text ?? 'Hoi! Waarmee kan ik je helpen? 🍳';
@@ -1038,7 +1219,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
 // ── Greeting / morning summary ─────────────────────────────────────────────────
 
-function buildGreetingReply(lists, activeHabits, todayEvents) {
+function buildGreetingReply(lists, activeHabits, todayEvents, uncheckedItems = []) {
   const hour = new Date().getHours();
   let salutation;
   if (hour >= 5  && hour < 12) salutation = 'Goedemorgen! ☀️';
@@ -1048,21 +1229,27 @@ function buildGreetingReply(lists, activeHabits, todayEvents) {
   const parts = [salutation];
 
   if (todayEvents.length > 0) {
-    parts.push(`📅 *Vandaag:* ${todayEvents.map(e => e.title).join(', ')}`);
+    const evLines = todayEvents.map(e => `  • *${e.title}*${e.time ? ` om ${e.time}` : ''}`).join('\n');
+    parts.push(`📅 *Vandaag op je agenda:*\n${evLines}`);
   }
 
-  if (lists.length > 0) {
-    const listLine = lists.slice(0, 3).map(l => `${l.emoji ?? '📝'} ${l.name}`).join(', ');
-    parts.push(`📋 *Lijsten:* ${listLine}${lists.length > 3 ? ` +${lists.length - 3}` : ''}`);
+  if (uncheckedItems.length > 0) {
+    const total = uncheckedItems.length;
+    const topList = lists[0];
+    const topItems = uncheckedItems.filter(i => i.list?.id === topList?.id).slice(0, 3);
+    const itemStr = topItems.length > 0
+      ? ` (${topList?.emoji ?? '📝'} ${topItems.map(i => i.text).join(', ')}${total > topItems.length ? ` +${total - topItems.length} meer` : ''})`
+      : ` — ${total} open`;
+    parts.push(`📋 *Open items:* ${total}${itemStr}`);
   }
 
   if (activeHabits.length > 0) {
-    parts.push(`🏋️ *Habits:* ${activeHabits.map(h => h.name).join(', ')}`);
+    parts.push(`🏋️ *Habits vandaag:* ${activeHabits.map(h => h.name).join(' · ')}`);
   }
 
-  if (parts.length === 1) parts.push('Waarmee kan ik je helpen? 🍳');
+  if (parts.length === 1) parts.push('Waarmee kan ik je helpen vandaag? 🍳');
 
-  return parts.join('\n');
+  return parts.join('\n\n');
 }
 
 // ── Utility: fuzzy find ────────────────────────────────────────────────────────

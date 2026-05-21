@@ -172,6 +172,10 @@ function buildIcal(event, uid, reminderMinutesBefore = null) {
     }
   }
 
+  if (event.location) {
+    lines.push(`LOCATION:${event.location.replace(/\n/g, '\\n')}`);
+  }
+
   if (reminderMinutesBefore !== null && reminderMinutesBefore !== undefined) {
     lines.push(
       'BEGIN:VALARM',

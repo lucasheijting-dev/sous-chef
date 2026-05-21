@@ -528,6 +528,46 @@ async function updateEventTitle(eventId, title) {
   await supabase.from('events').update({ title, updated_at: new Date().toISOString() }).eq('id', eventId);
 }
 
+async function getEventsForDateRange(userId, startDate, endDate) {
+  const { data } = await supabase
+    .from('events')
+    .select('id, title, date, time, caldav_uid, calendar_stream')
+    .eq('user_id', userId)
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true })
+    .order('time', { ascending: true, nullsFirst: false });
+  return (data ?? []).map(e => ({ ...e, caldavUid: e.caldav_uid, calendarStream: e.calendar_stream }));
+}
+
+async function bulkUpdateEventDate(userId, eventIds, newDate) {
+  await supabase.from('events').update({ date: newDate, updated_at: new Date().toISOString() }).in('id', eventIds).eq('user_id', userId);
+}
+
+async function moveAllListItems(fromListId, toListId) {
+  await supabase.from('list_items').update({ list_id: toListId }).eq('list_id', fromListId).eq('checked', false);
+  await supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', toListId);
+}
+
+async function searchNotes(userId, query) {
+  const { data } = await supabase
+    .from('notes')
+    .select('id, title, body')
+    .eq('user_id', userId)
+    .or(`title.ilike.%${query}%,body.ilike.%${query}%`);
+  return data ?? [];
+}
+
+async function sortListItemsAlphabetically(listId) {
+  const { data: items } = await supabase.from('list_items').select('id, text, checked').eq('list_id', listId);
+  if (!items?.length) return;
+  const sorted = [...items].sort((a, b) => a.text.localeCompare(b.text, 'nl', { sensitivity: 'base' }));
+  await supabase.from('list_items').delete().eq('list_id', listId);
+  if (sorted.length > 0) {
+    await supabase.from('list_items').insert(sorted.map(i => ({ list_id: listId, text: i.text, checked: i.checked })));
+  }
+}
+
 async function updateEvent(userId, eventId, { date, time }) {
   const { error } = await supabase
     .from('events')
@@ -818,6 +858,11 @@ module.exports = {
   getEventsByTitle,
   updateEvent,
   updateEventTitle,
+  getEventsForDateRange,
+  bulkUpdateEventDate,
+  moveAllListItems,
+  searchNotes,
+  sortListItemsAlphabetically,
   deleteEventById,
   getNotes,
   appendToNote,
