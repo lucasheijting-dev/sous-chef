@@ -193,7 +193,9 @@ export function MorningScreen() {
     const today = now.toISOString().split('T')[0];
 
     AsyncStorage.getItem(MORNING_KEY).then(async (lastShown) => {
-      if (false && lastShown === today) return; // TEST MODE: always show
+      const hour = now.getHours();
+      if (lastShown === today) return;
+      if (hour < 6 || hour >= 12) return;
       await load();
       setVisible(true);
       await AsyncStorage.setItem(MORNING_KEY, today);
