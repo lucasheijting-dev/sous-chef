@@ -27,6 +27,7 @@
       }
     },
     "android": {
+      "package": "com.lucasheijting.souschef",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#FCC10C"
