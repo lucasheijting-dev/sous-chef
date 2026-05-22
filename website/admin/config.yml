@@ -1,5 +1,6 @@
 backend:
-  name: git-gateway
+  name: github
+  repo: lucasheijting-dev/sous-chef
   branch: main
 
 media_folder: website/assets
