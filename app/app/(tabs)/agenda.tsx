@@ -393,6 +393,33 @@ function AgendaLite() {
         setLoading(false);
       }
     });
+
+    // Real-time subscription: reflect WhatsApp-created events instantly
+    const channel = supabase
+      .channel(`events:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'events', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const e = payload.new as CalEvent;
+            if (e.date && e.date >= TODAY && e.date <= endKey) {
+              setAllEvents(prev => {
+                if (prev.some(ev => ev.id === e.id)) return prev;
+                return [...prev, { ...e, source: 'sous-chef' as const }];
+              });
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setAllEvents(prev => prev.filter(ev => ev.id !== (payload.old as any).id));
+          } else if (payload.eventType === 'UPDATE') {
+            const e = payload.new as CalEvent;
+            setAllEvents(prev => prev.map(ev => ev.id === e.id ? { ...e, source: 'sous-chef' as const } : ev));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const periodCounts = useMemo(() => {

@@ -51,9 +51,23 @@ export default function OnboardingScreen() {
   });
   const [userName, setUserName] = useState('');
   const [geoEnabled, setGeoEnabled] = useState(false);
+  const [nameSavedConfetti, setNameSavedConfetti] = useState(false);
+  const [firstMessageDetected, setFirstMessageDetected] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+
+  // Auto-detect first message via Supabase realtime
+  useEffect(() => {
+    if (!user || user.id === 'dev' || step !== 'caldav') return;
+    const { supabase: sb } = require('@/lib/supabase');
+    const ch = sb.channel('onboarding-first-msg')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${user.id}` }, () => {
+        setFirstMessageDetected(true);
+      })
+      .subscribe();
+    return () => { sb.removeChannel(ch); };
+  }, [user, step]);
 
   // Load persisted step on mount
   useEffect(() => {
@@ -175,13 +189,31 @@ export default function OnboardingScreen() {
         )}
       </View>
 
+      <Confetti active={nameSavedConfetti} />
+
+      {firstMessageDetected && step === 'caldav' && (
+        <View style={{ position: 'absolute', top: 120, left: 20, right: 20, backgroundColor: '#22C55E', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 100 }}>
+          <Text style={{ fontSize: 20 }}>🎉</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Eerste bericht ontvangen!</Text>
+            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.8)' }}>Je koppeling werkt. Ga door!</Text>
+          </View>
+        </View>
+      )}
+
       <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateX: slideAnim }] }]}>
         {step === 'welcome' && <WelcomeStep onNext={() => transition('name')} />}
         {step === 'name' && (
           <NameStep
             value={userName}
             onChange={setUserName}
-            onNext={() => { transition('theme'); }}
+            onNext={() => {
+              if (userName.trim()) {
+                setNameSavedConfetti(true);
+                setTimeout(() => setNameSavedConfetti(false), 2000);
+              }
+              transition('theme');
+            }}
           />
         )}
         {step === 'theme' && (

@@ -13,6 +13,8 @@ import {
   Animated,
   Pressable,
   Platform,
+  Share,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -188,6 +190,9 @@ export default function NotitiesTab() {
   const [deletedNote, setDeletedNote] = useState<Note | null>(null);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editBody, setEditBody] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
@@ -327,20 +332,60 @@ export default function NotitiesTab() {
 
       <UndoSnackbar visible={snackbarVisible} onUndo={handleUndo} />
 
-      <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
-            <TouchableOpacity onPress={() => setSelected(null)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="close" size={18} color={colors.black} />
-            </TouchableOpacity>
-            <Text style={[styles.modalDateHeader, { color: colors.gray400 }]}>{selected ? formatDate(selected.created_at) : ''}</Text>
-            <View style={{ width: 34 }} />
-          </View>
-          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent}>
-            {selected?.title && <Text style={[styles.modalTitle, { color: colors.black }]}>{selected.title}</Text>}
-            <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selected?.body}</Text>
-          </ScrollView>
-        </SafeAreaView>
+      <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSelected(null); setEditMode(false); }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+              <TouchableOpacity onPress={() => { setSelected(null); setEditMode(false); }} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+                <Ionicons name="close" size={18} color={colors.black} />
+              </TouchableOpacity>
+              <Text style={[styles.modalDateHeader, { color: colors.gray400 }]}>{selected ? formatDate(selected.created_at) : ''}</Text>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => selected && Share.share({ message: `${selected.title ? selected.title + '\n\n' : ''}${selected.body}`, title: selected.title || 'Notitie' })}
+                  style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+                >
+                  <Ionicons name="share-outline" size={17} color={colors.black} />
+                </TouchableOpacity>
+                {editMode ? (
+                  <TouchableOpacity
+                    onPress={async () => {
+                      if (!selected || !editBody.trim() || editSaving) return;
+                      setEditSaving(true);
+                      await supabase.from('notes').update({ body: editBody.trim() }).eq('id', selected.id);
+                      setNotes(prev => prev.map(n => n.id === selected.id ? { ...n, body: editBody.trim() } : n));
+                      setSelected(prev => prev ? { ...prev, body: editBody.trim() } : null);
+                      setEditMode(false);
+                      setEditSaving(false);
+                    }}
+                    style={[styles.closeBtn, { backgroundColor: Colors.yellow }]}
+                  >
+                    <Ionicons name="checkmark" size={18} color={Colors.black} />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={() => { setEditBody(selected?.body ?? ''); setEditMode(true); }} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+                    <Ionicons name="pencil-outline" size={17} color={colors.black} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+            <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalContent} keyboardDismissMode="interactive">
+              {selected?.title && <Text style={[styles.modalTitle, { color: colors.black }]}>{selected.title}</Text>}
+              {editMode ? (
+                <TextInput
+                  style={[styles.modalBody, { color: colors.gray800, borderWidth: 1, borderColor: Colors.yellow + '60', borderRadius: Radius.md, padding: 12, textAlignVertical: 'top', minHeight: 200 }]}
+                  value={editBody}
+                  onChangeText={setEditBody}
+                  multiline
+                  autoFocus
+                  selectionColor={Colors.yellow}
+                />
+              ) : (
+                <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selected?.body}</Text>
+              )}
+            </ScrollView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

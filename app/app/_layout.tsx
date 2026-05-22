@@ -19,6 +19,8 @@ import { UserProvider, useUser } from '@/context/UserContext';
 import { ThemeProvider, useTheme } from '@/context/ThemeContext';
 import { ModuleSettingsProvider, useModuleSettings } from '@/context/ModuleSettingsContext';
 import { registerForPushNotifications } from '@/lib/pushNotifications';
+import { OfflineBanner } from '@/components/OfflineBanner';
+import { MorningScreen } from '@/components/MorningScreen';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -109,6 +111,8 @@ export default function RootLayout() {
         <UserProvider>
           <AuthGate />
           <AppStack />
+          <OfflineBanner />
+          <MorningScreen />
         </UserProvider>
       </ModuleSettingsProvider>
     </ThemeProvider>

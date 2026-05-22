@@ -68,6 +68,8 @@ export const Shadow = {
   },
 };
 
+export const TAB_BAR_CLEARANCE = 120;
+
 export const Typography = {
   display: {
     fontFamily: 'TitanOne_400Regular',

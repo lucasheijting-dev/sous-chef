@@ -34,6 +34,8 @@ import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { Colors, Radius, Shadow } from '@/constants/Design';
 import { Toast, useToast } from '@/components/Toast';
 import { startGeoAlertTask, stopGeoAlertTask, isGeoAlertEnabled } from '@/lib/geoAlert';
+import { getMorningListIds, setMorningListIds as saveMorningListIds } from '@/components/MorningScreen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -241,10 +243,15 @@ export default function InstellingenTab() {
   const [geoAlertEnabled, setGeoAlertEnabled] = useState(false);
   const [geoAlertLoading, setGeoAlertLoading] = useState(false);
 
+  // Morning screen list settings
+  const [morningModalVisible, setMorningModalVisible] = useState(false);
+  const [allLists, setAllLists] = useState<any[]>([]);
+  const [morningListIds, setMorningListIds] = useState<Set<string>>(new Set());
+
   // Calendar streams
   const [streams, setStreams] = useState<any[]>([]);
-  const [streamModalVisible, setStreamModalVisible] = useState(false);
   const [editingStream, setEditingStream] = useState<any | null>(null);
+  const [streamFormVisible, setStreamFormVisible] = useState(false);
   const [streamName, setStreamName] = useState('');
   const [streamEmoji, setStreamEmoji] = useState('');
   const [streamColor, setStreamColor] = useState('#4A90D8');
@@ -344,6 +351,25 @@ export default function InstellingenTab() {
     setNameInputValue(settings.user_name ?? '');
     setNameValue(settings.user_name ?? '');
   }, [settings.user_name]);
+
+  async function openMorningModal() {
+    if (!user || user.id === 'dev') return;
+    const { data } = await supabase.from('lists').select('id, name, emoji').eq('user_id', user.id).order('last_activity_at', { ascending: false });
+    setAllLists(data ?? []);
+    const savedIds = await getMorningListIds();
+    setMorningListIds(new Set(savedIds));
+    setMorningModalVisible(true);
+  }
+
+  async function toggleMorningList(listId: string) {
+    setMorningListIds(prev => {
+      const next = new Set(prev);
+      if (next.has(listId)) next.delete(listId);
+      else next.add(listId);
+      saveMorningListIds([...next]);
+      return next;
+    });
+  }
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -483,12 +509,19 @@ export default function InstellingenTab() {
     setEditingName(false);
   }
 
-  function openStreamModal(stream: any | null) {
+  function openStreamForm(stream: any | null) {
     setEditingStream(stream);
     setStreamName(stream?.name ?? '');
     setStreamEmoji(stream?.emoji ?? '📅');
     setStreamColor(stream?.color ?? '#4A90D8');
-    setStreamModalVisible(true);
+    // Close agenda modal first — iOS can't stack transparent Modal over pageSheet Modal
+    setAgendaModalVisible(false);
+    setTimeout(() => setStreamFormVisible(true), 350);
+  }
+
+  function closeStreamForm() {
+    setStreamFormVisible(false);
+    setTimeout(() => setAgendaModalVisible(true), 350);
   }
 
   async function saveStream() {
@@ -514,8 +547,9 @@ export default function InstellingenTab() {
         const created = await res.json();
         setStreams(prev => [...prev, created]);
       }
-      setStreamModalVisible(false);
+      setStreamFormVisible(false);
       showToast(editingStream ? 'Categorie bijgewerkt' : 'Categorie toegevoegd', 'success');
+      setTimeout(() => setAgendaModalVisible(true), 350);
     } catch {
       showToast('Opslaan mislukt', 'error');
     } finally {
@@ -772,6 +806,18 @@ export default function InstellingenTab() {
           />
         </View>
 
+        {/* ── Ochtendscherm ──────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Ochtendscherm</Text>
+        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          <SettingsRow
+            icon="sunny-outline"
+            label="Daglijsten"
+            subtitle="Welke lijsten zie je elke ochtend"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={openMorningModal}
+          />
+        </View>
+
         {/* ── Agenda ─────────────────────────────────────────────────── */}
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Agenda</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
@@ -901,82 +947,6 @@ export default function InstellingenTab() {
             <TouchableOpacity onPress={() => setHabitsModalVisible(false)} style={styles.cancelBtn}>
               <Text style={[styles.cancelText, { color: colors.gray400 }]}>Annuleer</Text>
             </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </SpringModal>
-
-      {/* ── Stream edit modal ───────────────────────────────────────── */}
-      <SpringModal
-        visible={streamModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setStreamModalVisible(false)}
-      >
-        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
-          <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
-            <TouchableOpacity
-              onPress={() => setStreamModalVisible(false)}
-              style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
-            >
-              <Text style={[styles.cancelText, { color: colors.gray400 }]}>Annuleer</Text>
-            </TouchableOpacity>
-            <Text style={[styles.modalHeaderTitle, { color: colors.black }]}>
-              {editingStream ? 'Bewerk categorie' : 'Nieuwe categorie'}
-            </Text>
-            <TouchableOpacity
-              onPress={saveStream}
-              disabled={streamSaving || !streamName.trim()}
-              style={[styles.closeBtn, { backgroundColor: Colors.yellow, opacity: streamName.trim() ? 1 : 0.4 }]}
-            >
-              {streamSaving
-                ? <ActivityIndicator size="small" color={Colors.black} />
-                : <Text style={[styles.saveBtnText, { color: Colors.black }]}>Opslaan</Text>
-              }
-            </TouchableOpacity>
-          </View>
-          <ScrollView contentContainerStyle={{ padding: 24, gap: 20 }}>
-            <View style={{ gap: 8 }}>
-              <Text style={[styles.sectionLabel, { marginLeft: 0, marginTop: 0, color: colors.gray400 }]}>Naam</Text>
-              <TextInput
-                style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
-                value={streamName}
-                onChangeText={setStreamName}
-                placeholder="Bijv. Familie"
-                placeholderTextColor={colors.gray400}
-                autoFocus={!editingStream}
-                selectionColor={Colors.yellow}
-              />
-            </View>
-            <View style={{ gap: 8 }}>
-              <Text style={[styles.sectionLabel, { marginLeft: 0, marginTop: 0, color: colors.gray400 }]}>Emoji</Text>
-              <TextInput
-                style={[styles.nameInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
-                value={streamEmoji}
-                onChangeText={t => {
-                  const chars = [...t];
-                  setStreamEmoji(chars[chars.length - 1] ?? '');
-                }}
-                placeholder="📅"
-                placeholderTextColor={colors.gray400}
-                selectionColor={Colors.yellow}
-              />
-            </View>
-            <View style={{ gap: 8 }}>
-              <Text style={[styles.sectionLabel, { marginLeft: 0, marginTop: 0, color: colors.gray400 }]}>Kleur</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                {STREAM_COLORS.map(c => (
-                  <TouchableOpacity
-                    key={c}
-                    onPress={() => setStreamColor(c)}
-                    style={[
-                      { width: 40, height: 40, borderRadius: 20, backgroundColor: c },
-                      streamColor === c && { borderWidth: 3, borderColor: colors.black },
-                    ]}
-                    activeOpacity={0.8}
-                  />
-                ))}
-              </View>
-            </View>
           </ScrollView>
         </SafeAreaView>
       </SpringModal>
@@ -1576,8 +1546,8 @@ export default function InstellingenTab() {
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 28, marginBottom: 8 }}>
               <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 0, marginBottom: 0, marginLeft: 0 }]}>Categorieën</Text>
-              <TouchableOpacity onPress={() => openStreamModal(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="add-circle-outline" size={22} color={Colors.yellow} />
+              <TouchableOpacity onPress={() => openStreamForm(null)} style={{ padding: 8, marginRight: -8 }} activeOpacity={0.6}>
+                <Ionicons name="add-circle-outline" size={24} color={Colors.yellow} />
               </TouchableOpacity>
             </View>
             <View style={[styles.card, { backgroundColor: colors.white }]}>
@@ -1589,12 +1559,12 @@ export default function InstellingenTab() {
                 streams.map((stream, idx) => (
                   <View key={stream.id}>
                     {idx > 0 && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
-                    <TouchableOpacity style={styles.row} onPress={() => openStreamModal(stream)} activeOpacity={0.7}>
+                    <TouchableOpacity style={styles.row} onPress={() => openStreamForm(stream)} activeOpacity={0.7}>
                       <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
                         <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: stream.color ?? '#4A90D8' }} />
                       </View>
                       <View style={styles.rowLabelWrap}>
-                        <Text style={[styles.rowLabel, { color: colors.black }]}>{stream.emoji} {stream.name}</Text>
+                        <Text style={[styles.rowLabel, { color: colors.black }]}>{stream.name}</Text>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={colors.gray400} />
                     </TouchableOpacity>
@@ -1602,6 +1572,7 @@ export default function InstellingenTab() {
                 ))
               )}
             </View>
+
           </ScrollView>
         </SafeAreaView>
       </SpringModal>
@@ -1789,6 +1760,102 @@ export default function InstellingenTab() {
           </ScrollView>
         </SafeAreaView>
       </SpringModal>
+
+      {/* ── Morning screen lists modal ───────────────────────────────── */}
+      <Modal visible={morningModalVisible} transparent animationType="slide" onRequestClose={() => setMorningModalVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => setMorningModalVisible(false)}>
+            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 14, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 0 }} onPress={() => {}}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 20 }} />
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Daglijsten ochtendscherm</Text>
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, marginBottom: 20 }}>Kies welke lijsten elke ochtend verschijnen</Text>
+              {allLists.length === 0 ? (
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen lijsten gevonden</Text>
+              ) : (
+                allLists.map(list => (
+                  <TouchableOpacity
+                    key={list.id}
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 14, borderBottomWidth: 1, borderBottomColor: colors.gray100 }}
+                    onPress={() => toggleMorningList(list.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{
+                      width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+                      borderColor: morningListIds.has(list.id) ? Colors.yellow : colors.gray200,
+                      backgroundColor: morningListIds.has(list.id) ? Colors.yellow : 'transparent',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {morningListIds.has(list.id) && <Ionicons name="checkmark" size={14} color={Colors.black} />}
+                    </View>
+                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, flex: 1 }}>
+                      {list.emoji} {list.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Stream bottom sheet (top-level, keyboard-aware) ──────────── */}
+      <Modal visible={streamFormVisible} transparent animationType="slide" onRequestClose={closeStreamForm}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={closeStreamForm}>
+            <Pressable
+              style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingTop: 14, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 18 }}
+              onPress={() => {}}
+            >
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 6 }} />
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, textAlign: 'center' }}>
+                {editingStream ? 'Bewerk categorie' : 'Nieuwe categorie'}
+              </Text>
+
+              {/* Naam */}
+              <View style={{ backgroundColor: colors.gray100, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 4 }}>
+                <TextInput
+                  style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, paddingVertical: 12 }}
+                  value={streamName}
+                  onChangeText={setStreamName}
+                  placeholder="Naam, bijv. Familie"
+                  placeholderTextColor={colors.gray400}
+                  autoFocus
+                  returnKeyType="done"
+                  selectionColor={Colors.yellow}
+                />
+              </View>
+
+              {/* Kleur */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                {STREAM_COLORS.map(c => (
+                  <TouchableOpacity
+                    key={c}
+                    onPress={() => setStreamColor(c)}
+                    style={[
+                      { width: 38, height: 38, borderRadius: 19, backgroundColor: c },
+                      streamColor === c && { borderWidth: 3, borderColor: colors.black },
+                    ]}
+                    activeOpacity={0.8}
+                  />
+                ))}
+              </View>
+
+              {/* Opslaan */}
+              <TouchableOpacity
+                onPress={saveStream}
+                disabled={streamSaving || !streamName.trim()}
+                activeOpacity={0.85}
+                style={{ backgroundColor: streamName.trim() ? Colors.yellow : colors.gray200, borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}
+              >
+                {streamSaving
+                  ? <ActivityIndicator size="small" color={Colors.black} />
+                  : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black }}>Opslaan</Text>
+                }
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }

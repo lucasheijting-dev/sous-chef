@@ -10,6 +10,9 @@ import {
   Animated,
   Pressable,
   Platform,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,11 +22,12 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { Habit, HabitLog } from '@/lib/types';
-import { Colors, Radius, Shadow } from '@/constants/Design';
+import { Colors, Radius, Shadow, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { SkeletonHabitCard } from '@/components/SkeletonCard';
 import { Toast, useToast } from '@/components/Toast';
+import Confetti from '@/components/Confetti';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +44,7 @@ const LEVELS = [
   { key: 'elite', emoji: '🥇', label: 'Goud',   activeBg: Colors.yellow, activeFg: Colors.black, pts: 3 },
 ] as const;
 
-const STRIP_DAYS = 14;
+const STRIP_DAYS = new Date().getDate(); // covers all days this month up to today
 const today = new Date().toISOString().split('T')[0];
 
 const MONTH_START = (() => {
@@ -196,8 +200,12 @@ function LoggedPill({ log }: { log: HabitLog | undefined }) {
   const lvl = LEVELS.find(l => l.key === log.level)!;
   const isElite = log.level === 'elite';
 
+  const timeStr = log.logged_at
+    ? new Date(log.logged_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
-    <Animated.View style={{ opacity: anim, transform: [{ scale: anim }] }}>
+    <Animated.View style={{ opacity: anim, transform: [{ scale: anim }], alignItems: 'flex-end', gap: 2 }}>
       <LinearGradient
         colors={isElite ? ['#FCC10C', '#E5A800'] : ['#F3F4F6', '#E5E7EB']}
         style={s.loggedPill}
@@ -207,6 +215,7 @@ function LoggedPill({ log }: { log: HabitLog | undefined }) {
           {lvl.emoji} {lvl.label}
         </Text>
       </LinearGradient>
+      {timeStr && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 10, color: Colors.gray400 }}>{timeStr}</Text>}
     </Animated.View>
   );
 }
@@ -442,13 +451,13 @@ function HabitsLite() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
-      <View style={[s.banner, { paddingTop: insets.top + 36 }]}>
+      <View style={[s.banner, { paddingTop: insets.top + 40 }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
         <Text style={s.bannerTitle}>Habits</Text>
         <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: '#888', marginTop: 4 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }}>
         {loading ? (
           <SkeletonHabitCard />
         ) : habits.length === 0 ? (
@@ -462,7 +471,7 @@ function HabitsLite() {
         ) : habits.map(habit => {
           const log = logs.find(l => l.habit_id === habit.id);
           return (
-            <View key={habit.id} style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10 }, Shadow.card]}>
+            <View key={habit.id} style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, padding: 18, marginBottom: 12 }, Shadow.card]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                 <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.black, flex: 1 }}>{habit.name}</Text>
                 {log && (
@@ -631,6 +640,16 @@ export default function HabitsTab() {
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const { toastProps, show: showToast } = useToast();
 
+  const [confettiActive, setConfettiActive] = useState(false);
+  const wasAllDone = useRef(false);
+  const [milestoneStreak, setMilestoneStreak] = useState<{ habitName: string; streak: number } | null>(null);
+  const [quickAddVisible, setQuickAddVisible] = useState(false);
+  const [quickAddName, setQuickAddName] = useState('');
+  const [quickAddMini, setQuickAddMini] = useState('');
+  const [quickAddGood, setQuickAddGood] = useState('');
+  const [quickAddElite, setQuickAddElite] = useState('');
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const fetchData = useCallback(async () => {
@@ -684,10 +703,45 @@ export default function HabitsTab() {
       );
       const lvl = LEVELS.find(l => l.key === level)!;
       showToast(`${lvl.emoji} ${habit.name} — ${lvl.label}!`, 'success');
+
+      // Check streak milestone
+      const newStreak = computeStreak(habit.id, logs, selectedDay) + 1;
+      if ([7, 14, 21, 30, 60, 90].includes(newStreak)) {
+        setTimeout(() => setMilestoneStreak({ habitName: habit.name, streak: newStreak }), 600);
+      }
     }
 
     setLoadingKey(null);
+    await fetchData();
+
+    // Confetti when all habits done for today
+    if (selectedDay === today) {
+      const newLogsCount = logs.filter(l => l.date === today && l.habit_id !== habit.id).length + 1;
+      if (!wasAllDone.current && newLogsCount >= habits.length && habits.length > 0) {
+        wasAllDone.current = true;
+        setConfettiActive(true);
+        setTimeout(() => setConfettiActive(false), 3000);
+      }
+    }
+  }
+
+  async function saveQuickAddHabit() {
+    if (!user || !quickAddName.trim()) return;
+    setQuickAddSaving(true);
+    await supabase.from('habits').insert({
+      user_id: user.id,
+      name: quickAddName.trim(),
+      mini_goal: quickAddMini.trim() || 'Minimum',
+      good_goal: quickAddGood.trim() || 'Goed',
+      elite_goal: quickAddElite.trim() || 'Elite',
+      is_active: true,
+      sort_order: habits.length,
+    });
+    setQuickAddName(''); setQuickAddMini(''); setQuickAddGood(''); setQuickAddElite('');
+    setQuickAddVisible(false);
+    setQuickAddSaving(false);
     fetchData();
+    showToast(`${quickAddName.trim()} toegevoegd!`, 'success');
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────────
@@ -702,6 +756,10 @@ export default function HabitsTab() {
 
   const todayLogsCount = useMemo(() => logs.filter(l => l.date === today).length, [logs]);
   const allDoneToday   = habits.length > 0 && todayLogsCount >= habits.length;
+
+  useEffect(() => {
+    if (!allDoneToday) wasAllDone.current = false;
+  }, [allDoneToday]);
   const selectedLogsCount = useMemo(() => logs.filter(l => l.date === selectedDay).length, [logs, selectedDay]);
   const allDoneSelected   = habits.length > 0 && selectedLogsCount >= habits.length;
 
@@ -731,7 +789,7 @@ export default function HabitsTab() {
   if (loading) {
     return (
       <View style={[s.root, { backgroundColor: colors.offWhite }]}>
-        <View style={[s.banner, { paddingTop: insets.top + 40, paddingBottom: 28 }]}>
+        <View style={[s.banner, { paddingTop: insets.top + 44 }]}>
           <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
           <Text style={s.bannerTitle}>Habits</Text>
@@ -750,7 +808,7 @@ export default function HabitsTab() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={Colors.yellow} />}
       >
         {/* ── Banner ── */}
-        <View style={[s.banner, { paddingTop: insets.top + 40, paddingBottom: 28 }]}>
+        <View style={[s.banner, { paddingTop: insets.top + 44 }]}>
           <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
 
@@ -898,6 +956,77 @@ export default function HabitsTab() {
       </ScrollView>
 
       <Toast {...toastProps} />
+
+      {/* Confetti burst */}
+      <Confetti active={confettiActive} />
+
+      {/* Streak milestone overlay */}
+      <Modal visible={!!milestoneStreak} transparent animationType="fade" onRequestClose={() => setMilestoneStreak(null)}>
+        <Pressable style={mStyles.overlay} onPress={() => setMilestoneStreak(null)}>
+          <Pressable style={[mStyles.milestoneCard, { backgroundColor: colors.white }]} onPress={() => {}}>
+            <Text style={mStyles.milestoneEmoji}>🔥</Text>
+            <Text style={[mStyles.milestoneNum, { color: colors.black }]}>{milestoneStreak?.streak} dagen!</Text>
+            <Text style={[mStyles.milestoneName, { color: colors.black }]}>{milestoneStreak?.habitName}</Text>
+            <Text style={[mStyles.milestoneSub, { color: colors.gray400 }]}>
+              {milestoneStreak?.streak === 7 ? 'Een week op rij — geweldig!' :
+               milestoneStreak?.streak === 14 ? 'Twee weken — je bent op dreef!' :
+               milestoneStreak?.streak === 21 ? '21 dagen — het wordt een gewoonte!' :
+               milestoneStreak?.streak === 30 ? 'Een maand! Je bent een held 🏆' :
+               `${milestoneStreak?.streak} dagen — ongelooflijk!`}
+            </Text>
+            <TouchableOpacity onPress={() => setMilestoneStreak(null)} style={mStyles.milestoneBtn}>
+              <Text style={mStyles.milestoneBtnText}>Doorgaan 💪</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Quick-add habit FAB */}
+      <TouchableOpacity
+        style={[mStyles.fab, { bottom: insets.bottom + 90 }]}
+        onPress={() => setQuickAddVisible(true)}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={26} color={Colors.black} />
+      </TouchableOpacity>
+
+      {/* Quick-add habit sheet */}
+      <Modal visible={quickAddVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setQuickAddVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={[{ flex: 1, backgroundColor: colors.white }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.gray100 }}>
+              <TouchableOpacity onPress={() => setQuickAddVisible(false)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.gray100 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.gray400 }}>Annuleer</Text>
+              </TouchableOpacity>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.black }}>Nieuwe habit</Text>
+              <TouchableOpacity onPress={saveQuickAddHabit} disabled={!quickAddName.trim() || quickAddSaving} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.yellow, opacity: quickAddName.trim() ? 1 : 0.4 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black }}>Opslaan</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 24, gap: 20 }}>
+              {[
+                { label: 'Naam', value: quickAddName, setter: setQuickAddName, placeholder: 'Bijv. Mediteren, Lezen, Sporten...', autoFocus: true },
+                { label: '🥉 Mini-doel', value: quickAddMini, setter: setQuickAddMini, placeholder: 'Bijv. 5 minuten' },
+                { label: '🥈 Goed-doel', value: quickAddGood, setter: setQuickAddGood, placeholder: 'Bijv. 15 minuten' },
+                { label: '🥇 Elite-doel', value: quickAddElite, setter: setQuickAddElite, placeholder: 'Bijv. 30 minuten' },
+              ].map(field => (
+                <View key={field.label} style={{ gap: 8 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>{field.label}</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: colors.gray200, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 14, color: colors.black, backgroundColor: colors.offWhite, fontFamily: 'Inter_400Regular', fontSize: 16 }}
+                    value={field.value}
+                    onChangeText={field.setter}
+                    placeholder={field.placeholder}
+                    placeholderTextColor={colors.gray400}
+                    autoFocus={field.autoFocus}
+                    selectionColor={Colors.yellow}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -919,14 +1048,14 @@ const s = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1 },
 
-  banner: { paddingHorizontal: 20, paddingBottom: 20, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
-  bannerTop: { marginBottom: 10 },
-  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 28, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
-  bannerStats: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  statTile: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#FFFFFF12', borderRadius: Radius.md, borderWidth: 1, borderColor: '#FFFFFF18', minWidth: 80 },
+  banner: { paddingHorizontal: 24, paddingBottom: 28, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' },
+  bannerTop: { marginBottom: 14 },
+  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 30, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
+  bannerStats: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  statTile: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFFFFF0F', borderRadius: 16, borderWidth: 1, borderColor: '#FFFFFF16', minWidth: 96 },
   statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
-  statNum: { fontFamily: 'Inter_700Bold', fontSize: 20, color: Colors.white, letterSpacing: -0.5 },
-  statLabel: { fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: 1 },
+  statNum: { fontFamily: 'Inter_700Bold', fontSize: 21, color: Colors.white, letterSpacing: -0.5 },
+  statLabel: { fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
 
   progressBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
   progressBarTrack: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
@@ -952,9 +1081,9 @@ const s = StyleSheet.create({
 
   sectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.8, marginBottom: 8 },
 
-  habitsList: { padding: 16, gap: 14, paddingBottom: 120 },
+  habitsList: { padding: 20, gap: 16, paddingBottom: TAB_BAR_CLEARANCE },
   habitCard: { borderRadius: Radius.xl, overflow: 'hidden', flexDirection: 'row', ...Shadow.card },
-  habitInner: { flex: 1, padding: 16 },
+  habitInner: { flex: 1, padding: 18 },
 
   accentBar: { width: 4 },
 
@@ -1001,6 +1130,18 @@ const s = StyleSheet.create({
   emptyStepText: { fontFamily: 'Inter_400Regular', fontSize: 13, flex: 1 },
 
   skeletonList: { padding: 16 },
+});
+
+const mStyles = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
+  milestoneCard: { width: '100%', borderRadius: Radius.xl, padding: 32, alignItems: 'center', gap: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 10 },
+  milestoneEmoji: { fontSize: 60, marginBottom: 4 },
+  milestoneNum: { fontFamily: 'Inter_700Bold', fontSize: 36, letterSpacing: -1 },
+  milestoneName: { fontFamily: 'Inter_600SemiBold', fontSize: 18, textAlign: 'center' },
+  milestoneSub: { fontFamily: 'Inter_300Light', fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  milestoneBtn: { marginTop: 12, backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingHorizontal: 28, paddingVertical: 14 },
+  milestoneBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black },
+  fab: { position: 'absolute', right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
 });
 
 const m = StyleSheet.create({
