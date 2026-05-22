@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Contact — Sous-Chef</title>
+<meta name="description" content="Neem contact op met Sous-Chef." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Titan+One&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --accent: #FFD000;
+    --fg: #0a0a0a; --fg-2: #1d1d1f; --muted: #6b6b70;
+    --line: #e7e7ea; --bg: #ffffff; --footer: #111113;
+    --display: 'Titan One', 'Inter', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--fg); background: var(--bg);
+    font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 740px; margin: 0 auto; padding: 0 32px; }
+  @media (max-width: 640px) { .container { padding: 0 20px; } }
+  nav.top {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    background: rgba(255,255,255,.85); border-bottom: 1px solid var(--line);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+  .brand { display: inline-flex; align-items: center; text-decoration: none; }
+  .brand-logo { height: 36px; width: auto; }
+  .nav-back { font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none; transition: color .15s; }
+  .nav-back:hover { color: var(--fg); }
+  .page-hero { background: var(--accent); border-bottom: 4px solid #000; padding: 64px 0 48px; }
+  .page-hero h1 {
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(36px, 5vw, 60px); text-transform: uppercase; margin: 0 0 12px; line-height: 1;
+  }
+  .page-hero .meta { font-size: 16px; color: rgba(0,0,0,.65); font-weight: 500; }
+  .contact-body { padding: 80px 0 120px; }
+  .contact-card {
+    background: #fff;
+    border: 3px solid #000;
+    border-radius: 28px;
+    padding: 48px 44px;
+    box-shadow: 8px 8px 0 #000;
+  }
+  .contact-card h2 {
+    font-family: var(--display); font-weight: 400;
+    font-size: 28px; text-transform: uppercase;
+    margin: 0 0 12px;
+  }
+  .contact-card p { color: var(--fg-2); font-size: 16px; margin: 0 0 32px; }
+  .mail-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--accent); color: #000;
+    font-family: inherit; font-weight: 800; font-size: 16px;
+    text-decoration: none;
+    padding: 16px 28px; border-radius: 999px;
+    border: 3px solid #000; box-shadow: 5px 5px 0 #000;
+    transition: transform .12s ease, box-shadow .12s ease;
+    text-transform: uppercase; letter-spacing: 0.01em;
+  }
+  .mail-btn:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 #000; }
+  .mail-btn svg { flex-shrink: 0; }
+  .contact-note {
+    margin-top: 24px; font-size: 14px; color: var(--muted); font-weight: 500;
+  }
+  footer.site { background: var(--footer); color: #c0c0c5; padding: 40px 0; }
+  .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .footer-links { display: flex; gap: 28px; list-style: none; margin: 0; padding: 0; }
+  .footer-links a { color: #c0c0c5; text-decoration: none; font-size: 14px; transition: color .15s; }
+  .footer-links a:hover { color: #fff; }
+  .footer-copy { color: #6c6c72; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="container nav-inner">
+    <a href="/" class="brand">
+      <img class="brand-logo" src="/assets/sous-chef-logo.png" alt="Sous-Chef" />
+    </a>
+    <a href="/" class="nav-back">← Terug</a>
+  </div>
+</nav>
+
+<div class="page-hero">
+  <div class="container">
+    <h1>Contact</h1>
+    <div class="meta">Vragen, feedback of hulp nodig? Stuur gerust een mailtje.</div>
+  </div>
+</div>
+
+<div class="contact-body">
+  <div class="container">
+    <div class="contact-card">
+      <h2>Neem contact op</h2>
+      <p>We reageren doorgaans binnen één werkdag. Voor snelle vragen kun je ook een WhatsApp sturen naar de assistent zelf.</p>
+      <a href="mailto:lucas@sous-chef.nl" class="mail-btn">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="20" height="16" rx="2"/>
+          <path d="M2 7l10 7 10-7"/>
+        </svg>
+        lucas@sous-chef.nl
+      </a>
+      <div class="contact-note">Of stuur een WhatsApp naar de assistent — die geeft je ook door aan ons.</div>
+    </div>
+  </div>
+</div>
+
+<footer class="site">
+  <div class="container footer-inner">
+    <a href="/" class="footer-brand">
+      <img src="/assets/sous-chef-logo.png" alt="Sous-Chef" style="height:36px;opacity:.6;" />
+    </a>
+    <ul class="footer-links">
+      <li><a href="/privacy">Privacy</a></li>
+      <li><a href="/terms">Voorwaarden</a></li>
+      <li><a href="/contact">Contact</a></li>
+    </ul>
+    <div class="footer-copy">© 2026 Sous-Chef</div>
+  </div>
+</footer>
+
+</body>
+</html>
