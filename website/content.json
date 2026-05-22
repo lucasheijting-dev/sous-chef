@@ -1,0 +1,104 @@
+{
+  "nav": {
+    "cta_text": "Gratis proberen"
+  },
+  "hero": {
+    "eyebrow": "Persoonlijke assistent · Via WhatsApp",
+    "headline": "Je persoonlijke WhatsApp-assistent.",
+    "headline_highlight": "WhatsApp-assistent",
+    "subtext": "Lijstjes, notities, afspraken — gewoon typen of inspreken via WhatsApp. Sous-Chef sorteert alles automatisch. Jij hoeft er niet meer aan te denken.",
+    "cta_primary": "Begin gratis →",
+    "cta_secondary": "Hoe werkt het?",
+    "social_proof": "14 dagen gratis · Geen creditcard · Opzegbaar wanneer je wilt",
+    "sticker": "Die cheft het wel."
+  },
+  "how": {
+    "eyebrow": "Hoe het werkt",
+    "title": "Drie stappen. Dat is het.",
+    "steps": [
+      {
+        "title": "Stuur een bericht",
+        "description": "Typ in het Nederlands, zoals je praat. Geen commando's nodig."
+      },
+      {
+        "title": "Die snapt het",
+        "description": "Sous-Chef herkent of het een boodschap, afspraak, notitie of reminder is."
+      },
+      {
+        "title": "Jij vergeet het gerust",
+        "description": "Reminders komen terug via WhatsApp. Niks meer aan denken."
+      }
+    ]
+  },
+  "features": {
+    "eyebrow": "Features",
+    "title": "Alles wat in je hoofd zat, in één WhatsApp.",
+    "items": [
+      {
+        "title": "Slimme lijstjes",
+        "description": "Voeg items toe via WhatsApp. Sous-Chef kiest automatisch de juiste lijst op basis van context. En loop je langs de supermarkt? Dan krijg je een seintje.",
+        "example": "\"citroenen kopen\" → Boodschappen ✓"
+      },
+      {
+        "title": "Kalender & reminders",
+        "description": "Afspraken en verjaardagen herkent die automatisch. Reminders komen terug via WhatsApp op het juiste moment.",
+        "example": "\"verjaardag Stan 27 juli\" → reminder 26 juli ✓"
+      },
+      {
+        "title": "Persoonlijke notities",
+        "description": "Ideeën vastleggen in één appje. Teruglezen in de app. Altijd doorzoekbaar. Alleen voor jou.",
+        "example": "\"idee: podcast over design\" → opgeslagen ✓"
+      },
+      {
+        "title": "Habit tracker",
+        "description": "Optioneel. Brons, zilver of goud per dag. Via WhatsApp of in de app. Dagelijkse reminder als je het vergeet.",
+        "example": "\"gesport\" → 🥈 Zilver gelogd ✓"
+      }
+    ]
+  },
+  "praktijk": {
+    "eyebrow": "In de praktijk",
+    "title": "WhatsApp doet het werk. De app toont het overzicht.",
+    "whatsapp_title": "Via WhatsApp doe je alles.",
+    "whatsapp_items": [
+      "Items toevoegen aan lijsten",
+      "Afspraken en reminders instellen",
+      "Notities dicteren via spraakbericht",
+      "Habits loggen",
+      "Suggesties ontvangen en beantwoorden",
+      "Instellingen wijzigen"
+    ],
+    "app_title": "In de app zie je alles.",
+    "app_items": [
+      "Lijsten inzien en afvinken",
+      "Notities teruglezen",
+      "Agenda bekijken",
+      "Habits dagelijks bijhouden"
+    ]
+  },
+  "price": {
+    "eyebrow": "Prijs",
+    "title": "Eén plan. Geen ruis.",
+    "plan_name": "Volledige toegang",
+    "amount": "€4,99",
+    "period": "/maand",
+    "features": [
+      "Onbeperkte WhatsApp-berichten",
+      "Lijsten, notities & kalender",
+      "Slimme suggesties (instelbaar)",
+      "Habit tracker (optioneel)",
+      "iCal-synchronisatie",
+      "App voor iOS & Android"
+    ],
+    "cta_text": "Begin 14 dagen gratis →",
+    "foot_text": "Geen creditcard nodig · Opzegbaar wanneer je wilt"
+  },
+  "cta": {
+    "headline": "Die cheft het wel.",
+    "subtext": "Stuur een appje. Sous-Chef regelt de rest.",
+    "button_text": "Begin nu gratis →"
+  },
+  "footer": {
+    "copyright": "© 2026 Sous-Chef"
+  }
+}

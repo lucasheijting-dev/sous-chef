@@ -1371,6 +1371,93 @@
   document.getElementById('phone-prev').addEventListener('click', () => renderScene(sceneIdx - 1));
   document.getElementById('phone-next').addEventListener('click', () => renderScene(sceneIdx + 1));
   tabs.forEach(d => d.addEventListener('click', () => renderScene(Number(d.dataset.i))));
+
+  // Load content from CMS
+  fetch('/content.json').then(r => r.json()).then(c => {
+    const set = (sel, val) => { const el = document.querySelector(sel); if (el && val !== undefined) el.textContent = val; };
+    const setHTML = (sel, val) => { const el = document.querySelector(sel); if (el && val !== undefined) el.innerHTML = val; };
+
+    // Nav
+    document.querySelectorAll('.nav-cta').forEach(el => el.textContent = c.nav.cta_text);
+
+    // Hero
+    set('.eyebrow span:last-child', c.hero.eyebrow);
+    setHTML('h1.headline', c.hero.headline.replace(
+      c.hero.headline_highlight,
+      `<span class="accent-underline">${c.hero.headline_highlight}</span>`
+    ));
+    set('.hero-sub', c.hero.subtext);
+    set('.phone-sticker', c.hero.sticker);
+    set('.social-proof', c.hero.social_proof);
+    const btns = document.querySelectorAll('.hero-cta-row .btn');
+    if (btns[0]) btns[0].textContent = c.hero.cta_primary;
+    if (btns[1]) btns[1].textContent = c.hero.cta_secondary;
+
+    // How it works
+    const howSection = document.querySelector('section.how');
+    if (howSection) {
+      set('section.how .section-eyebrow', c.how.eyebrow);
+      set('section.how .section-title', c.how.title);
+      const steps = howSection.querySelectorAll('.step');
+      c.how.steps.forEach((s, i) => {
+        if (steps[i]) {
+          steps[i].querySelector('h3').textContent = s.title;
+          steps[i].querySelector('p').textContent = s.description;
+        }
+      });
+    }
+
+    // Features
+    set('section.features .section-eyebrow', c.features.eyebrow);
+    set('section.features .section-title', c.features.title);
+    const features = document.querySelectorAll('.feature');
+    c.features.items.forEach((f, i) => {
+      if (features[i]) {
+        features[i].querySelector('h3').textContent = f.title;
+        features[i].querySelector('p').textContent = f.description;
+        features[i].querySelector('.feature-example').textContent = f.example;
+      }
+    });
+
+    // Praktijk
+    set('section.praktijk .section-eyebrow', c.praktijk.eyebrow);
+    set('section.praktijk .section-title', c.praktijk.title);
+    const pcols = document.querySelectorAll('.pcol');
+    if (pcols[0]) {
+      pcols[0].querySelector('h3').textContent = c.praktijk.whatsapp_title;
+      const ul = pcols[0].querySelector('ul');
+      ul.innerHTML = c.praktijk.whatsapp_items.map(item => `<li>${item}</li>`).join('');
+    }
+    if (pcols[1]) {
+      pcols[1].querySelector('h3').textContent = c.praktijk.app_title;
+      const ul = pcols[1].querySelector('ul');
+      ul.innerHTML = c.praktijk.app_items.map(item => `<li>${item}</li>`).join('');
+    }
+
+    // Price
+    set('section.prijs .section-eyebrow', c.price.eyebrow);
+    set('section.prijs .section-title', c.price.title);
+    set('.price-name', c.price.plan_name);
+    set('.price-display .amount', c.price.amount);
+    set('.price-display .period', c.price.period);
+    set('.price-foot', c.price.foot_text);
+    set('.price-cta', c.price.cta_text);
+    const priceList = document.querySelector('.price-features');
+    if (priceList) {
+      const checkSVG = '<svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg>';
+      priceList.innerHTML = c.price.features.map(f =>
+        `<li><span class="check">${checkSVG}</span>${f}</li>`
+      ).join('');
+    }
+
+    // CTA
+    set('.cta-headline', c.cta.headline);
+    set('.cta-sub', c.cta.subtext);
+    set('section.cta-yellow .btn-dark', c.cta.button_text);
+
+    // Footer
+    set('.footer-copy', c.footer.copyright);
+  }).catch(() => {}); // fail silently — hardcoded HTML stays as fallback
 </script>
 
 </body>

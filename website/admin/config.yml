@@ -1,0 +1,110 @@
+backend:
+  name: git-gateway
+  branch: main
+
+media_folder: website/assets
+public_folder: /assets
+
+locale: nl
+
+collections:
+  - name: content
+    label: Website inhoud
+    files:
+      - name: landing
+        label: Landing pagina
+        file: website/content.json
+        format: json
+        fields:
+          - label: Navigatie
+            name: nav
+            widget: object
+            fields:
+              - { label: CTA knoptekst, name: cta_text, widget: string }
+
+          - label: Hero sectie
+            name: hero
+            widget: object
+            fields:
+              - { label: Eyebrow tekst, name: eyebrow, widget: string }
+              - { label: Headline, name: headline, widget: string }
+              - { label: Gemarkeerd woord in headline, name: headline_highlight, widget: string, hint: "Het deel van de headline dat onderstreept wordt" }
+              - { label: Subtekst, name: subtext, widget: text }
+              - { label: Primaire knop, name: cta_primary, widget: string }
+              - { label: Secundaire knop, name: cta_secondary, widget: string }
+              - { label: Social proof tekst, name: social_proof, widget: string }
+              - { label: Sticker tekst, name: sticker, widget: string }
+
+          - label: Hoe het werkt
+            name: how
+            widget: object
+            fields:
+              - { label: Eyebrow, name: eyebrow, widget: string }
+              - { label: Titel, name: title, widget: string }
+              - label: Stappen
+                name: steps
+                widget: list
+                fields:
+                  - { label: Titel, name: title, widget: string }
+                  - { label: Omschrijving, name: description, widget: text }
+
+          - label: Features
+            name: features
+            widget: object
+            fields:
+              - { label: Eyebrow, name: eyebrow, widget: string }
+              - { label: Titel, name: title, widget: string }
+              - label: Feature kaartjes
+                name: items
+                widget: list
+                fields:
+                  - { label: Titel, name: title, widget: string }
+                  - { label: Omschrijving, name: description, widget: text }
+                  - { label: Voorbeeldbericht, name: example, widget: string }
+
+          - label: In de praktijk
+            name: praktijk
+            widget: object
+            fields:
+              - { label: Eyebrow, name: eyebrow, widget: string }
+              - { label: Titel, name: title, widget: string }
+              - { label: WhatsApp kolom titel, name: whatsapp_title, widget: string }
+              - label: WhatsApp items
+                name: whatsapp_items
+                widget: list
+                field: { label: Item, name: item, widget: string }
+              - { label: App kolom titel, name: app_title, widget: string }
+              - label: App items
+                name: app_items
+                widget: list
+                field: { label: Item, name: item, widget: string }
+
+          - label: Prijs
+            name: price
+            widget: object
+            fields:
+              - { label: Eyebrow, name: eyebrow, widget: string }
+              - { label: Titel, name: title, widget: string }
+              - { label: Plan naam, name: plan_name, widget: string }
+              - { label: Bedrag, name: amount, widget: string }
+              - { label: Periode, name: period, widget: string }
+              - label: Inbegrepen features
+                name: features
+                widget: list
+                field: { label: Feature, name: feature, widget: string }
+              - { label: CTA knoptekst, name: cta_text, widget: string }
+              - { label: Ondertekst, name: foot_text, widget: string }
+
+          - label: CTA sectie
+            name: cta
+            widget: object
+            fields:
+              - { label: Headline, name: headline, widget: string }
+              - { label: Subtekst, name: subtext, widget: string }
+              - { label: Knoptekst, name: button_text, widget: string }
+
+          - label: Footer
+            name: footer
+            widget: object
+            fields:
+              - { label: Copyright, name: copyright, widget: string }
