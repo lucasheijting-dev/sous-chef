@@ -172,7 +172,7 @@ Gebruik deze standaardtijden ook als de gebruiker alleen "vanavond" of "morgenoc
 
 ## Datumregels
 
-Vandaag is ${new Date().toLocaleDateString('nl-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Europe/Amsterdam' })}.
+De exacte datum van vandaag wordt onderaan in de context meegegeven.
 Gebruik ISO 8601 (YYYY-MM-DD).
 
 **Relatieve datums:**
@@ -455,6 +455,15 @@ async function parseIntent({ text, availableLists, activeHabits, calendarStreams
     ? `\n\n## Gebruikerscontext\n${userContext}`
     : '';
 
+  const now = new Date();
+  const WEEKDAYS_NL = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+  const todayStr = now.toISOString().split('T')[0];
+  const weekdayNL = WEEKDAYS_NL[now.getDay()];
+  const tomorrowDate = new Date(now); tomorrowDate.setDate(now.getDate() + 1);
+  const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
+  const dateContext = `## Huidige datum en tijd\nVandaag is ${weekdayNL} ${todayStr}. Morgen is ${tomorrowStr}.\nWanneer de gebruiker "morgen" zegt → gebruik altijd ${tomorrowStr}. "Vandaag" → ${todayStr}.\nBereken alle relatieve datums (overmorgen, volgende week, etc.) vanuit ${todayStr}.`;
+
   const messages = [
     ...conversationHistory,
     { role: 'user', content: text },
@@ -468,6 +477,10 @@ async function parseIntent({ text, availableLists, activeHabits, calendarStreams
         type: 'text',
         text: SYSTEM_PROMPT + listsContext + habitsContext + streamsContext + contextBlock,
         cache_control: { type: 'ephemeral' },
+      },
+      {
+        type: 'text',
+        text: dateContext,
       },
     ],
     messages,
