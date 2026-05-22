@@ -6,7 +6,7 @@
     "eyebrow": "Persoonlijke assistent · Via WhatsApp",
     "headline": "Je persoonlijke WhatsApp-assistent.",
     "headline_highlight": "WhatsApp-assistent",
-    "subtext": "Lijstjes, notities, afspraken. Gewoon typen of inspreken via WhatsApp. Sous-Chef sorteert alles automatisch. Jij hoeft er niet meer aan te denken.",
+    "subtext": "Lijstjes, notities, afspraken. Gewoon typen of inspreken via WhatsApp. Sous-Chef sorteert alles automatisch. Je afspraken in je eigen agenda (iCal of Google), je lijstjes gesorteerd en je notities op de juiste plek.",
     "cta_primary": "Begin gratis →",
     "cta_secondary": "Hoe werkt het?",
     "social_proof": "14 dagen gratis · Geen creditcard · Opzegbaar wanneer je wilt",
@@ -21,11 +21,11 @@
         "description": "Typ in het Nederlands, zoals je praat. Geen commando's nodig."
       },
       {
-        "title": "Sous-Chef snapt het",
+        "title": "Het wordt gecheft",
         "description": "Sous-Chef herkent of het een boodschap, afspraak, notitie of een reminder is."
       },
       {
-        "title": "Jij kunt het vergeten",
+        "title": "Laat het gebeuren",
         "description": "Het staat in je agenda, je lijst of in je logboek. Niet meer aan denken."
       }
     ]
@@ -41,8 +41,8 @@
       },
       {
         "title": "Kalender & reminders",
-        "description": "Afspraken en verjaardagen herkent die automatisch. Reminders komen terug via WhatsApp en agenda op het juiste moment.",
-        "example": "\"verjaardag Jan 27 juli\" → reminder 26 juli ✓"
+        "description": "Afspraken en verjaardagen herkent die automatisch. De afspraak staat in je kalender (iCal of Google) & in de app.",
+        "example": "\"verjaardag Jan 27 juli\" → genoteerd Verjaardag Jan 27 juli ✓"
       },
       {
         "title": "Persoonlijke notities",
