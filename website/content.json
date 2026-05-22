@@ -6,7 +6,7 @@
     "eyebrow": "Persoonlijke assistent · Via WhatsApp",
     "headline": "Je persoonlijke WhatsApp-assistent.",
     "headline_highlight": "WhatsApp-assistent",
-    "subtext": "Lijstjes, notities, afspraken — gewoon typen of inspreken via WhatsApp. Sous-Chef sorteert alles automatisch. Jij hoeft er niet meer aan te denken.",
+    "subtext": "Lijstjes, notities, afspraken. Gewoon typen of inspreken via WhatsApp. Sous-Chef sorteert alles automatisch. Jij hoeft er niet meer aan te denken.",
     "cta_primary": "Begin gratis →",
     "cta_secondary": "Hoe werkt het?",
     "social_proof": "14 dagen gratis · Geen creditcard · Opzegbaar wanneer je wilt",
@@ -21,44 +21,44 @@
         "description": "Typ in het Nederlands, zoals je praat. Geen commando's nodig."
       },
       {
-        "title": "Die snapt het",
-        "description": "Sous-Chef herkent of het een boodschap, afspraak, notitie of reminder is."
+        "title": "Sous-Chef snapt het",
+        "description": "Sous-Chef herkent of het een boodschap, afspraak, notitie of een reminder is."
       },
       {
-        "title": "Jij vergeet het gerust",
-        "description": "Reminders komen terug via WhatsApp. Niks meer aan denken."
+        "title": "Jij kunt het vergeten",
+        "description": "Het staat in je agenda, je lijst of in je logboek. Niet meer aan denken."
       }
     ]
   },
   "features": {
     "eyebrow": "Features",
-    "title": "Alles wat in je hoofd zat, in één WhatsApp.",
+    "title": "Alles wat in je hoofd zat, gefixt met één Whatsappje.",
     "items": [
       {
-        "title": "Slimme lijstjes",
-        "description": "Voeg items toe via WhatsApp. Sous-Chef kiest automatisch de juiste lijst op basis van context. En loop je langs de supermarkt? Dan krijg je een seintje.",
+        "title": "Slimme lijsten",
+        "description": "Voeg items toe via WhatsApp. Sous-Chef kiest automatisch de juiste lijst op basis van je verzoek. En loop je langs de supermarkt? Dan krijg je een seintje. Niet vergeten!",
         "example": "\"citroenen kopen\" → Boodschappen ✓"
       },
       {
         "title": "Kalender & reminders",
-        "description": "Afspraken en verjaardagen herkent die automatisch. Reminders komen terug via WhatsApp op het juiste moment.",
-        "example": "\"verjaardag Stan 27 juli\" → reminder 26 juli ✓"
+        "description": "Afspraken en verjaardagen herkent die automatisch. Reminders komen terug via WhatsApp en agenda op het juiste moment.",
+        "example": "\"verjaardag Jan 27 juli\" → reminder 26 juli ✓"
       },
       {
         "title": "Persoonlijke notities",
-        "description": "Ideeën vastleggen in één appje. Teruglezen in de app. Altijd doorzoekbaar. Alleen voor jou.",
+        "description": "Ideeën vastleggen met één appje. Teruglezen in de app. Zowel via tekst als via spraak.",
         "example": "\"idee: podcast over design\" → opgeslagen ✓"
       },
       {
         "title": "Habit tracker",
-        "description": "Optioneel. Brons, zilver of goud per dag. Via WhatsApp of in de app. Dagelijkse reminder als je het vergeet.",
-        "example": "\"gesport\" → 🥈 Zilver gelogd ✓"
+        "description": "Brons, zilver of goud. Laat het weten via WhatsApp. Dagelijkse reminder voor als je het vergeet.",
+        "example": "\"gesport 60 minuten\" → 🥈 Zilver gelogd ✓"
       }
     ]
   },
   "praktijk": {
-    "eyebrow": "In de praktijk",
-    "title": "WhatsApp doet het werk. De app toont het overzicht.",
+    "eyebrow": "Het is heel simpel",
+    "title": "WhatsApp die regelt het. In de app houd je het overzicht.",
     "whatsapp_title": "Via WhatsApp doe je alles.",
     "whatsapp_items": [
       "Items toevoegen aan lijsten",
@@ -78,7 +78,7 @@
   },
   "price": {
     "eyebrow": "Prijs",
-    "title": "Eén plan. Geen ruis.",
+    "title": "Eén plan. Geen gedoe.",
     "plan_name": "Volledige toegang",
     "amount": "€4,99",
     "period": "/maand",
@@ -87,7 +87,7 @@
       "Lijsten, notities & kalender",
       "Slimme suggesties (instelbaar)",
       "Habit tracker (optioneel)",
-      "iCal-synchronisatie",
+      "iCal of Google Calendar synchronisatie",
       "App voor iOS & Android"
     ],
     "cta_text": "Begin 14 dagen gratis →",
@@ -95,7 +95,7 @@
   },
   "cta": {
     "headline": "Die cheft het wel.",
-    "subtext": "Stuur een appje. Sous-Chef regelt de rest.",
+    "subtext": "Stuur een appje. Sous-Chef regelt het.",
     "button_text": "Begin nu gratis →"
   },
   "footer": {
