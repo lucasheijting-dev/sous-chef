@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sous-Chef — Die cheft het wel.</title>
+<meta name="description" content="Sous-Chef is een persoonlijke WhatsApp-assistent die lijstjes, notities, afspraken en habits bijhoudt. Stuur een appje. Die cheft het wel." />
+<meta property="og:title" content="Sous-Chef — Die cheft het wel." />
+<meta property="og:description" content="Jouw persoonlijke WhatsApp-assistent. Lijstjes, notities, afspraken — gewoon typen. Sous-Chef sorteert alles automatisch." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://sous-chef.nl" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Titan+One&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --accent: #FFD000;
+    --accent-tint: #FFF7CC;
+    --cta: #007AFF;
+    --cta-hover: #0066D6;
+    --fg: #0a0a0a;
+    --fg-2: #1d1d1f;
+    --muted: #6b6b70;
+    --muted-2: #8e8e93;
+    --line: #e7e7ea;
+    --bg: #ffffff;
+    --bg-2: #f5f5f7;
+    --bg-3: #fafafa;
+    --footer: #111113;
+    --chat-bg: #ECE5DD;
+    --chat-header: #075E54;
+    --chat-out: #DCF8C6;
+    --chat-in: #ffffff;
+    --radius: 18px;
+    --radius-lg: 28px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.06), 0 24px 60px rgba(0,0,0,.08);
+    --shadow-lg: 0 30px 80px -20px rgba(0,0,0,.25), 0 12px 32px -12px rgba(0,0,0,.12);
+    --display: 'Titan One', 'Inter', system-ui, sans-serif;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  html{ scroll-behavior: smooth; }
+  body{
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'ss01','cv11';
+  }
+  .container{
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+  @media (max-width: 640px){
+    .container{ padding: 0 20px; }
+  }
+
+  /* ---------- Nav ---------- */
+  nav.top{
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    background: rgba(255,255,255,.72);
+    border-bottom: 1px solid transparent;
+    transition: background .25s ease, border-color .25s ease;
+  }
+  nav.top.scrolled{
+    background: rgba(255,255,255,.85);
+    border-bottom-color: var(--line);
+  }
+  .nav-inner{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 76px;
+  }
+  .brand{
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: var(--fg);
+  }
+  .brand-logo{
+    height: 42px;
+    width: auto;
+    display: block;
+  }
+  .nav-links{
+    display: flex;
+    gap: 36px;
+    list-style: none;
+    margin: 0; padding: 0;
+  }
+  .nav-links a{
+    color: var(--fg-2);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    opacity: .82;
+    transition: opacity .15s ease;
+  }
+  .nav-links a:hover{ opacity: 1; }
+  .nav-cta{
+    background: var(--accent);
+    color: #000;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 2.5px solid #000;
+    box-shadow: 3px 3px 0 #000;
+    transition: transform .12s ease, box-shadow .12s ease;
+    letter-spacing: -0.005em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .nav-cta:hover{ transform: translate(-1px,-1px); box-shadow: 5px 5px 0 #000; }
+  @media (max-width: 760px){
+    .nav-links{ display: none; }
+  }
+
+  /* ---------- Hero ---------- */
+  section.hero{
+    text-align: center;
+    padding: 80px 0 60px;
+    position: relative;
+    overflow: hidden;
+    background: var(--accent);
+    border-bottom: 4px solid #000;
+  }
+  section.hero .container{ position: relative; z-index: 1; }
+  .eyebrow{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: #000;
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    border: 2.5px solid #000;
+    box-shadow: 3px 3px 0 #fff, 3px 3px 0 1px #000;
+    transform: rotate(-1.5deg);
+    white-space: nowrap;
+  }
+  .eyebrow .dot{
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+  }
+  h1.headline{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(44px, 6.6vw, 88px);
+    line-height: 1.0;
+    letter-spacing: -0.015em;
+    margin: 0 auto 22px;
+    max-width: 14ch;
+    text-wrap: balance;
+    text-transform: uppercase;
+  }
+  h1.headline .accent-underline{
+    background-image: linear-gradient(transparent 62%, rgba(0,0,0,.15) 62%, rgba(0,0,0,.15) 92%, transparent 92%);
+    background-repeat: no-repeat;
+    padding: 0 .05em;
+  }
+  p.hero-sub{
+    font-size: clamp(17px, 1.4vw, 20px);
+    color: rgba(0,0,0,.78);
+    max-width: 560px;
+    margin: 0 auto 48px;
+    line-height: 1.45;
+    text-wrap: pretty;
+    font-weight: 500;
+  }
+  .hero-cta-row{
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 44px;
+    flex-wrap: wrap;
+  }
+  .btn{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 26px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 16px;
+    text-decoration: none;
+    cursor: pointer;
+    border: 0;
+    transition: background .15s ease, transform .15s ease, box-shadow .2s ease;
+    letter-spacing: -0.01em;
+    font-family: inherit;
+  }
+  .btn-primary{
+    background: var(--cta);
+    color: #fff;
+    border: 2.5px solid #000;
+    box-shadow: 4px 4px 0 #000;
+  }
+  .btn-primary:hover{ background: var(--cta-hover); transform: translate(-1px,-1px); box-shadow: 6px 6px 0 #000; }
+  .btn-ghost{
+    background: #fff;
+    color: var(--fg);
+    border: 2.5px solid #000;
+    box-shadow: 4px 4px 0 #000;
+  }
+  .btn-ghost:hover{ background: #f5f5f7; transform: translate(-1px,-1px); box-shadow: 6px 6px 0 #000; }
+  .social-proof{
+    color: rgba(0,0,0,.65);
+    font-size: 13.5px;
+    margin-top: 18px;
+    letter-spacing: -0.005em;
+    font-weight: 600;
+  }
+  .social-proof .dot-sep{
+    opacity: .5;
+    margin: 0 8px;
+  }
+
+  /* ---------- Phone + Chat ---------- */
+  .phone-deck{
+    margin: 56px auto 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    width: 100%;
+    max-width: 580px;
+  }
+  .phone-nav{
+    flex-shrink: 0;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    background: #fff;
+    color: #000;
+    border: 3px solid #000;
+    box-shadow: 4px 4px 0 #000;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-family: inherit;
+    transition: transform .12s ease, box-shadow .12s ease, background .15s ease;
+    z-index: 3;
+  }
+  .phone-nav:hover{ background: #000; color: var(--accent); transform: translate(-1px,-1px); box-shadow: 6px 6px 0 #000; }
+  .phone-nav:active{ transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+  .phone-tabs{
+    margin: 28px auto 0;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .phone-tabs .ptab{
+    padding: 9px 16px;
+    border: 2.5px solid #000;
+    border-radius: 999px;
+    background: #fff;
+    font-family: 'Inter', inherit;
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #000;
+    transition: transform .12s ease, box-shadow .12s ease, background .15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #000;
+    letter-spacing: -0.005em;
+  }
+  .phone-tabs .ptab .ic{ font-size: 14px; }
+  .phone-tabs .ptab:hover{ transform: translate(-1px,-1px); box-shadow: 4px 4px 0 #000; }
+  .phone-tabs .ptab.active{ background: #000; color: var(--accent); transform: translate(1px, 1px); box-shadow: 1px 1px 0 #000; }
+  @media (max-width: 720px){
+    .phone-deck{ gap: 8px; }
+    .phone-nav{ width: 48px; height: 48px; box-shadow: 3px 3px 0 #000; }
+  }
+  @media (max-width: 480px){
+    .phone-deck{ gap: 4px; }
+    .phone-nav{ width: 42px; height: 42px; }
+  }
+  .phone-wrap{
+    width: 340px;
+    max-width: 80vw;
+    position: relative;
+  }
+  .phone-sticker{
+    position: absolute;
+    top: -28px;
+    right: -70px;
+    z-index: 4;
+    background: #fff;
+    color: #000;
+    border: 3px solid #000;
+    border-radius: 18px;
+    padding: 14px 20px;
+    box-shadow: 5px 5px 0 #000;
+    transform: rotate(8deg);
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 22px;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  @media (max-width: 820px){
+    .phone-sticker{ right: -10px; top: -34px; font-size: 17px; padding: 10px 14px; }
+  }
+  .phone{
+    background: #0a0a0a;
+    border-radius: 44px;
+    padding: 12px;
+    box-shadow: 10px 10px 0 #000;
+    position: relative;
+    border: 3px solid #000;
+  }
+  .phone::before, .phone::after{
+    content: "";
+    position: absolute;
+    background: #1f1f23;
+    border-radius: 2px;
+  }
+  .phone::before{ left:-2px; top: 100px; width: 3px; height: 30px; }
+  .phone::after{ right:-2px; top: 120px; width: 3px; height: 50px; }
+  .phone-screen{
+    background: var(--chat-bg);
+    border-radius: 32px;
+    overflow: hidden;
+    position: relative;
+    aspect-ratio: 340 / 720;
+    display: flex;
+    flex-direction: column;
+  }
+  .phone-notch{
+    position: absolute;
+    top: 6px; left: 50%; transform: translateX(-50%);
+    width: 90px; height: 22px;
+    background: #0a0a0a;
+    border-radius: 999px;
+    z-index: 5;
+  }
+  .chat-status{
+    background: var(--chat-header);
+    color: rgba(255,255,255,.95);
+    font-size: 11px;
+    font-weight: 600;
+    display: flex; justify-content: space-between; align-items: center;
+    height: 34px;
+    padding: 0 22px;
+  }
+  .chat-status .time{ padding-right: 60px; }
+  .chat-status .ind{ display: flex; gap: 5px; align-items: center; padding-left: 60px; opacity: .95; }
+  .chat-header{
+    background: var(--chat-header);
+    color: #fff;
+    padding: 6px 12px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .chat-avatar{
+    width: 36px; height: 36px;
+    background: #fff;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .chat-meta{ display: flex; flex-direction: column; line-height: 1.15; }
+  .chat-meta .name{ font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+  .chat-meta .status{ font-size: 12px; opacity: .75; margin-top: 1px; }
+  .chat-actions{ margin-left: auto; display: flex; gap: 18px; align-items: center; opacity: .95; }
+  .chat-actions svg{ width: 18px; height: 18px; display: block; }
+
+  .chat-body{
+    flex: 1;
+    padding: 14px 12px 70px;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(255,255,255,.15), transparent 35%),
+      radial-gradient(circle at 80% 60%, rgba(0,0,0,.04), transparent 50%),
+      var(--chat-bg);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .chat-date{
+    align-self: center;
+    background: rgba(225,245,254,.85);
+    color: #4a4a4f;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    margin-bottom: 6px;
+    font-weight: 500;
+  }
+  .bubble{
+    max-width: 78%;
+    padding: 7px 10px 5px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.32;
+    letter-spacing: -0.005em;
+    box-shadow: 0 1px 0.5px rgba(0,0,0,.13);
+    position: relative;
+    opacity: 0;
+    transform: translateY(10px);
+    word-wrap: break-word;
+  }
+  .bubble.in{
+    background: var(--chat-in);
+    align-self: flex-start;
+    border-top-left-radius: 0;
+  }
+  .bubble.in::before{
+    content:"";
+    position: absolute;
+    top: 0; left: -6px;
+    width: 8px; height: 13px;
+    background: var(--chat-in);
+    clip-path: polygon(100% 0, 0 0, 100% 100%);
+  }
+  .bubble.out{
+    background: var(--chat-out);
+    align-self: flex-end;
+    border-top-right-radius: 0;
+  }
+  .bubble.out::before{
+    content:"";
+    position: absolute;
+    top: 0; right: -6px;
+    width: 8px; height: 13px;
+    background: var(--chat-out);
+    clip-path: polygon(0 0, 0 100%, 100% 0);
+  }
+  .bubble .ts{
+    font-size: 10px;
+    color: #8a8a8d;
+    margin-left: 8px;
+    float: right;
+    margin-top: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .bubble .ts svg{ width: 14px; height: 14px; }
+  .bubble.typing{
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 11px 14px;
+  }
+  .bubble.typing span{
+    width: 6px; height: 6px;
+    background: #b0b0b3;
+    border-radius: 50%;
+    animation: dot 1.2s infinite ease-in-out;
+  }
+  .bubble.typing span:nth-child(2){ animation-delay: .15s; }
+  .bubble.typing span:nth-child(3){ animation-delay: .3s; }
+  @keyframes dot{
+    0%, 60%, 100%{ transform: translateY(0); opacity: .5; }
+    30%{ transform: translateY(-4px); opacity: 1; }
+  }
+  .bubble.show{
+    animation: fadeUp .45s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  @keyframes fadeUp{
+    from{ opacity: 0; transform: translateY(10px); }
+    to  { opacity: 1; transform: translateY(0); }
+  }
+  .chat-input{
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 8px 8px 10px;
+    background: var(--chat-bg);
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .chat-input .input-field{
+    flex: 1;
+    background: #fff;
+    border-radius: 22px;
+    padding: 9px 14px;
+    color: #999;
+    font-size: 13px;
+    box-shadow: 0 1px 0.5px rgba(0,0,0,.06);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chat-input .mic{
+    width: 38px; height: 38px;
+    background: var(--chat-header);
+    color: #fff;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* ---------- How it works ---------- */
+  section.how{
+    background: var(--bg-2);
+    padding: 90px 0 120px;
+  }
+  .section-eyebrow{
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .section-title{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(36px, 4.6vw, 60px);
+    letter-spacing: -0.005em;
+    line-height: 1.02;
+    margin: 0 0 18px;
+    max-width: 18ch;
+    text-wrap: balance;
+    text-transform: uppercase;
+  }
+  .section-lede{
+    color: var(--muted);
+    max-width: 56ch;
+    font-size: 17px;
+    margin: 0;
+  }
+  .section-head{ text-align: center; margin-bottom: 64px; }
+  .section-head .section-title{ margin-left: auto; margin-right: auto; }
+  .section-head .section-lede{ margin: 0 auto; }
+  .steps{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    position: relative;
+  }
+  .step{
+    background: #fff;
+    border-radius: 28px;
+    padding: 40px 32px 36px;
+    border: 3px solid #000;
+    box-shadow: 6px 6px 0 #000;
+    transition: transform .15s ease, box-shadow .15s ease;
+    position: relative;
+  }
+  .step:hover{ transform: translate(-2px,-2px); box-shadow: 8px 8px 0 #000; }
+  .step:nth-of-type(2){ transform: rotate(0.6deg); }
+  .step:nth-of-type(2):hover{ transform: translate(-2px,-2px) rotate(0.6deg); }
+  .step:nth-of-type(1){ background: var(--accent); }
+  .step:nth-of-type(1) .step-num{ background: #000; color: var(--accent); }
+  .step-num{
+    width: 56px; height: 56px;
+    background: var(--accent);
+    color: #000;
+    border: 3px solid #000;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 26px;
+    letter-spacing: 0;
+    margin-bottom: 22px;
+    box-shadow: 3px 3px 0 #000;
+  }
+  .step h3{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 24px;
+    letter-spacing: 0;
+    margin: 0 0 10px;
+    text-transform: uppercase;
+  }
+  .step p{
+    color: var(--muted);
+    margin: 0;
+    font-size: 15.5px;
+    line-height: 1.5;
+  }
+  @media (max-width: 880px){
+    .steps{ grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Features ---------- */
+  section.features{
+    padding: 130px 0;
+  }
+  .feature-grid{
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+  }
+  .feature{
+    background: #fff;
+    border: 3px solid #000;
+    border-radius: 28px;
+    padding: 36px 34px;
+    box-shadow: 6px 6px 0 #000;
+    transition: background .2s ease, transform .15s ease, box-shadow .15s ease;
+    cursor: default;
+  }
+  .feature:nth-of-type(2){ background: var(--accent); }
+  .feature:nth-of-type(3){ background: var(--accent); }
+  .feature:hover{
+    transform: translate(-2px,-2px);
+    box-shadow: 9px 9px 0 #000;
+  }
+  .feature:hover .feature-icon{
+    transform: scale(1.08) rotate(-3deg);
+  }
+  .feature-icon{
+    width: 60px; height: 60px;
+    background: #000;
+    color: var(--accent);
+    border-radius: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 24px;
+    transition: transform .3s cubic-bezier(.2,.7,.3,1);
+  }
+  .feature:nth-of-type(2) .feature-icon,
+  .feature:nth-of-type(3) .feature-icon{
+    background: #fff;
+    color: #000;
+  }
+  .feature:hover .feature-icon{
+    background: #000;
+    color: var(--accent);
+  }
+  .feature h3{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 24px;
+    letter-spacing: 0;
+    margin: 0 0 10px;
+    text-transform: uppercase;
+  }
+  .feature p{
+    color: #000;
+    font-size: 15.5px;
+    line-height: 1.5;
+    margin: 0 0 20px;
+  }
+  .feature-example{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 2px solid #000;
+    border-radius: 999px;
+    padding: 7px 14px;
+    font-size: 13px;
+    color: var(--fg-2);
+    font-style: italic;
+    font-family: 'Inter', monospace;
+    box-shadow: 2px 2px 0 #000;
+  }
+  .feature-example .ex-arrow{ opacity: .35; font-style: normal; }
+  .feature-example .ex-check{ color: #2a8c4a; font-style: normal; font-weight: 700; }
+  @media (max-width: 760px){
+    .feature-grid{ grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Praktijk ---------- */
+  section.praktijk{
+    background: var(--bg-2);
+    padding: 120px 0;
+  }
+  .praktijk-grid{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .pcol{
+    background: #fff;
+    border-radius: 28px;
+    padding: 44px 40px 40px;
+    border: 3px solid #000;
+    box-shadow: 6px 6px 0 #000;
+  }
+  .pcol.invert{
+    background: #0a0a0a;
+    color: #fff;
+  }
+  .pcol.invert h3{ color: #fff; }
+  .pcol.invert li{ color: #e9eaee; border-top-color: rgba(255,255,255,.12); }
+  .pcol.invert li::before{ background: var(--accent); opacity: 1; }
+  .pcol.invert .pcol-tag{ background: var(--accent); color: #000; }
+  .pcol-tag{
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: #f5f5f7;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-2);
+    letter-spacing: 0.02em;
+    margin-bottom: 18px;
+  }
+  .pcol-tag .pcol-dot{
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .pcol-tag.wa .pcol-dot{ background: #25D366; }
+  .pcol-tag.app .pcol-dot{ background: var(--accent); }
+  .pcol h3{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 28px;
+    letter-spacing: 0;
+    margin: 0 0 22px;
+    line-height: 1.05;
+    text-transform: uppercase;
+  }
+  .pcol ul{
+    list-style: none;
+    margin: 0; padding: 0;
+  }
+  .pcol li{
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+    border-top: 1px solid var(--line);
+    font-size: 15.5px;
+    color: var(--fg-2);
+  }
+  .pcol li:first-child{ border-top: 0; }
+  .pcol li::before{
+    content: "";
+    width: 6px; height: 6px;
+    background: var(--fg);
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: .55;
+  }
+  @media (max-width: 880px){
+    .praktijk-grid{ grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Prijs ---------- */
+  section.prijs{
+    padding: 130px 0;
+  }
+  .pricecard{
+    max-width: 480px;
+    margin: 0 auto;
+    background: #fff;
+    border: 3px solid #000;
+    border-radius: 32px;
+    overflow: hidden;
+    box-shadow: 8px 8px 0 #000;
+    position: relative;
+  }
+  .pricecard::before{
+    content: "";
+    display: block;
+    height: 14px;
+    background: var(--accent);
+    border-bottom: 3px solid #000;
+  }
+  .pricecard-inner{
+    padding: 44px 40px 40px;
+  }
+  .price-eyebrow{
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .price-name{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 28px;
+    letter-spacing: 0;
+    margin: 0 0 18px;
+    text-transform: uppercase;
+  }
+  .price-display{
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 26px;
+  }
+  .price-display .amount{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 72px;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+  .price-display .period{
+    font-size: 17px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .price-features{
+    list-style: none;
+    margin: 0 0 28px;
+    padding: 0;
+    border-top: 1px solid var(--line);
+  }
+  .price-features li{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 0;
+    font-size: 15.5px;
+    color: var(--fg-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .price-features .check{
+    width: 24px; height: 24px;
+    background: var(--accent);
+    color: #000;
+    border: 2px solid #000;
+    border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .price-features .check svg{ width: 12px; height: 12px; }
+  .price-cta{
+    width: 100%;
+    padding: 16px 20px;
+  }
+  .price-foot{
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted-2);
+    margin-top: 14px;
+  }
+
+  /* ---------- CTA ---------- */
+  section.cta-yellow{
+    background: var(--accent);
+    padding: 140px 0;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    border-top: 4px solid #000;
+    border-bottom: 4px solid #000;
+  }
+  section.cta-yellow::before{
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(45deg, transparent 0 28px, rgba(0,0,0,.06) 28px 30px);
+    pointer-events: none;
+  }
+  section.cta-yellow .container{ position: relative; z-index: 1; }
+  .cta-headline{
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(56px, 8.5vw, 112px);
+    letter-spacing: -0.005em;
+    line-height: .95;
+    margin: 0 0 22px;
+    max-width: 16ch;
+    margin-inline: auto;
+    text-wrap: balance;
+    text-transform: uppercase;
+  }
+  .cta-sub{
+    font-size: clamp(18px, 1.6vw, 22px);
+    color: rgba(0,0,0,.7);
+    max-width: 52ch;
+    margin: 0 auto 44px;
+    font-weight: 500;
+  }
+  .btn-dark{
+    background: #000;
+    color: #fff;
+    font-size: 17px;
+    padding: 18px 34px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    border: 3px solid #000;
+    box-shadow: 6px 6px 0 #fff, 6px 6px 0 1px #000;
+  }
+  .btn-dark:hover{ background: #1d1d1f; transform: translate(-2px,-2px); box-shadow: 8px 8px 0 #fff, 8px 8px 0 1px #000; }
+
+  /* ---------- Footer ---------- */
+  footer.site{
+    background: var(--footer);
+    color: #c0c0c5;
+    padding: 56px 0 36px;
+  }
+  .footer-inner{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .footer-brand{
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+  }
+  .footer-links{
+    display: flex;
+    gap: 32px;
+    list-style: none;
+    margin: 0; padding: 0;
+  }
+  .footer-links a{
+    color: #c0c0c5;
+    text-decoration: none;
+    font-size: 14px;
+    transition: color .15s ease;
+  }
+  .footer-links a:hover{ color: #fff; }
+  .footer-copy{
+    color: #6c6c72;
+    font-size: 13px;
+  }
+  @media (max-width: 760px){
+    .footer-inner{ justify-content: flex-start; }
+    .footer-links{ order: 3; width: 100%; gap: 20px; flex-wrap: wrap; }
+  }
+
+  /* ---------- Marquee ribbon ---------- */
+  .marquee{
+    background: #000;
+    color: var(--accent);
+    border-top: 4px solid #000;
+    border-bottom: 4px solid #000;
+    overflow: hidden;
+    position: relative;
+    transform: rotate(-2deg) scale(1.04);
+    margin: 40px 0 30px;
+  }
+  .marquee.yellow{
+    background: var(--accent);
+    color: #000;
+  }
+  .marquee-track{
+    display: flex;
+    gap: 40px;
+    padding: 18px 0;
+    white-space: nowrap;
+    animation: marquee 30s linear infinite;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 32px;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+  }
+  .marquee-track span{
+    display: inline-flex;
+    align-items: center;
+    gap: 40px;
+  }
+  .marquee-track .star{ font-family: 'Inter', sans-serif; font-size: 28px; }
+  .marquee.yellow .marquee-track .star{ color: #000; }
+  @keyframes marquee{
+    from{ transform: translateX(0); }
+    to{ transform: translateX(-50%); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .marquee-track{ animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============== NAV ============== -->
+<nav class="top" id="topnav">
+  <div class="container nav-inner">
+    <a href="#" class="brand">
+      <img class="brand-logo" src="assets/sous-chef-logo.png" alt="Sous-Chef" />
+    </a>
+    <ul class="nav-links">
+      <li><a href="#how">Hoe het werkt</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#prijs">Prijs</a></li>
+    </ul>
+    <a href="#prijs" class="nav-cta">Gratis proberen</a>
+  </div>
+</nav>
+
+<!-- ============== HERO ============== -->
+<section class="hero">
+  <div class="container">
+    <div class="eyebrow">
+      <span class="dot"></span>
+      <span>Persoonlijke assistent · Via WhatsApp</span>
+    </div>
+    <h1 class="headline">
+      Je persoonlijke <span class="accent-underline">WhatsApp-assistent</span>.
+    </h1>
+    <p class="hero-sub">
+      Lijstjes, notities, afspraken — gewoon typen of inspreken via WhatsApp.
+      Sous-Chef sorteert alles automatisch. Jij hoeft er niet meer aan te denken.
+    </p>
+
+    <!-- Phone mockup -->
+    <div class="phone-deck">
+      <button class="phone-nav prev" id="phone-prev" aria-label="Vorige demo" type="button">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+      </button>
+      <div class="phone-wrap" id="phone">
+        <div class="phone-sticker">Die cheft het wel.</div>
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-notch"></div>
+            <div class="chat-status">
+              <span class="time">9:41</span>
+              <span class="ind">
+                <svg viewBox="0 0 18 12" width="16" height="11" fill="currentColor"><rect x="0" y="3" width="3" height="6" rx="1"/><rect x="4" y="2" width="3" height="7" rx="1"/><rect x="8" y="1" width="3" height="8" rx="1"/><rect x="12" y="0" width="3" height="9" rx="1"/></svg>
+                <svg viewBox="0 0 20 14" width="18" height="12" fill="currentColor"><rect x="0.5" y="2.5" width="15" height="9" rx="2" stroke="currentColor" stroke-width="1" fill="none"/><rect x="2" y="4" width="11" height="6" rx="1"/><rect x="16.5" y="5" width="2" height="4" rx="0.5"/></svg>
+              </span>
+            </div>
+            <div class="chat-header">
+              <div class="chat-avatar">
+                <img src="assets/sous-chef-icon.png" alt="" style="width:100%;height:100%;object-fit:contain;border-radius:50%;background:var(--accent);" />
+              </div>
+              <div class="chat-meta">
+                <div class="name">Sous-Chef</div>
+                <div class="status">online</div>
+              </div>
+              <div class="chat-actions" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 00-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.27-.28.35-.67.24-1.02-.37-1.11-.56-2.3-.56-3.53 0-.54-.45-.99-.99-.99H4.19C3.65 3 3 3.24 3 3.99 3 13.28 10.73 21 20.01 21c.71 0 .99-.63.99-1.18v-3.45c0-.54-.45-.99-.99-.99z"/></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+              </div>
+            </div>
+            <div class="chat-body" id="chat-body"></div>
+            <div class="chat-input">
+              <div class="input-field">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="#999"><circle cx="12" cy="12" r="10" fill="none" stroke="#999" stroke-width="2"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" stroke="#999" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                <span>Bericht</span>
+              </div>
+              <span class="mic" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3z"/><path d="M19 11a7 7 0 01-14 0H3a9 9 0 008 8.94V23h2v-3.06A9 9 0 0021 11z"/></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="phone-nav next" id="phone-next" aria-label="Volgende demo" type="button">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+      </button>
+    </div>
+    <div class="phone-tabs" id="phone-tabs">
+      <button class="ptab active" data-i="0" type="button"><span class="ic">📝</span>Boodschappen</button>
+      <button class="ptab" data-i="1" type="button"><span class="ic">📅</span>Kalender</button>
+      <button class="ptab" data-i="2" type="button"><span class="ic">💭</span>Notities</button>
+    </div>
+
+    <div class="hero-cta-row">
+      <a href="#prijs" class="btn btn-primary">Begin gratis →</a>
+      <a href="#how" class="btn btn-ghost">Hoe werkt het?</a>
+    </div>
+    <div class="social-proof">
+      14 dagen gratis<span class="dot-sep">·</span>Geen creditcard<span class="dot-sep">·</span>Opzegbaar wanneer je wilt
+    </div>
+  </div>
+</section>
+
+<!-- ============== MARQUEE ============== -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    <span>Die cheft het wel <span class="star">✦</span> Stuur een appje <span class="star">✦</span> Lijstjes &amp; reminders <span class="star">✦</span> Die cheft het wel <span class="star">✦</span> Stuur een appje <span class="star">✦</span> Lijstjes &amp; reminders <span class="star">✦</span></span>
+    <span>Die cheft het wel <span class="star">✦</span> Stuur een appje <span class="star">✦</span> Lijstjes &amp; reminders <span class="star">✦</span> Die cheft het wel <span class="star">✦</span> Stuur een appje <span class="star">✦</span> Lijstjes &amp; reminders <span class="star">✦</span></span>
+  </div>
+</div>
+
+<!-- ============== HOE HET WERKT ============== -->
+<section class="how" id="how">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">Hoe het werkt</div>
+      <h2 class="section-title">Drie stappen. Dat is het.</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Stuur een bericht</h3>
+        <p>Typ in het Nederlands, zoals je praat. Geen commando's nodig.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Die snapt het</h3>
+        <p>Sous-Chef herkent of het een boodschap, afspraak, notitie of reminder is.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Jij vergeet het gerust</h3>
+        <p>Reminders komen terug via WhatsApp. Niks meer aan denken.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FEATURES ============== -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">Features</div>
+      <h2 class="section-title">Alles wat in je hoofd zat, in één WhatsApp.</h2>
+    </div>
+    <div class="feature-grid">
+
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        </div>
+        <h3>Slimme lijstjes</h3>
+        <p>Voeg items toe via WhatsApp. Sous-Chef kiest automatisch de juiste lijst op basis van context. En loop je langs de supermarkt? Dan krijg je een seintje.</p>
+        <div class="feature-example">
+          "citroenen kopen" <span class="ex-arrow">→</span> Boodschappen <span class="ex-check">✓</span>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="12" cy="16" r="1.6" fill="currentColor"/></svg>
+        </div>
+        <h3>Kalender &amp; reminders</h3>
+        <p>Afspraken en verjaardagen herkent die automatisch. Reminders komen terug via WhatsApp op het juiste moment.</p>
+        <div class="feature-example">
+          "verjaardag Stan 27 juli" <span class="ex-arrow">→</span> reminder 26 juli <span class="ex-check">✓</span>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        </div>
+        <h3>Persoonlijke notities</h3>
+        <p>Ideeën vastleggen in één appje. Teruglezen in de app. Altijd doorzoekbaar. Alleen voor jou.</p>
+        <div class="feature-example">
+          "idee: podcast over design" <span class="ex-arrow">→</span> opgeslagen <span class="ex-check">✓</span>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="6"/><path d="M8 4l-2 8M16 4l2 8M9 4h6"/><path d="M10 14l1.5 1.5L15 12" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Habit tracker</h3>
+        <p>Optioneel. Brons, zilver of goud per dag. Via WhatsApp of in de app. Dagelijkse reminder als je het vergeet.</p>
+        <div class="feature-example">
+          "gesport" <span class="ex-arrow">→</span> 🥈 Zilver gelogd <span class="ex-check">✓</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============== PRAKTIJK ============== -->
+<section class="praktijk">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">In de praktijk</div>
+      <h2 class="section-title">WhatsApp doet het werk. De app toont het overzicht.</h2>
+    </div>
+    <div class="praktijk-grid">
+      <div class="pcol">
+        <div class="pcol-tag wa"><span class="pcol-dot"></span>Via WhatsApp</div>
+        <h3>Via WhatsApp doe je alles.</h3>
+        <ul>
+          <li>Items toevoegen aan lijsten</li>
+          <li>Afspraken en reminders instellen</li>
+          <li>Notities dicteren via spraakbericht</li>
+          <li>Habits loggen</li>
+          <li>Suggesties ontvangen en beantwoorden</li>
+          <li>Instellingen wijzigen</li>
+        </ul>
+      </div>
+      <div class="pcol invert">
+        <div class="pcol-tag app"><span class="pcol-dot"></span>In de app</div>
+        <h3>In de app zie je alles.</h3>
+        <ul>
+          <li>Lijsten inzien en afvinken</li>
+          <li>Notities teruglezen</li>
+          <li>Agenda bekijken</li>
+          <li>Habits dagelijks bijhouden</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== MARQUEE 2 ============== -->
+<div class="marquee yellow" aria-hidden="true">
+  <div class="marquee-track">
+    <span>Geen apps onthouden <span class="star">✦</span> Geen commando's <span class="star">✦</span> Geen gedoe <span class="star">✦</span> Geen apps onthouden <span class="star">✦</span> Geen commando's <span class="star">✦</span> Geen gedoe <span class="star">✦</span></span>
+    <span>Geen apps onthouden <span class="star">✦</span> Geen commando's <span class="star">✦</span> Geen gedoe <span class="star">✦</span> Geen apps onthouden <span class="star">✦</span> Geen commando's <span class="star">✦</span> Geen gedoe <span class="star">✦</span></span>
+  </div>
+</div>
+
+<!-- ============== PRIJS ============== -->
+<section class="prijs" id="prijs">
+  <div class="container">
+    <div class="section-head">
+      <div class="section-eyebrow">Prijs</div>
+      <h2 class="section-title">Eén plan. Geen ruis.</h2>
+    </div>
+    <div class="pricecard">
+      <div class="pricecard-inner">
+        <div class="price-eyebrow">Sous-Chef</div>
+        <h3 class="price-name">Volledige toegang</h3>
+        <div class="price-display">
+          <span class="amount">€4,99</span>
+          <span class="period">/maand</span>
+        </div>
+        <ul class="price-features">
+          <li><span class="check"><svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg></span>Onbeperkte WhatsApp-berichten</li>
+          <li><span class="check"><svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg></span>Lijsten, notities &amp; kalender</li>
+          <li><span class="check"><svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg></span>Slimme suggesties (instelbaar)</li>
+          <li><span class="check"><svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg></span>Habit tracker (optioneel)</li>
+          <li><span class="check"><svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg></span>iCal-synchronisatie</li>
+          <li><span class="check"><svg viewBox="0 0 12 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 5 4.5 8.5 11 1.5"/></svg></span>App voor iOS &amp; Android</li>
+        </ul>
+        <a href="#" class="btn btn-primary price-cta">Begin 14 dagen gratis →</a>
+        <div class="price-foot">Geen creditcard nodig · Opzegbaar wanneer je wilt</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CTA ============== -->
+<section class="cta-yellow">
+  <div class="container">
+    <h2 class="cta-headline">Die cheft het wel.</h2>
+    <p class="cta-sub">Stuur een appje. Sous-Chef regelt de rest.</p>
+    <a href="#prijs" class="btn btn-dark">Begin nu gratis →</a>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer class="site">
+  <div class="container footer-inner">
+    <a href="#" class="footer-brand brand">
+      <img class="brand-logo" src="assets/sous-chef-logo.png" alt="Sous-Chef" style="height:48px;" />
+    </a>
+    <ul class="footer-links">
+      <li><a href="#">Privacy</a></li>
+      <li><a href="#">Voorwaarden</a></li>
+      <li><a href="#">Contact</a></li>
+    </ul>
+    <div class="footer-copy">© 2026 Sous-Chef</div>
+  </div>
+</footer>
+
+<script>
+  // Nav scroll
+  const nav = document.getElementById('topnav');
+  document.addEventListener('scroll', () => {
+    nav.classList.toggle('scrolled', window.scrollY > 8);
+  }, { passive: true });
+
+  // Chat scenes
+  const CHECK_SVG = '<svg viewBox="0 0 16 11" fill="#34B7F1"><path d="M15.01 3.316l-.478-.372a.365.365 0 00-.51.063L8.666 9.879a.32.32 0 01-.484.033l-.358-.325a.319.319 0 00-.484.032l-.378.483a.418.418 0 00.036.541l1.32 1.266c.143.14.361.125.484-.033l6.733-8.567a.366.366 0 00-.063-.51zm-4.692 0l-.478-.372a.365.365 0 00-.51.063L3.975 9.879a.32.32 0 01-.484.033L1.32 7.756a.366.366 0 00-.516.005l-.423.433a.364.364 0 00.006.514l3.258 3.185c.143.141.361.126.484-.033l6.733-8.567a.366.366 0 00-.063-.51z"/></svg>';
+
+  const SCENES = [
+    {
+      bubbles: [
+        { kind: 'date', text: 'VANDAAG' },
+        { side: 'out', text: 'citroenen kopen 🍋', ts: '9:24' },
+        { side: 'in',  typing: true },
+        { side: 'in',  text: '✅ Toegevoegd aan <b>Boodschappen</b>.', ts: '9:24' },
+        { side: 'out', text: "ook avocado's en bonen", ts: '9:25' },
+        { side: 'in',  typing: true },
+        { side: 'in',  text: '✅ Beide toegevoegd. Lijst staat nu op 7 items.', ts: '9:25' }
+      ]
+    },
+    {
+      bubbles: [
+        { kind: 'date', text: 'VANDAAG' },
+        { side: 'out', text: 'verjaardag Stan 27 juli', ts: '9:30' },
+        { side: 'in',  typing: true },
+        { side: 'in',  text: '🎂 Klaar! Reminder op 26 juli ingesteld.', ts: '9:30' },
+        { side: 'out', text: 'tandarts donderdag 14:00', ts: '9:31' },
+        { side: 'in',  typing: true },
+        { side: 'in',  text: '📅 Toegevoegd aan agenda. Gesynct met iCal.', ts: '9:31' }
+      ]
+    },
+    {
+      bubbles: [
+        { kind: 'date', text: 'VANDAAG' },
+        { side: 'out', text: 'idee: podcast over design', ts: '9:40' },
+        { side: 'in',  typing: true },
+        { side: 'in',  text: '📝 Opgeslagen in <b>Notities</b>.', ts: '9:40' },
+        { side: 'out', text: 'gesport', ts: '9:42' },
+        { side: 'in',  typing: true },
+        { side: 'in',  text: '🥈 Zilver gelogd. Streak: 5 dagen 🔥', ts: '9:42' }
+      ]
+    }
+  ];
+
+  const chatBody = document.getElementById('chat-body');
+  const tabs = document.querySelectorAll('#phone-tabs .ptab');
+  let sceneIdx = 0;
+  let sceneToken = 0;
+
+  function bubbleHTML(b) {
+    if (b.kind === 'date') return `<div class="chat-date">${b.text}</div>`;
+    if (b.typing) return `<div class="bubble in typing"><span></span><span></span><span></span></div>`;
+    const tsExtra = b.side === 'out' ? CHECK_SVG : '';
+    return `<div class="bubble ${b.side}">${b.text}<span class="ts">${b.ts}${tsExtra}</span></div>`;
+  }
+
+  function renderScene(idx) {
+    sceneIdx = (idx + SCENES.length) % SCENES.length;
+    const token = ++sceneToken;
+    const scene = SCENES[sceneIdx];
+
+    tabs.forEach((d, i) => d.classList.toggle('active', i === sceneIdx));
+    chatBody.innerHTML = scene.bubbles.map(bubbleHTML).join('');
+
+    let t = 200;
+    chatBody.querySelectorAll('.bubble, .chat-date').forEach((n) => {
+      const isTyping = n.classList.contains('typing');
+      setTimeout(() => {
+        if (token !== sceneToken) return;
+        if (n.classList.contains('chat-date')) n.style.opacity = '1';
+        else n.classList.add('show');
+      }, t);
+      if (isTyping) {
+        setTimeout(() => {
+          if (token !== sceneToken) return;
+          n.style.transition = 'opacity .2s ease';
+          n.style.opacity = '0';
+          setTimeout(() => { if (token !== sceneToken) return; n.style.display = 'none'; }, 200);
+        }, t + 1100);
+        t += 1200;
+      } else if (n.classList.contains('chat-date')) {
+        t += 150;
+      } else {
+        t += 650;
+      }
+    });
+  }
+
+  let firstPlayed = false;
+  new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && !firstPlayed) { firstPlayed = true; renderScene(0); }
+    });
+  }, { threshold: 0.2 }).observe(document.getElementById('phone'));
+
+  document.getElementById('phone-prev').addEventListener('click', () => renderScene(sceneIdx - 1));
+  document.getElementById('phone-next').addEventListener('click', () => renderScene(sceneIdx + 1));
+  tabs.forEach(d => d.addEventListener('click', () => renderScene(Number(d.dataset.i))));
+</script>
+
+</body>
+</html>
