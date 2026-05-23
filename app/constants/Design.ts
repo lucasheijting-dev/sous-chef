@@ -1,10 +1,10 @@
 export const LightColors = {
   black: '#0A0A0A',
   white: '#FFFFFF',
-  yellow: '#FFD000',
-  yellowDark: '#E5C000',
-  yellowLight: '#FFFDE7',
-  offWhite: '#F5F5F0',
+  yellow: '#FCC10C',
+  yellowDark: '#E5A800',
+  yellowLight: '#FFF9CC',
+  offWhite: '#F7F7F7',
   gray100: '#F0F0F0',
   gray200: '#E0E0E0',
   gray400: '#AAAAAA',
@@ -15,9 +15,9 @@ export const LightColors = {
 export const DarkColors = {
   black: '#FFFFFF',
   white: '#111111',
-  yellow: '#FFD000',
-  yellowDark: '#E5C000',
-  yellowLight: 'rgba(255,208,0,0.10)',
+  yellow: '#FCC10C',
+  yellowDark: '#E5A800',
+  yellowLight: 'rgba(252,193,12,0.10)',
   offWhite: '#080808',
   gray100: '#1E1E1E',
   gray200: '#2A2A2A',
@@ -31,48 +31,40 @@ export type ThemeColors = typeof LightColors;
 export const Colors = LightColors;
 
 export const Gradients = {
-  yellow: ['#FFD000', '#E5C000'] as const,
+  yellow: ['#FCC10C', '#E5A800'] as const,
   dark: ['#0A0A0A', '#1C1C1C'] as const,
   yellowSubtle: ['#FFFDE7', '#FFF9CC'] as const,
 };
 
 export const Radius = {
-  sm: 6,
-  md: 10,
-  lg: 14,
-  xl: 18,
+  sm: 10,
+  md: 16,
+  lg: 20,
+  xl: 28,
   pill: 100,
 };
 
-// Neobrutalist flat offset shadow — hard edge, no blur
 export const Shadow = {
   card: {
-    shadowColor: '#0A0A0A',
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
     elevation: 4,
   },
   strong: {
-    shadowColor: '#0A0A0A',
-    shadowOffset: { width: 5, height: 5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 8,
   },
   yellow: {
-    shadowColor: '#FFD000',
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 5,
-  },
-};
-
-export const Border = {
-  neo: {
-    borderWidth: 2,
-    borderColor: '#0A0A0A',
+    shadowColor: '#FCC10C',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
 };
 

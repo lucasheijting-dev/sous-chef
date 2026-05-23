@@ -32,7 +32,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { CalEvent } from '@/lib/types';
-import { Colors, Radius, Shadow, Border, ThemeColors, TAB_BAR_CLEARANCE } from '@/constants/Design';
+import { Colors, Radius, Shadow, ThemeColors, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 
@@ -692,8 +692,8 @@ function AgendaLite() {
             <Pressable
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedEvent(e); }}
               style={({ pressed }) => [
-                { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, opacity: eventPast ? 0.45 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
-                Shadow.card, Border.neo,
+                { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.white, borderRadius: Radius.lg, padding: 16, marginBottom: 10, gap: 14, overflow: 'hidden', opacity: eventPast ? 0.45 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] },
+                Shadow.card,
               ]}
             >
               {stream?.color && <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: stream.color }} />}
@@ -736,7 +736,7 @@ function AgendaLite() {
       {/* QuickAdd FAB */}
       <TouchableOpacity
         onPress={() => openQuickAdd()}
-        style={{ position: 'absolute', right: 20, bottom: TAB_BAR_CLEARANCE - 20, width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', ...Shadow.strong, ...Border.neo }}
+        style={{ position: 'absolute', right: 20, bottom: TAB_BAR_CLEARANCE - 20, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
         activeOpacity={0.85}
       >
         <Ionicons name="add" size={26} color={Colors.black} />
@@ -1133,7 +1133,7 @@ const cal = StyleSheet.create({
   dayEventCard: {
     flexDirection: 'row', alignItems: 'center', borderRadius: Radius.lg,
     padding: 16, marginBottom: 10,
-    ...Shadow.card, ...Border.neo,
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 2,
   },
 });
 
@@ -1153,10 +1153,10 @@ const s = StyleSheet.create({
   icalBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow },
 
   filterRow:      { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
-  pill:           { paddingHorizontal: 18, paddingVertical: 9, borderRadius: Radius.sm, backgroundColor: '#E4E4E4', borderWidth: 2, borderColor: '#0A0A0A' },
-  chip:           { paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.sm, backgroundColor: '#E4E4E4', borderWidth: 2, borderColor: '#0A0A0A' },
+  pill:           { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 24, backgroundColor: '#E4E4E4' },
+  chip:           { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 24, backgroundColor: '#E4E4E4' },
   pillActive:     { backgroundColor: Colors.yellow },
-  pillText:       { fontFamily: 'Inter_700Bold', fontSize: 13, color: '#222' },
+  pillText:       { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#222' },
   pillTextActive: { color: '#111' },
   unlinkBtn: { padding: 7 },
 
@@ -1179,7 +1179,7 @@ const s = StyleSheet.create({
   sectionLabelPast:  { color: Colors.gray400 },
 
   cardWrap: { paddingHorizontal: 16, paddingBottom: 10 },
-  card:     { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.lg, ...Shadow.card, ...Border.neo },
+  card:     { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.white, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
   cardPast: { opacity: 0.5 },
   accent:        { width: 4, alignSelf: 'stretch' },
   accentDefault: { backgroundColor: Colors.gray200 },

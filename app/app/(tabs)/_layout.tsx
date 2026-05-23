@@ -2,6 +2,7 @@ import { View, StyleSheet, Platform } from 'react-native';
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useRef, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 import { useUser } from '@/context/UserContext';
@@ -33,6 +34,16 @@ function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label
   );
 }
 
+function GlassBar() {
+  return (
+    <BlurView
+      intensity={Platform.OS === 'web' ? 70 : 95}
+      tint="systemUltraThinMaterialDark"
+      style={StyleSheet.absoluteFill}
+    />
+  );
+}
+
 export default function TabLayout() {
   const { prefs } = useUser();
 
@@ -44,6 +55,7 @@ export default function TabLayout() {
         tabBarShowLabel: false,
         tabBarItemStyle: styles.tabBarItem,
         tabBarIconStyle: styles.tabBarIcon,
+        tabBarBackground: () => <GlassBar />,
       }}
     >
       {ALL_TABS.map(({ name, label, icon, iconOff }) => {
@@ -77,19 +89,20 @@ const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
     bottom: Platform.OS === 'web' ? 16 : 32,
-    left: 50,
-    right: 50,
+    left: 60,
+    right: 60,
     height: 62,
-    borderRadius: 16,
-    backgroundColor: '#0A0A0A',
+    borderRadius: 31,
+    backgroundColor: 'rgba(10,10,10,0.65)',
     borderTopWidth: 0,
-    borderWidth: 2,
-    borderColor: Colors.yellow,
-    shadowColor: Colors.yellow,
-    shadowOffset: { width: 4, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 8,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 20,
+    overflow: 'hidden',
   },
   tabBarItem: {
     height: 62,
