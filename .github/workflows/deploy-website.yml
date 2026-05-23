@@ -1,0 +1,27 @@
+name: Deploy website naar Hetzner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via rsync
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            website/ \
+            deploy@$HOST:/var/www/sous-chef/
