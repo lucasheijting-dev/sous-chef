@@ -1099,70 +1099,6 @@
     margin-top: 14px;
   }
 
-  /* ---------- Blog ---------- */
-  section.blog{
-    padding: 110px 0 120px;
-    background: var(--bg-2);
-    border-top: 4px solid #000;
-  }
-  .blog-grid{
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
-    margin-top: 48px;
-  }
-  @media (max-width: 720px){ .blog-grid{ grid-template-columns: 1fr; } }
-  .blog-card{
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    background: #fff;
-    border: 3px solid #000;
-    border-radius: 24px;
-    padding: 32px 28px 28px;
-    box-shadow: 5px 5px 0 #000;
-    text-decoration: none;
-    color: var(--fg);
-    transition: transform .15s ease, box-shadow .15s ease;
-  }
-  .blog-card:hover{ transform: translate(-2px,-2px); box-shadow: 7px 7px 0 #000; }
-  .blog-card-tag{
-    display: inline-block;
-    background: var(--accent);
-    color: #000;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 4px 12px;
-    border-radius: 999px;
-    border: 2px solid #000;
-    width: fit-content;
-  }
-  .blog-card-title{
-    font-family: var(--display);
-    font-weight: 400;
-    font-size: clamp(20px, 1.8vw, 24px);
-    text-transform: uppercase;
-    margin: 6px 0 0;
-    line-height: 1.1;
-  }
-  .blog-card-lead{
-    color: var(--muted);
-    font-size: 15px;
-    line-height: 1.5;
-    margin: 0;
-    flex: 1;
-  }
-  .blog-card-meta{
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--muted-2);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-top: 6px;
-  }
-
   /* ---------- CTA ---------- */
   section.cta-yellow{
     background: var(--accent);
@@ -1595,40 +1531,6 @@
     <h2 class="cta-headline">Die cheft het wel.</h2>
     <p class="cta-sub">Stuur een appje. Sous-Chef regelt de rest.</p>
     <a href="#prijs" class="btn btn-dark">Begin nu gratis →</a>
-  </div>
-</section>
-
-<!-- ============== BLOG ============== -->
-<section class="blog" id="blog">
-  <div class="container">
-    <div class="section-eyebrow">Van de blog</div>
-    <h2 class="section-title">Slimmer leven,<br>één appje per keer.</h2>
-    <div class="blog-grid">
-      <a href="/blog/stop-met-post-its" class="blog-card">
-        <div class="blog-card-tag">Productiviteit</div>
-        <h3 class="blog-card-title">Stop met post-its</h3>
-        <p class="blog-card-lead">Hoe ik mijn hoofd leeg maakte door gewoon een appje te sturen.</p>
-        <div class="blog-card-meta">12 mei 2026 · 4 min</div>
-      </a>
-      <a href="/blog/gewoontes-volhouden" class="blog-card">
-        <div class="blog-card-tag">Habits</div>
-        <h3 class="blog-card-title">5 gewoontes die ik eindelijk volhou</h3>
-        <p class="blog-card-lead">Geen willpower. Geen spreadsheets. Alleen een dagelijks seintje op het juiste moment.</p>
-        <div class="blog-card-meta">5 mei 2026 · 5 min</div>
-      </a>
-      <a href="/blog/nooit-meer-vergeten" class="blog-card">
-        <div class="blog-card-tag">Lijsten</div>
-        <h3 class="blog-card-title">Nooit meer "wat hadden we nodig?"</h3>
-        <p class="blog-card-lead">De gedeelde boodschappenlijst die eindelijk wél werkt — zonder een aparte app.</p>
-        <div class="blog-card-meta">28 april 2026 · 3 min</div>
-      </a>
-      <a href="/blog/agenda-altijd-bij" class="blog-card">
-        <div class="blog-card-tag">Agenda</div>
-        <h3 class="blog-card-title">Je agenda, eindelijk op één plek</h3>
-        <p class="blog-card-lead">Hoe ik gestopt ben met drie kalenders en nooit meer een afspraak mis.</p>
-        <div class="blog-card-meta">20 april 2026 · 4 min</div>
-      </a>
-    </div>
   </div>
 </section>
 
