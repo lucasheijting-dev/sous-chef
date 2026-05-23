@@ -284,8 +284,48 @@ cron.schedule('*/13 * * * *', async () => {
   } catch {}
 });
 
+// ── Calendar sync health check — every day at 07:30 ──────────────────────────
+
+cron.schedule('30 7 * * *', async () => {
+  if (!caldav.isConfigured()) return;
+  console.log('[CalDAV Health] Checking sync status for all users...');
+
+  try {
+    const users = await db.getUsersWithCalDAV();
+    for (const user of users) {
+      try {
+        const creds = await db.getCalDAVCredentials(user.id);
+        if (!creds) continue;
+
+        // Try a lightweight propfind to verify credentials still work
+        const ok = await caldav.checkConnection(creds.username, creds.password).catch(() => false);
+        if (!ok) {
+          const prefs = await db.getUserPrefs(user.id) ?? {};
+          const lastAlert = prefs.caldav_health_alerted_at;
+          const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+
+          // Only send once per day to avoid spam
+          if (!lastAlert || new Date(lastAlert).getTime() < oneDayAgo) {
+            await sendMessage(user.whatsapp_number,
+              `⚠️ *Kalender-sync onderbroken.*\n\nSous-Chef kan geen afspraken meer toevoegen aan je agenda. Ga naar *Instellingen → Agenda* in de app om opnieuw te verbinden.`
+            );
+            await db.updateUserPrefs(user.id, { caldav_health_alerted_at: new Date().toISOString() });
+          }
+        } else {
+          // Clear alert flag on successful check
+          await db.updateUserPrefs(user.id, { caldav_health_alerted_at: null }).catch(() => {});
+        }
+      } catch (err) {
+        console.error(`[CalDAV Health] Error for user ${user.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[CalDAV Health] Fatal:', err);
+  }
+});
+
 function start() {
-  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | keepalive every 13min');
+  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | caldav health check daily 07:30 | keepalive every 13min');
 }
 
 module.exports = { start, syncUserCalendar };

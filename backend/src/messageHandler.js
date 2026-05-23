@@ -7,6 +7,8 @@ const caldav              = require('./caldav');
 const session             = require('./sessionMemory');
 const undo                = require('./undoManager');
 const confirm             = require('./pendingConfirmations');
+const timeDefaults        = require('./timeDefaults');
+const onboarding          = require('./onboarding');
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -68,14 +70,14 @@ async function handleMessage({ from, text }) {
   const userId = user.id;
   const lc     = text.toLowerCase().trim();
 
-  // Onboarding: send welcome on first ever message
+  // Onboarding: guided conversation for new users
   if (!user.onboarding_completed) {
-    await db.markOnboardingComplete(userId);
-    await sendSplit(from, buildWelcomeMessage());
-    if (GREETING_TRIGGERS.some(t => lc === t || lc.startsWith(t + '!'))) {
+    const handled = await onboarding.handleOnboardingMessage({ from, text, userId, user });
+    if (handled) {
       await db.incrementMessageCount(userId);
       return;
     }
+    // Onboarding just finished — fall through to process the message normally
   }
 
   // Pending confirmation check (destructive actions)
@@ -131,15 +133,17 @@ async function handleMessage({ from, text }) {
   }
 
   // Load all context in parallel
-  const [lists, activeHabits, userContext, calendarStreams, conversationHistory] = await Promise.all([
+  const [lists, activeHabits, userContext, calendarStreams, conversationHistory, userPrefs] = await Promise.all([
     db.getLists(userId),
     db.getActiveHabits(userId),
     db.getUserContext(userId),
     db.getCalendarStreams(userId),
     Promise.resolve(session.getHistory(userId)),
+    db.getUserPrefs(userId),
   ]);
+  const timezone = userPrefs?.timezone ?? 'Europe/Amsterdam';
 
-  const intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, conversationHistory, userContext });
+  const intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, conversationHistory, userContext, timezone });
 
   Promise.all([
     db.logMessage(userId, text, intent.category),
@@ -158,7 +162,7 @@ async function handleMessage({ from, text }) {
   if (intent.category === 'multi_action' && Array.isArray(intent.actions) && intent.actions.length > 0) {
     const replies = [];
     for (const action of intent.actions) {
-      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from, calendarStreams);
+      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from, calendarStreams, timezone);
       if (r) replies.push(r);
     }
     const combined = replies.join('\n');
@@ -177,7 +181,7 @@ async function handleMessage({ from, text }) {
     }
   }
 
-  const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from, calendarStreams);
+  const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from, calendarStreams, timezone);
   if (!baseReply) return;
 
   const confidenceSuffix = intent.confidence === 'medium'
@@ -304,7 +308,8 @@ async function handleUndo(userId) {
 
 // ── Intent processing ──────────────────────────────────────────────────────────
 
-async function processIntent(intent, userId, lists, activeHabits, originalText, from, calendarStreams = []) {
+async function processIntent(intent, userId, lists, activeHabits, originalText, from, calendarStreams = [], timezone = 'Europe/Amsterdam') {
+  const fmtDate = (d) => formatDate(d, timezone);
   const { category } = intent;
 
   switch (category) {
@@ -559,7 +564,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       undo.record(userId, 'add_recurring', { itemId: created.id, content: created.content });
 
       const label = recurrenceToLabel(intent.recurrence);
-      return `🔄 Terugkerend item aangemaakt: *${intent.item_text}* wordt ${label} toegevoegd aan ${list.emoji ?? '📝'} ${list.name}.\n_Eerste keer: ${formatDate(nextDue)}_`;
+      return `🔄 Terugkerend item aangemaakt: *${intent.item_text}* wordt ${label} toegevoegd aan ${list.emoji ?? '📝'} ${list.name}.\n_Eerste keer: ${fmtDate(nextDue)}_`;
     }
 
     // ── Calendar ─────────────────────────────────────────────────────────────
@@ -603,18 +608,25 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       for (const ev of eventList) {
         const evTitle         = ev.title ?? intent.event_title ?? originalText;
         const reminderDays    = ev.reminder_days_before ?? null;
-        const reminderMinutes = ev.reminder_minutes_before ?? 30;
+        const reminderMinutes = ev.reminder_minutes_before ?? (intent.urgent ? 60 : 30);
+
+        // Smart time default: fill in learned preferred time if user omitted time
+        if (!ev.time) {
+          const suggested = await timeDefaults.getSuggestedTime(userId, evTitle);
+          if (suggested) ev.time = suggested;
+        }
         const stream          = ev.calendar_stream ?? intent.calendar_stream ?? 'personal';
-        const durationMinutes = ev.duration_minutes ?? null;
-        const attendees       = Array.isArray(ev.attendees) && ev.attendees.length > 0 ? ev.attendees : null;
-        const location        = ev.location ?? null;
+        const durationMinutes    = ev.duration_minutes ?? null;
+        const attendees          = Array.isArray(ev.attendees) && ev.attendees.length > 0 ? ev.attendees : null;
+        const location           = ev.location ?? null;
+        const recurrenceUntil    = intent.recurrence_until ?? null;
 
         // Conflict check: warn if another timed event exists at same time
         if (ev.time && ev.date) {
           const existing = await db.getEventsForDate(userId, ev.date);
           const conflict = existing.find(e => e.time === ev.time && e.title !== evTitle);
           if (conflict) {
-            lines.push(`⚠️ Let op: *${conflict.title}* staat ook op ${formatDate(ev.date)} om ${ev.time}.`);
+            lines.push(`⚠️ Let op: *${conflict.title}* staat ook op ${fmtDate(ev.date)} om ${ev.time}.`);
           }
         }
 
@@ -625,7 +637,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
               caldavCreds.username,
               caldavCreds.password,
               stream,
-              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes, durationMinutes, attendees, location },
+              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, recurrenceUntil, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes, durationMinutes, attendees, location },
             );
           } catch (err) {
             console.error('CalDAV event creation failed, queuing retry:', err.message);
@@ -648,6 +660,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
         lastSavedEvent = { id: saved.id, title: evTitle, date: ev.date, time: ev.time ?? null, caldavUid, calendarStream: stream };
         undo.record(userId, 'add_event', { eventId: saved.id, title: evTitle, caldavUid, calendarStream: stream });
+        if (ev.time) timeDefaults.recordEventTime(userId, evTitle, ev.time).catch(() => {});
 
         if (stream === 'birthdays') {
           hasBirthday = true;
@@ -658,7 +671,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         const customStream = !builtinLabel ? calendarStreams.find(s => s.claude_key === stream) : null;
         const streamLabel  = builtinLabel ?? customStream?.name ?? 'Ingepland';
         const timeStr     = ev.time ? ` om ${ev.time}` : '';
-        const dateStr     = ev.date ? ` — ${formatDate(ev.date)}${timeStr}` : '';
+        const dateStr     = ev.date ? ` — ${fmtDate(ev.date)}${timeStr}` : '';
         const recurStr    = ev.recurrence === 'yearly' ? ' _(jaarlijks)_'
           : ev.recurrence?.startsWith('weekly:') ? ' _(wekelijks)_'
           : ev.recurrence?.startsWith('monthly:') ? ' _(maandelijks)_'
@@ -724,7 +737,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         }
       }
 
-      const timeStr = event.date ? ` vóór *${event.title}* op ${formatDate(event.date)}` : ` vóór *${event.title}*`;
+      const timeStr = event.date ? ` vóór *${event.title}* op ${fmtDate(event.date)}` : ` vóór *${event.title}*`;
       return `⏰ Ik stuur je ${mins} minuten van tevoren een reminder${timeStr} via de agenda.`;
     }
 
@@ -780,7 +793,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         }
       }
 
-      const dateStr = newDate ? ` naar ${formatDate(newDate)}` : '';
+      const dateStr = newDate ? ` naar ${fmtDate(newDate)}` : '';
       const timeStr = newTime ? ` om ${newTime}` : '';
       return `📅 *${event.title}* verplaatst${dateStr}${timeStr}.`;
     }
@@ -794,7 +807,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (matches.length === 0) return `Geen afspraak gevonden voor "${query}".`;
       const lines = matches.slice(0, 3).map(e => {
         const timeStr = e.time ? ` om ${e.time}` : '';
-        return `• *${e.title}* — ${formatDate(e.date)}${timeStr}`;
+        return `• *${e.title}* — ${fmtDate(e.date)}${timeStr}`;
       });
       return `📅 Gevonden:\n${lines.join('\n')}`;
     }
@@ -807,12 +820,12 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (!start || !end) return 'Voor welke periode wil je een overzicht?';
       const events = await db.getUpcomingEvents(userId, 365);
       const filtered = events.filter(e => e.date && e.date >= start && e.date <= end);
-      if (filtered.length === 0) return `📅 Geen afspraken gevonden tussen ${formatDate(start)} en ${formatDate(end)}.`;
+      if (filtered.length === 0) return `📅 Geen afspraken gevonden tussen ${fmtDate(start)} en ${fmtDate(end)}.`;
       const lines = filtered.map(e => {
         const timeStr = e.time ? ` om ${e.time}` : '';
-        return `• *${e.title}* — ${formatDate(e.date)}${timeStr}`;
+        return `• *${e.title}* — ${fmtDate(e.date)}${timeStr}`;
       });
-      return `📅 *Planning ${formatDate(start)} t/m ${formatDate(end)}*\n\n${lines.join('\n')}`;
+      return `📅 *Planning ${fmtDate(start)} t/m ${fmtDate(end)}*\n\n${lines.join('\n')}`;
     }
 
     // ── Receipt query ─────────────────────────────────────────────────────────
@@ -882,7 +895,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (weekEvents.length === 0) return '📅 Je hebt deze week geen afspraken.';
       const lines = weekEvents.map(e => {
         const timeStr = e.time ? ` ${e.time}` : '';
-        return `• *${e.title}* — ${formatDate(e.date)}${timeStr}`;
+        return `• *${e.title}* — ${fmtDate(e.date)}${timeStr}`;
       }).join('\n');
       return `📅 *Planning deze week*\n\n${lines}`;
     }
@@ -913,8 +926,8 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           conflicts.push(`• *${timed[i].title}* en *${timed[i + 1].title}* — beiden om ${timed[i].time}`);
         }
       }
-      if (conflicts.length === 0) return `✅ Geen dubbel geplande afspraken op ${formatDate(checkDate)}.`;
-      return `⚠️ *Dubbel geplande afspraken op ${formatDate(checkDate)}:*\n\n${conflicts.join('\n')}`;
+      if (conflicts.length === 0) return `✅ Geen dubbel geplande afspraken op ${fmtDate(checkDate)}.`;
+      return `⚠️ *Dubbel geplande afspraken op ${fmtDate(checkDate)}:*\n\n${conflicts.join('\n')}`;
     }
 
     // ── Bulk reschedule ───────────────────────────────────────────────────────
@@ -924,9 +937,9 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const toDate   = intent.to_date;
       if (!fromDate || !toDate) return 'Geef op: van welke datum en naar welke datum.';
       const events = await db.getEventsForDateRange(userId, fromDate, fromDate);
-      if (events.length === 0) return `📅 Geen afspraken gevonden op ${formatDate(fromDate)}.`;
+      if (events.length === 0) return `📅 Geen afspraken gevonden op ${fmtDate(fromDate)}.`;
       await db.bulkUpdateEventDate(userId, events.map(e => e.id), toDate);
-      return `📅 ${events.length} afspraak${events.length !== 1 ? 'en' : ''} verplaatst van ${formatDate(fromDate)} naar ${formatDate(toDate)}.`;
+      return `📅 ${events.length} afspraak${events.length !== 1 ? 'en' : ''} verplaatst van ${fmtDate(fromDate)} naar ${fmtDate(toDate)}.`;
     }
 
     // ── Find free slots ───────────────────────────────────────────────────────
@@ -949,8 +962,8 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       }
       if (prevEnd < dayEnd) slots.push(`${prevEnd} – ${dayEnd}`);
 
-      if (slots.length === 0) return `📅 Geen vrije slots op ${formatDate(slotDate)} (09:00–20:00). Je agenda zit vol!`;
-      return `📅 *Vrije slots op ${formatDate(slotDate)}:*\n\n${slots.map(s => `• ${s}`).join('\n')}`;
+      if (slots.length === 0) return `📅 Geen vrije slots op ${fmtDate(slotDate)} (09:00–20:00). Je agenda zit vol!`;
+      return `📅 *Vrije slots op ${fmtDate(slotDate)}:*\n\n${slots.map(s => `• ${s}`).join('\n')}`;
     }
 
     // ── List categorize ───────────────────────────────────────────────────────
@@ -1172,7 +1185,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         caldavUid: null,
         calendarStream: reminderTime ? 'wa_reminder' : 'personal',
       });
-      const dateStr = intent.reminder_date ? ` op ${formatDate(intent.reminder_date)}` : '';
+      const dateStr = intent.reminder_date ? ` op ${fmtDate(intent.reminder_date)}` : '';
       const timeStr = reminderTime ? ` om ${reminderTime}` : '';
       return `⏰ Herinnering ingesteld: *${reminderText}*${dateStr}${timeStr}. Ik stuur je dan een WhatsApp${timeStr ? '' : ' die ochtend'}.`;
     }
@@ -1558,9 +1571,12 @@ Voeg hem toe aan je iPhone:
 Je agenda's (Afspraken, Verjaardagen, Werk, Persoonlijk) verschijnen automatisch. Alle afspraken die je via WhatsApp instuurt komen er direct in.`;
 }
 
-function formatDate(isoDate) {
+function fmtDate(isoDate, tz = 'Europe/Amsterdam') {
   if (!isoDate) return '';
-  return new Date(isoDate).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+  // Parse as local date (not UTC) by treating YYYY-MM-DD as noon in the user tz
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dt = new Date(y, m - 1, d, 12);
+  return dt.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: tz });
 }
 
 function levelLabel(level) {

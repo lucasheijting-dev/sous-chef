@@ -63,6 +63,21 @@ async function handleVoiceMessage({ from, mediaId }) {
 
     console.log(`[Voice] Transcribed from ${from}: ${text}`);
 
+    // Low-confidence check: very short transcription or mostly non-Dutch characters
+    const wordCount = text.trim().split(/\s+/).length;
+    const hasOnlyGibberish = /^[^a-zA-ZàáâäèéêëìíîïòóôöùúûüÀÁÂÄÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜ0-9\s.,!?'-]+$/.test(text);
+    const isLikelyMumbled = wordCount === 1 && text.length < 4;
+
+    if (hasOnlyGibberish || isLikelyMumbled) {
+      await sendMessage(from, `🎤 Ik hoorde: _"${text}"_ — maar dat begrijp ik niet goed. Kun je het opnieuw sturen of als tekst typen?`);
+      return;
+    }
+
+    // If transcription is very short (1-2 words), echo it back for confirmation
+    if (wordCount <= 2) {
+      await sendMessage(from, `🎤 Ik hoorde: _"${text}"_\n\nKlopt dit?`);
+    }
+
     // Process exactly like a text message — replies are the action confirmations
     await handleMessage({ from, text });
   } catch (err) {

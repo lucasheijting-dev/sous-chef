@@ -90,10 +90,15 @@ export async function registerForPushNotifications(userId: string): Promise<void
     const token = tokenData.data;
 
     // Save to Supabase so the backend can find it
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await supabase
       .from('users')
       .update({ push_token: token })
       .eq('id', userId);
+    // Store timezone in user_prefs (best-effort)
+    await supabase
+      .from('user_prefs')
+      .upsert({ user_id: userId, timezone }, { onConflict: 'user_id' });
 
     // Register the background task for incoming push notifications
     await Notifications.registerTaskAsync(PUSH_SYNC_TASK);

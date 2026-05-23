@@ -163,14 +163,17 @@ function buildIcal(event, uid, reminderMinutesBefore = null) {
   ];
 
   if (event.recurrence === 'yearly') {
-    lines.push('RRULE:FREQ=YEARLY');
+    const untilStr = event.recurrenceUntil ? `;UNTIL=${event.recurrenceUntil.replace(/-/g, '')}T000000Z` : '';
+    lines.push(`RRULE:FREQ=YEARLY${untilStr}`);
   } else if (event.recurrence?.startsWith('weekly:')) {
     const dayNum = parseInt(event.recurrence.split(':')[1], 10);
     const byDay = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][dayNum] ?? 'MO';
-    lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byDay}`);
+    const untilStr = event.recurrenceUntil ? `;UNTIL=${event.recurrenceUntil.replace(/-/g, '')}T000000Z` : '';
+    lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${byDay}${untilStr}`);
   } else if (event.recurrence?.startsWith('monthly:')) {
     const dayOfMonth = parseInt(event.recurrence.split(':')[1], 10);
-    lines.push(`RRULE:FREQ=MONTHLY;BYMONTHDAY=${dayOfMonth}`);
+    const untilStr = event.recurrenceUntil ? `;UNTIL=${event.recurrenceUntil.replace(/-/g, '')}T000000Z` : '';
+    lines.push(`RRULE:FREQ=MONTHLY;BYMONTHDAY=${dayOfMonth}${untilStr}`);
   }
 
   if (Array.isArray(event.attendees) && event.attendees.length > 0) {
@@ -297,4 +300,19 @@ function parseIcal(ics) {
   return { uid, title, date, time };
 }
 
-module.exports = { isConfigured, generateCredentials, provisionUser, createEvent, deleteEvent, CALENDARS, listCalendarEvents, getEventIcal, parseIcal, setCalendarColor, createUserCalendar };
+// Lightweight connectivity check — PROPFIND with depth 0 on the root
+async function checkConnection(username, password) {
+  const url = `${process.env.CALDAV_URL}/dav/${username}/`;
+  const res = await fetch(url, {
+    method: 'PROPFIND',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
+      Depth: '0',
+      'Content-Type': 'application/xml',
+    },
+    body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+  });
+  return res.status === 207 || res.status === 200;
+}
+
+module.exports = { isConfigured, generateCredentials, provisionUser, createEvent, deleteEvent, CALENDARS, listCalendarEvents, getEventIcal, parseIcal, setCalendarColor, createUserCalendar, checkConnection };

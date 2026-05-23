@@ -136,11 +136,21 @@ LET OP: berichten met Mini:/Goed:/Elite: zijn habit_manage, GEEN list_items.
 
 ## Habit-niveaus
 
-**mini:** "ff/even/snel/kort X gedaan", "een beetje X", "heel even X", duur bij mini_goal
-**good:** "X gedaan" (neutraal), standaard als geen signaal
-**elite:** "lekker lang X", "echt goed X", "hard gegaan", superlatieven, duur bij elite_goal
+Gebruik de actieve habits onderaan (inclusief mini/goed/elite doelen) om het niveau te bepalen:
 
-Onduidelijk → habit_level = null.
+1. **Numerieke waarde aanwezig** (bijv. "gesport 45 min", "30 minuten gezwommen", "10km gelopen"):
+   → Vergelijk de waarde met de drempels van de overeenkomende habit:
+   - waarde ≥ elite_goal → elite
+   - waarde ≥ good_goal → good
+   - waarde ≥ mini_goal → mini
+   - waarde < mini_goal → mini (benefit of the doubt; ze deden iets)
+
+2. **Geen numerieke waarde, wel kwalitatief signaal:**
+   - "ff/even/snel/kort/een beetje/heel even" → mini
+   - "gedaan" (neutraal) / geen signaal → good (standaard)
+   - "lekker lang/echt goed/hard gegaan/superlatieven" → elite
+
+3. Onduidelijk → habit_level = null
 
 Prioriteer habit_log boven list_check als X overeenkomt met een actieve habit.
 
@@ -221,6 +231,14 @@ Bij "elke [dag] [activiteit]" of "wekelijks [activiteit]" → calendar met event
 - "jaarlijks" / verjaardag → event_recurrence="yearly"
 - "elke eerste maandag van de maand" → event_recurrence="monthly:first:1" (format: monthly:first/second/third/fourth/last:weekday_number)
 
+**Einddatum van herhaling:**
+Als de gebruiker een eindpunt noemt → vul recurrence_until in als YYYY-MM-DD:
+- "elke maandag standup tot eind juni" → recurrence_until: "2026-06-30"
+- "tot en met 31 december" → recurrence_until: "2026-12-31"
+- "de komende 4 weken" → recurrence_until: 4 weken na vandaag
+- "tot de zomervakantie" → recurrence_until: eerste dag zomervakantie (1 juli)
+- Geen eindpunt → recurrence_until: null
+
 ## Agenda — verplaatsen en zoeken
 
 **Verplaatsen:** "verplaats X naar donderdag" → event_reschedule. "zet het een uur later" → event_reschedule met relatieve tijd (event_time_new: "relatief:+1h").
@@ -268,6 +286,8 @@ Bij events[] array: elk object ook "calendar_stream" meegeven.
 - "vergadering van 2 uur" → event_duration_minutes: 120
 - "afspraak van 45 minuten" → event_duration_minutes: 45
 - "3 kwartier" → event_duration_minutes: 45
+- "van 10 tot 12" / "van 14:00 tot 15:30" → bereken duur in minuten (event_duration_minutes: 120 / 90) én zet event_time op het startuur
+- "van half 3 tot kwart voor 4" → bereken exact: 14:30 tot 15:45 = 75 minuten
 - Geen duur vermeld → event_duration_minutes: null (standaard 60 minuten in CalDAV)
 
 **Deelnemers:**
@@ -309,6 +329,12 @@ reminder_days_before: N = N **hele** dagen van tevoren — gebruik dit als de ge
 **Wanneer de gebruiker "herinner me eraan", "stuur me een reminder", "remind me" zegt als FOLLOW-UP op een eerder geplande afspraak (zie conversatiegeschiedenis):**
 → Gebruik category "event_update_reminder", vul event_title en event_date in vanuit de conversatiegeschiedenis, en reminder_minutes_before: 30.
 
+
+## Urgentie
+
+Als het bericht urgentie aangeeft ("urgent", "dringend", "zo snel mogelijk", "asap", "niet vergeten!!", "heel belangrijk") → zet urgent: true.
+Bij urgente agenda-afspraken: gebruik reminder_minutes_before: 60 (in plaats van 30) tenzij de gebruiker iets anders vraagt.
+Bij urgente lijstitems of herinneringen: voeg _(⚡ urgent)_ toe aan reply_text.
 
 ## Correcties en annuleringen
 
@@ -381,7 +407,23 @@ Voorbeelden:
 
 ## Gesprekstoon
 
-Kort en bevestigend. Max 2 zinnen. Geen "je" in de bevestiging.
+Uiterst kort. Max 1 zin. Geen "je" in de bevestiging. Geen herhaling van de volledige invoer — noem alleen de kern.
+Slechte bevestiging: "Begrepen! Tandarts op donderdag 15 mei om 14:00 is toegevoegd aan je agenda."
+Goede bevestiging: gebruik de handler-output (reply_text hoeft alleen bij greeting/learn_context/clarification/unknown ingevuld).
+
+## Vaste emojis per categorie (gebruik ALTIJD deze, nooit andere)
+
+📅 agenda / afspraken
+📝 notities
+🛒 boodschappenlijst
+📋 lijsten (generiek)
+✅ bevestiging / afvinken
+🔄 terugkerend
+⏰ reminder / herinnering
+🏅 habit log (gebruik 🥉🥈🥇 voor niveau)
+⚡ urgent
+↩️ ongedaan / correctie
+👤 profiel / context
 
 ## Output
 
@@ -433,12 +475,14 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "item_quantity": null,
   "slot_date": null,
   "reminder_time": null,
-  "note_query": null
+  "note_query": null,
+  "urgent": null,
+  "recurrence_until": null
 }
 
 Vul alleen de relevante velden in en laat de rest null.`;
 
-async function parseIntent({ text, availableLists, activeHabits, calendarStreams = [], conversationHistory = [], userContext = '' }) {
+async function parseIntent({ text, availableLists, activeHabits, calendarStreams = [], conversationHistory = [], userContext = '', timezone = 'Europe/Amsterdam' }) {
   const listsContext = availableLists.length > 0
     ? `\n\n## Beschikbare lijsten\n${availableLists.map(l => `- ID: ${l.id} | Naam: "${l.name}" | Emoji: ${l.emoji || '📝'}`).join('\n')}`
     : '\n\n## Beschikbare lijsten\nGeen lijsten aangemaakt.';
@@ -455,14 +499,17 @@ async function parseIntent({ text, availableLists, activeHabits, calendarStreams
     ? `\n\n## Gebruikerscontext\n${userContext}`
     : '';
 
-  const now = new Date();
+  const tz = timezone || 'Europe/Amsterdam';
+  const nowInTz = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
   const WEEKDAYS_NL = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
-  const todayStr = now.toISOString().split('T')[0];
-  const weekdayNL = WEEKDAYS_NL[now.getDay()];
-  const tomorrowDate = new Date(now); tomorrowDate.setDate(now.getDate() + 1);
-  const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${nowInTz.getFullYear()}-${pad(nowInTz.getMonth() + 1)}-${pad(nowInTz.getDate())}`;
+  const weekdayNL = WEEKDAYS_NL[nowInTz.getDay()];
+  const tomorrowInTz = new Date(nowInTz); tomorrowInTz.setDate(nowInTz.getDate() + 1);
+  const tomorrowStr = `${tomorrowInTz.getFullYear()}-${pad(tomorrowInTz.getMonth() + 1)}-${pad(tomorrowInTz.getDate())}`;
+  const currentHour = nowInTz.getHours();
 
-  const dateContext = `## Huidige datum en tijd\nVandaag is ${weekdayNL} ${todayStr}. Morgen is ${tomorrowStr}.\nWanneer de gebruiker "morgen" zegt → gebruik altijd ${tomorrowStr}. "Vandaag" → ${todayStr}.\nBereken alle relatieve datums (overmorgen, volgende week, etc.) vanuit ${todayStr}.`;
+  const dateContext = `## Huidige datum en tijd\nVandaag is ${weekdayNL} ${todayStr} (tijdzone: ${tz}, lokale tijd: ${pad(currentHour)}:${pad(nowInTz.getMinutes())}). Morgen is ${tomorrowStr}.\nWanneer de gebruiker "morgen" zegt → gebruik altijd ${tomorrowStr}. "Vandaag" → ${todayStr}.\nBereken alle relatieve datums (overmorgen, volgende week, etc.) vanuit ${todayStr}.`;
 
   const messages = [
     ...conversationHistory,

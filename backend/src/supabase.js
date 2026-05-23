@@ -257,6 +257,14 @@ async function storeCalDAVCredentials(userId, username, password) {
   await supabase.from('users').update({ caldav_username: username, caldav_password: password }).eq('id', userId);
 }
 
+async function getUsersWithCalDAV() {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number')
+    .not('caldav_username', 'is', null);
+  return data ?? [];
+}
+
 async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore, caldavUid, calendarStream }) {
   const { data, error } = await supabase
     .from('events')
@@ -863,6 +871,7 @@ module.exports = {
   deleteRecurringItem,
   getCalDAVCredentials,
   storeCalDAVCredentials,
+  getUsersWithCalDAV,
   createNote,
   deleteNote,
   createEvent,
