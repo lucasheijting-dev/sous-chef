@@ -1230,11 +1230,6 @@
     <a href="#" class="brand">
       <img class="brand-logo" src="assets/sous-chef-logo.png" alt="Sous-Chef" />
     </a>
-    <ul class="nav-links">
-      <li><a href="#how">Hoe het werkt</a></li>
-      <li><a href="#features">Features</a></li>
-      <li><a href="#prijs">Prijs</a></li>
-    </ul>
     <div style="display:flex;align-items:center;gap:10px;">
       <a href="#prijs" class="nav-cta">Gratis proberen</a>
       <button class="nav-hamburger" id="menuBtn" aria-label="Menu openen">
@@ -1734,11 +1729,12 @@
   // ── WhatsApp menu ──────────────────────────────────────────────────────────
 
   const MENU_MESSAGES = [
-    { emoji: '👋', text: 'Hoi! Waar wil je naartoe?', href: null, delay: 0 },
-    { emoji: '⚙️', text: 'Hoe het werkt', href: '#how', delay: 520 },
-    { emoji: '✨', text: 'Alle features', href: '#features', delay: 950 },
-    { emoji: '💰', text: 'Wat kost het?', href: '#prijs', delay: 1360 },
-    { emoji: '🔒', text: 'Privacy & voorwaarden', href: '/privacy', delay: 1740 },
+    { emoji: '👋', text: 'Hoi! Waar wil je naartoe?', href: null,       delay: 0    },
+    { emoji: '🛒', text: 'Slimme lijsten',             href: '/lijsten', delay: 480  },
+    { emoji: '📅', text: 'Kalender & reminders',       href: '/kalender',delay: 880  },
+    { emoji: '📝', text: 'Persoonlijke notities',       href: '/notities',delay: 1260 },
+    { emoji: '🏅', text: 'Habit tracker',               href: '/habits',  delay: 1620 },
+    { emoji: '💰', text: 'Wat kost het?',               href: '#prijs',   delay: 1980 },
   ];
 
   const menuBtn    = document.getElementById('menuBtn');
