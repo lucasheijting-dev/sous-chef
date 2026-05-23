@@ -2,12 +2,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Animated, Pressable,
-  SafeAreaView, StatusBar,
+  SafeAreaView, StatusBar, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Calendar from 'expo-calendar';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { Colors } from '@/constants/Design';
@@ -124,15 +125,53 @@ export function MorningScreen() {
     if (!user || user.id === 'dev') return;
 
     const today = new Date().toISOString().split('T')[0];
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-    // Today's events
+    // Sous-Chef events from Supabase
     const { data: evtData } = await supabase
       .from('events')
       .select('id, title, time')
       .eq('user_id', user.id)
       .eq('date', today)
       .order('time', { ascending: true, nullsFirst: false });
-    setEvents((evtData ?? []) as Event[]);
+    const supabaseEvents: Event[] = (evtData ?? []).map(e => ({ ...e, source: 'supabase' as const }));
+
+    // Native device calendar events
+    let nativeEvents: Event[] = [];
+    try {
+      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      if (status === 'granted') {
+        const calendars = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+        const calendarIds = calendars.map(c => c.id);
+        if (calendarIds.length > 0) {
+          const rawEvents = await Calendar.getEventsAsync(calendarIds, todayStart, todayEnd);
+          nativeEvents = rawEvents
+            .filter(e => !e.allDay)
+            .map(e => ({
+              id: `native_${e.id}`,
+              title: e.title,
+              time: e.startDate ? new Date(e.startDate).toTimeString().slice(0, 5) : null,
+            }));
+        }
+      }
+    } catch {
+      // Calendar permission denied or unavailable — skip silently
+    }
+
+    // Merge: deduplicate by title+time, native takes precedence
+    const allEvents: Event[] = [...supabaseEvents];
+    for (const ne of nativeEvents) {
+      const dup = allEvents.find(e => e.title === ne.title && e.time === ne.time);
+      if (!dup) allEvents.push(ne);
+    }
+    allEvents.sort((a, b) => {
+      if (!a.time && !b.time) return 0;
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return a.time.localeCompare(b.time);
+    });
+    setEvents(allEvents);
 
     // Morning lists
     const storedIds = await AsyncStorage.getItem(MORNING_LISTS_KEY);
@@ -247,85 +286,86 @@ export function MorningScreen() {
         style={StyleSheet.absoluteFillObject}
       />
 
-      <Pressable style={StyleSheet.absoluteFillObject} onPress={handleTap}>
-        <SafeAreaView style={{ flex: 1 }}>
-          <Animated.View style={[styles.content, { opacity: screenOpacity }]}>
+      <SafeAreaView style={{ flex: 1 }}>
+        <Animated.View style={[styles.content, { opacity: screenOpacity }]}>
 
-            {/* ── Greeting ──────────────────────────────────────────── */}
-            <View style={[styles.header, { marginTop: insets.top + 8 }]}>
-              <Text style={styles.flag}>{greeting.flag}</Text>
-              <Text style={styles.greetText}>{greeting.text}</Text>
-              <Text style={styles.dateText}>
-                {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </Text>
-            </View>
+          {/* ── Greeting ──────────────────────────────────────────── */}
+          <View style={[styles.header, { marginTop: insets.top + 8 }]}>
+            <Text style={styles.flag}>{greeting.flag}</Text>
+            <Text style={styles.greetText}>{greeting.text}</Text>
+            <Text style={styles.dateText}>
+              {new Date().toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </Text>
+          </View>
 
-            {/* ── Agenda (screen 1 or combined) ─────────────────────── */}
-            {showAgenda && (
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Ionicons name="calendar" size={16} color="#92700A" />
-                  <Text style={styles.sectionLabel}>Vandaag op de planning</Text>
-                </View>
-                {events.length === 0 ? (
-                  <Text style={styles.emptyText}>Niets gepland vandaag 🎉</Text>
-                ) : (
-                  events.slice(0, 6).map((e) => (
-                    <View key={e.id} style={styles.eventRow}>
-                      <View style={styles.eventDot} />
-                      <Text style={styles.eventTime}>{formatTime(e.time) ?? '  '}</Text>
-                      <Text style={styles.eventTitle} numberOfLines={1}>{e.title}</Text>
-                    </View>
-                  ))
-                )}
-                {events.length > 6 && (
-                  <Text style={styles.moreText}>+{events.length - 6} meer</Text>
-                )}
+          {/* ── Agenda (screen 1 or combined) ─────────────────────── */}
+          {showAgenda && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Ionicons name="calendar" size={16} color="#92700A" />
+                <Text style={styles.sectionLabel}>Vandaag op de planning</Text>
               </View>
-            )}
-
-            {/* ── Lists (screen 2 or combined) ──────────────────────── */}
-            {showLists && listGroups.length > 0 && (
-              <View style={styles.section}>
-                {listGroups.map(group => (
-                  <View key={group.listName}>
-                    <View style={styles.sectionHeader}>
-                      <Text style={styles.listEmoji}>{group.listEmoji}</Text>
-                      <Text style={styles.sectionLabel}>{group.listName}</Text>
-                    </View>
-                    {group.items.slice(0, 5).map((item, idx) => (
-                      <View key={idx} style={styles.listItemRow}>
-                        <View style={styles.checkbox} />
-                        <Text style={styles.listItemText} numberOfLines={1}>{item}</Text>
-                      </View>
-                    ))}
-                    {group.items.length > 5 && (
-                      <Text style={styles.moreText}>+{group.items.length - 5} meer</Text>
-                    )}
+              {events.length === 0 ? (
+                <Text style={styles.emptyText}>Niets gepland vandaag 🎉</Text>
+              ) : (
+                events.slice(0, 6).map((e) => (
+                  <View key={e.id} style={styles.eventRow}>
+                    <View style={styles.eventDot} />
+                    <Text style={styles.eventTime}>{formatTime(e.time) ?? '  '}</Text>
+                    <Text style={styles.eventTitle} numberOfLines={1}>{e.title}</Text>
                   </View>
-                ))}
-              </View>
-            )}
-
-            {/* ── Quote (screen 2 or combined when lists empty) ─────── */}
-            {(step === totalScreens - 1 || (useOneScreen && !hasLists)) && (
-              <View style={styles.quoteWrap}>
-                <Text style={styles.quoteText}>"{quote.text}"</Text>
-                <Text style={styles.quoteAuthor}>— {quote.author}</Text>
-              </View>
-            )}
-
-            {/* ── Footer ────────────────────────────────────────────── */}
-            <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-              {dots}
-              <Text style={styles.tapHint}>
-                {step < totalScreens - 1 ? 'Tik voor verder →' : 'Tik om te beginnen'}
-              </Text>
+                ))
+              )}
+              {events.length > 6 && (
+                <Text style={styles.moreText}>+{events.length - 6} meer</Text>
+              )}
             </View>
+          )}
 
-          </Animated.View>
-        </SafeAreaView>
-      </Pressable>
+          {/* ── Lists (screen 2 or combined) ──────────────────────── */}
+          {showLists && listGroups.length > 0 && (
+            <View style={styles.section}>
+              {listGroups.map(group => (
+                <View key={group.listName}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.listEmoji}>{group.listEmoji}</Text>
+                    <Text style={styles.sectionLabel}>{group.listName}</Text>
+                  </View>
+                  {group.items.slice(0, 5).map((item, idx) => (
+                    <View key={idx} style={styles.listItemRow}>
+                      <View style={styles.checkbox} />
+                      <Text style={styles.listItemText} numberOfLines={1}>{item}</Text>
+                    </View>
+                  ))}
+                  {group.items.length > 5 && (
+                    <Text style={styles.moreText}>+{group.items.length - 5} meer</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* ── Quote (screen 2 or combined when lists empty) ─────── */}
+          {(step === totalScreens - 1 || (useOneScreen && !hasLists)) && (
+            <View style={styles.quoteWrap}>
+              <Text style={styles.quoteText}>"{quote.text}"</Text>
+              <Text style={styles.quoteAuthor}>— {quote.author}</Text>
+            </View>
+          )}
+
+          {/* ── Spacer + dots (non-tappable area) ────────────────── */}
+          <View style={styles.dotsArea}>
+            {dots}
+          </View>
+
+        </Animated.View>
+
+        {/* ── Bottom 30% tap zone ───────────────────────────────── */}
+        <Pressable style={[styles.tapZone, { paddingBottom: insets.bottom + 20 }]} onPress={handleTap}>
+          <Text style={styles.tapHint}>klik hier om door te gaan.</Text>
+        </Pressable>
+
+      </SafeAreaView>
     </Animated.View>
   );
 }
@@ -467,10 +507,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
-  footer: {
+  dotsArea: {
     marginTop: 'auto',
     alignItems: 'center',
-    gap: 10,
+    paddingBottom: 8,
+  },
+  tapZone: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '30%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   dots: {
     flexDirection: 'row',
@@ -490,5 +539,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     fontSize: 13,
     color: '#92700A',
+    opacity: 0.5,
   },
 });
