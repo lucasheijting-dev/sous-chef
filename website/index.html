@@ -52,6 +52,17 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-feature-settings: 'ss01','cv11';
+    animation: pageIn .35s ease;
+  }
+  body.page-exit{
+    animation: pageOut .25s ease forwards;
+  }
+  @keyframes pageIn{
+    from{ opacity:0; transform:translateY(10px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+  @keyframes pageOut{
+    to{ opacity:0; transform:translateY(-8px); }
   }
   .container{
     max-width: 1180px;
@@ -1778,8 +1789,20 @@
         el.className = 'wa-msg';
         if (isLink) {
           el.href = item.href;
-          if (!item.href.startsWith('#')) el.target = '_blank';
-          el.addEventListener('click', closeMenu);
+          el.addEventListener('click', (e) => {
+            if (item.href.startsWith('#')) {
+              e.preventDefault();
+              closeMenu();
+              setTimeout(() => {
+                const t = document.querySelector(item.href);
+                if (t) t.scrollIntoView({ behavior: 'smooth' });
+              }, 200);
+            } else {
+              e.preventDefault();
+              closeMenu();
+              setTimeout(() => navigateTo(item.href), 150);
+            }
+          });
         }
         el.innerHTML = `<span class="wa-emoji">${item.emoji}</span>${item.text}<span class="wa-tick">✓✓</span>`;
         // Insert before typing bubble
@@ -1814,14 +1837,10 @@
   waBackdrop.addEventListener('click', closeMenu);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
 
-  // Smooth scroll for anchor links inside the menu
-  waBody.addEventListener('click', e => {
-    const a = e.target.closest('a[href^="#"]');
-    if (!a) return;
-    e.preventDefault();
-    const target = document.querySelector(a.getAttribute('href'));
-    if (target) target.scrollIntoView({ behavior: 'smooth' });
-  });
+  function navigateTo(href) {
+    document.body.classList.add('page-exit');
+    setTimeout(() => { window.location.href = href; }, 260);
+  }
 </script>
 
 </body>
