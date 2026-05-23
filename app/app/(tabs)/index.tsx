@@ -31,7 +31,7 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { List, Note } from '@/lib/types';
-import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE } from '@/constants/Design';
+import { Colors, Shadow, Radius, Border, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { SkeletonListCard } from '@/components/SkeletonCard';
 
 const BOT_NUMBER = '31684965318';
@@ -46,7 +46,7 @@ function getGreeting(): string {
   return 'Goedenavond';
 }
 
-const TILE_ACCENTS  = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
+const TILE_ACCENTS  = ['#FFD000', '#1A1A1A', '#E8734A', '#4A6FA5'];
 const TILE_TEXT_FG  = ['#0A0A0A', '#FFFFFF',  '#FFFFFF',  '#FFFFFF'];
 
 // ── Bottom Sheet ───────────────────────────────────────────────────────────────
@@ -378,8 +378,8 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
 
 const sortStyles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 6, paddingTop: 20, paddingBottom: 20 },
-  pill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.pill },
-  pillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  pill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.sm, borderWidth: 2, borderColor: '#0A0A0A' },
+  pillText: { fontFamily: 'Inter_700Bold', fontSize: 13 },
 });
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -766,7 +766,7 @@ export default function LijstenTab() {
               />
             )}
             <View style={styles.emptyContainer}>
-              <LinearGradient colors={['#FCC10C22', '#FCC10C00']} style={styles.emptyGlow} />
+              <LinearGradient colors={[Colors.yellow + '22', Colors.yellow + '00']} style={styles.emptyGlow} />
               <Animated.View style={[styles.emptyIcon, { backgroundColor: colors.gray100, transform: [{ scale: emptyBreath }] }]}>
                 <Ionicons name="layers-outline" size={32} color={colors.gray400} />
               </Animated.View>
@@ -780,10 +780,10 @@ export default function LijstenTab() {
                 style={styles.emptyActionBtn}
                 activeOpacity={0.8}
               >
-                <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.emptyActionBtnGrad}>
+                <View style={styles.emptyActionBtnGrad}>
                   <Ionicons name="logo-whatsapp" size={16} color={Colors.black} />
                   <Text style={styles.emptyActionBtnText}>Open WhatsApp</Text>
-                </LinearGradient>
+                </View>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -1296,9 +1296,7 @@ export default function LijstenTab() {
           onPress={() => { setNewListName(''); setNewListModalVisible(true); }}
           activeOpacity={0.85}
         >
-          <LinearGradient colors={['#FCC10C', '#E5A800']} style={fabStyles.fabGrad}>
-            <Ionicons name="add" size={26} color={Colors.black} />
-          </LinearGradient>
+          <Ionicons name="add" size={26} color={Colors.black} />
         </TouchableOpacity>
       )}
 
@@ -1345,11 +1343,11 @@ export default function LijstenTab() {
 const fabStyles = StyleSheet.create({
   fab: {
     position: 'absolute', right: 20, width: 56, height: 56,
-    borderRadius: 28, overflow: 'hidden',
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8,
+    borderRadius: Radius.md, backgroundColor: Colors.yellow,
+    justifyContent: 'center', alignItems: 'center',
+    ...Shadow.strong, ...Border.neo,
   },
-  fabGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  inputWrap: { borderRadius: Radius.pill, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 4 },
+  inputWrap: { borderRadius: Radius.sm, paddingHorizontal: 18, paddingVertical: 4, marginBottom: 4 },
   input: { fontFamily: 'Inter_400Regular', fontSize: 16, paddingVertical: 12 },
 });
 
@@ -1392,7 +1390,7 @@ const styles = StyleSheet.create({
   tileGrid: { padding: 20, paddingTop: 0, paddingBottom: TAB_BAR_CLEARANCE },
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 16 },
   tileWrap: { flex: 1, minWidth: '46%' },
-  tile: { flex: 1, borderRadius: 20, overflow: 'hidden', padding: 22, minHeight: 172, justifyContent: 'space-between', ...Shadow.card },
+  tile: { flex: 1, borderRadius: Radius.lg, padding: 22, minHeight: 172, justifyContent: 'space-between', ...Shadow.card, ...Border.neo },
   tileEmoji: { fontSize: 30, marginBottom: 16 },
   tileBottom: {},
   tileName: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3, marginBottom: 7 },
@@ -1400,14 +1398,14 @@ const styles = StyleSheet.create({
   tileCount: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill },
   typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.4 },
-  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(0,0,0,0.12)', borderBottomLeftRadius: 22, borderBottomRightRadius: 22, overflow: 'hidden' },
-  tileProgressFill: { height: 5, borderBottomLeftRadius: 22 },
+  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(0,0,0,0.12)', borderBottomLeftRadius: Radius.lg, borderBottomRightRadius: Radius.lg, overflow: 'hidden' },
+  tileProgressFill: { height: 5, borderBottomLeftRadius: Radius.lg },
   retryBtn: { borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   retryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },
 
   noteGrid: { padding: 20, paddingBottom: TAB_BAR_CLEARANCE },
   noteRow: { gap: 14, marginBottom: 14 },
-  noteCard: { flex: 1, borderRadius: 20, padding: 18, minHeight: 140, ...Shadow.card },
+  noteCard: { flex: 1, borderRadius: Radius.lg, padding: 18, minHeight: 140, ...Shadow.card, ...Border.neo },
   noteCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, marginBottom: 9, letterSpacing: -0.3 },
   noteCardBody: { fontFamily: 'Inter_300Light', fontSize: 13, lineHeight: 20, flex: 1 },
   noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
@@ -1423,7 +1421,8 @@ const styles = StyleSheet.create({
   emptyActionBtn: { marginTop: 4 },
   emptyActionBtnGrad: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 22,
+    borderRadius: Radius.sm, paddingVertical: 13, paddingHorizontal: 22,
+    backgroundColor: Colors.yellow, ...Border.neo, ...Shadow.card,
   },
   emptyActionBtnText: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black },
 
@@ -1434,6 +1433,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     padding: 18,
     ...Shadow.card,
+    ...Border.neo,
   },
   gettingStartedHeader: {
     flexDirection: 'row',

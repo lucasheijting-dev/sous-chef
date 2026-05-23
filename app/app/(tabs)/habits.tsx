@@ -22,7 +22,7 @@ import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { Habit, HabitLog } from '@/lib/types';
-import { Colors, Radius, Shadow, TAB_BAR_CLEARANCE } from '@/constants/Design';
+import { Colors, Radius, Shadow, Border, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { SkeletonHabitCard } from '@/components/SkeletonCard';
@@ -246,7 +246,7 @@ function LevelButton({
           s.levelBtn,
           { borderColor: colors.gray200, backgroundColor: colors.offWhite },
           isActive && { backgroundColor: activeBg, borderColor: activeBg },
-          isActive && activeBg === Colors.yellow && { shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
+          isActive && activeBg === Colors.yellow && { shadowColor: Colors.yellow, shadowOpacity: 1, shadowOffset: { width: 2, height: 2 }, shadowRadius: 0, elevation: 4 },
           { transform: [{ scale }] },
         ]}
       >
@@ -471,7 +471,7 @@ function HabitsLite() {
         ) : habits.map(habit => {
           const log = logs.find(l => l.habit_id === habit.id);
           return (
-            <View key={habit.id} style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, padding: 18, marginBottom: 12 }, Shadow.card]}>
+            <View key={habit.id} style={[{ backgroundColor: colors.white, borderRadius: Radius.lg, padding: 18, marginBottom: 12 }, Shadow.card, Border.neo]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                 <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: colors.black, flex: 1 }}>{habit.name}</Text>
                 {log && (
@@ -556,7 +556,7 @@ function HabitCard({
         style={[
           s.habitCard,
           { backgroundColor: colors.white },
-          isElite && { shadowColor: '#FCC10C', shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+          isElite && { shadowColor: Colors.yellow, shadowOpacity: 1, shadowOffset: { width: 3, height: 3 }, shadowRadius: 0, elevation: 6 },
           { transform: [{ scale: cardScale }, { scale: burstScale }] },
         ]}
       >
@@ -1082,7 +1082,7 @@ const s = StyleSheet.create({
   sectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.8, marginBottom: 8 },
 
   habitsList: { padding: 20, gap: 16, paddingBottom: TAB_BAR_CLEARANCE },
-  habitCard: { borderRadius: Radius.xl, overflow: 'hidden', flexDirection: 'row', ...Shadow.card },
+  habitCard: { borderRadius: Radius.xl, flexDirection: 'row', ...Shadow.card, ...Border.neo },
   habitInner: { flex: 1, padding: 18 },
 
   accentBar: { width: 4 },
@@ -1115,7 +1115,7 @@ const s = StyleSheet.create({
   goalChipEmoji: { fontSize: 11 },
   goalChipText: { fontFamily: 'Inter_300Light', fontSize: 11 },
 
-  allDoneCard: { borderRadius: Radius.xl, overflow: 'hidden', marginBottom: 4 },
+  allDoneCard: { borderRadius: Radius.xl, marginBottom: 4, ...Border.neo, ...Shadow.card },
   allDoneGradient: { padding: 20, alignItems: 'center' },
   allDoneEmoji: { fontSize: 40, marginBottom: 8 },
   allDoneTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.black, letterSpacing: -0.5 },
@@ -1134,18 +1134,18 @@ const s = StyleSheet.create({
 
 const mStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 32 },
-  milestoneCard: { width: '100%', borderRadius: Radius.xl, padding: 32, alignItems: 'center', gap: 8, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 10 },
+  milestoneCard: { width: '100%', borderRadius: Radius.xl, padding: 32, alignItems: 'center', gap: 8, ...Shadow.strong, ...Border.neo },
   milestoneEmoji: { fontSize: 60, marginBottom: 4 },
   milestoneNum: { fontFamily: 'Inter_700Bold', fontSize: 36, letterSpacing: -1 },
   milestoneName: { fontFamily: 'Inter_600SemiBold', fontSize: 18, textAlign: 'center' },
   milestoneSub: { fontFamily: 'Inter_300Light', fontSize: 15, textAlign: 'center', lineHeight: 22 },
   milestoneBtn: { marginTop: 12, backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingHorizontal: 28, paddingVertical: 14 },
   milestoneBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black },
-  fab: { position: 'absolute', right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+  fab: { position: 'absolute', right: 20, width: 52, height: 52, borderRadius: Radius.md, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', ...Shadow.yellow, ...Border.neo },
 });
 
 const m = StyleSheet.create({
-  card: { borderRadius: Radius.xl, padding: 16, ...Shadow.card, marginTop: 4 },
+  card: { borderRadius: Radius.xl, padding: 16, ...Shadow.card, ...Border.neo, marginTop: 4 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 },
   title: { fontFamily: 'Inter_700Bold', fontSize: 16 },
   subtitle: { fontFamily: 'Inter_300Light', fontSize: 12, textTransform: 'capitalize', marginTop: 2 },
