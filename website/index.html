@@ -131,6 +131,214 @@
     .nav-links{ display: none; }
   }
 
+  /* ── Hamburger ─────────────────────────────────────────────────── */
+  .nav-hamburger{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: 2.5px solid #000;
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 8px 9px;
+    box-shadow: 2px 2px 0 #000;
+    transition: transform .12s, box-shadow .12s;
+    flex-shrink: 0;
+  }
+  .nav-hamburger:hover{ transform: translate(-1px,-1px); box-shadow: 4px 4px 0 #000; }
+  .nav-hamburger span{
+    display: block;
+    height: 2px;
+    background: #000;
+    border-radius: 2px;
+    transition: transform .2s, opacity .2s;
+    transform-origin: center;
+  }
+  .nav-hamburger.open span:nth-child(1){ transform: translateY(7px) rotate(45deg); }
+  .nav-hamburger.open span:nth-child(2){ opacity: 0; transform: scaleX(0); }
+  .nav-hamburger.open span:nth-child(3){ transform: translateY(-7px) rotate(-45deg); }
+
+  /* ── WhatsApp chat overlay ──────────────────────────────────────── */
+  .wa-overlay{
+    position: fixed;
+    inset: 0;
+    z-index: 900;
+    pointer-events: none;
+  }
+  .wa-overlay.open{ pointer-events: all; }
+
+  .wa-backdrop{
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0);
+    transition: background .25s ease;
+  }
+  .wa-overlay.open .wa-backdrop{ background: rgba(0,0,0,.45); }
+
+  .wa-panel{
+    position: absolute;
+    top: 84px;
+    right: 32px;
+    width: 340px;
+    max-width: calc(100vw - 40px);
+    background: #ECE5DD;
+    border-radius: 20px;
+    border: 3px solid #000;
+    box-shadow: 6px 6px 0 #000;
+    overflow: hidden;
+    transform: scale(.9) translateY(-12px);
+    opacity: 0;
+    transition: transform .22s cubic-bezier(.34,1.56,.64,1), opacity .18s ease;
+    transform-origin: top right;
+  }
+  @media (max-width: 640px){
+    .wa-panel{ right: 16px; top: 76px; }
+  }
+  .wa-overlay.open .wa-panel{
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+
+  /* WhatsApp header bar */
+  .wa-header{
+    background: #075E54;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+  .wa-avatar{
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid rgba(255,255,255,.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .wa-header-text{ flex: 1; }
+  .wa-header-name{
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 1.2;
+  }
+  .wa-header-status{
+    color: rgba(255,255,255,.7);
+    font-size: 12px;
+  }
+  .wa-header-close{
+    background: none; border: none; cursor: pointer;
+    color: rgba(255,255,255,.8);
+    font-size: 20px;
+    padding: 4px;
+    line-height: 1;
+    transition: color .15s;
+  }
+  .wa-header-close:hover{ color: #fff; }
+
+  /* Chat messages area */
+  .wa-body{
+    padding: 14px 12px 10px;
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  /* Typing indicator bubble */
+  .wa-typing{
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fff;
+    border-radius: 14px 14px 14px 3px;
+    padding: 10px 14px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12);
+    width: fit-content;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .2s, transform .2s;
+  }
+  .wa-typing.show{ opacity: 1; transform: translateY(0); }
+  .wa-typing span{
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #aaa;
+    animation: typingDot 1.2s infinite ease-in-out;
+  }
+  .wa-typing span:nth-child(2){ animation-delay: .2s; }
+  .wa-typing span:nth-child(3){ animation-delay: .4s; }
+  @keyframes typingDot{
+    0%,60%,100%{ transform: translateY(0); opacity: .4; }
+    30%{ transform: translateY(-5px); opacity: 1; }
+  }
+
+  /* Individual message bubbles */
+  .wa-msg{
+    background: #fff;
+    border-radius: 14px 14px 14px 3px;
+    padding: 10px 14px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12);
+    font-size: 14.5px;
+    font-weight: 500;
+    color: #111;
+    width: fit-content;
+    max-width: 90%;
+    cursor: pointer;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .22s ease, transform .22s ease, background .15s, box-shadow .15s;
+    position: relative;
+    text-decoration: none;
+    display: block;
+    line-height: 1.4;
+  }
+  .wa-msg.show{ opacity: 1; transform: translateY(0); }
+  .wa-msg:hover{
+    background: #f0f7ff;
+    box-shadow: 0 2px 8px rgba(0,122,255,.15);
+  }
+  .wa-msg .wa-tick{
+    font-size: 11px;
+    color: #34B7F1;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .wa-msg .wa-emoji{ margin-right: 6px; }
+
+  /* Footer input (decorative) */
+  .wa-footer{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 12px;
+    background: #F0F0F0;
+  }
+  .wa-input-fake{
+    flex: 1;
+    background: #fff;
+    border-radius: 999px;
+    padding: 9px 14px;
+    font-size: 14px;
+    color: #999;
+    border: 1px solid #ddd;
+    pointer-events: none;
+    user-select: none;
+  }
+  .wa-send-btn{
+    width: 38px; height: 38px;
+    background: #075E54;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+
   /* ---------- Hero ---------- */
   section.hero{
     text-align: center;
@@ -1027,9 +1235,42 @@
       <li><a href="#features">Features</a></li>
       <li><a href="#prijs">Prijs</a></li>
     </ul>
-    <a href="#prijs" class="nav-cta">Gratis proberen</a>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <a href="#prijs" class="nav-cta">Gratis proberen</a>
+      <button class="nav-hamburger" id="menuBtn" aria-label="Menu openen">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
   </div>
 </nav>
+
+<!-- ── WhatsApp menu overlay ───────────────────────────────────────── -->
+<div class="wa-overlay" id="waOverlay">
+  <div class="wa-backdrop" id="waBackdrop"></div>
+  <div class="wa-panel" id="waPanel" role="dialog" aria-modal="true" aria-label="Menu">
+
+    <div class="wa-header">
+      <div class="wa-avatar">🍳</div>
+      <div class="wa-header-text">
+        <div class="wa-header-name">Sous-Chef</div>
+        <div class="wa-header-status" id="waStatus">aan het typen…</div>
+      </div>
+      <button class="wa-header-close" id="waClose" aria-label="Sluiten">✕</button>
+    </div>
+
+    <div class="wa-body" id="waBody">
+      <div class="wa-typing" id="waTyping">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="wa-footer">
+      <div class="wa-input-fake">Stuur een bericht…</div>
+      <div class="wa-send-btn">➤</div>
+    </div>
+
+  </div>
+</div>
 
 <!-- ============== HERO ============== -->
 <section class="hero">
@@ -1489,6 +1730,102 @@
     // Footer
     set('.footer-copy', c.footer.copyright);
   }).catch(() => {}); // fail silently — hardcoded HTML stays as fallback
+
+  // ── WhatsApp menu ──────────────────────────────────────────────────────────
+
+  const MENU_MESSAGES = [
+    { emoji: '👋', text: 'Hoi! Waar wil je naartoe?', href: null, delay: 0 },
+    { emoji: '⚙️', text: 'Hoe het werkt', href: '#how', delay: 520 },
+    { emoji: '✨', text: 'Alle features', href: '#features', delay: 950 },
+    { emoji: '💰', text: 'Wat kost het?', href: '#prijs', delay: 1360 },
+    { emoji: '🔒', text: 'Privacy & voorwaarden', href: '/privacy', delay: 1740 },
+  ];
+
+  const menuBtn    = document.getElementById('menuBtn');
+  const waOverlay  = document.getElementById('waOverlay');
+  const waBackdrop = document.getElementById('waBackdrop');
+  const waClose    = document.getElementById('waClose');
+  const waPanel    = document.getElementById('waPanel');
+  const waBody     = document.getElementById('waBody');
+  const waTyping   = document.getElementById('waTyping');
+  const waStatus   = document.getElementById('waStatus');
+
+  let isOpen = false;
+  let timers = [];
+
+  function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+  function openMenu() {
+    if (isOpen) return;
+    isOpen = true;
+    menuBtn.classList.add('open');
+    waOverlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    // Reset state
+    clearTimers();
+    // Remove all previous messages (keep typing bubble)
+    waBody.querySelectorAll('.wa-msg').forEach(el => el.remove());
+    waTyping.classList.remove('show');
+    waStatus.textContent = 'aan het typen…';
+
+    // Show typing indicator immediately
+    timers.push(setTimeout(() => waTyping.classList.add('show'), 80));
+
+    MENU_MESSAGES.forEach((item, i) => {
+      timers.push(setTimeout(() => {
+        // Hide typing before inserting non-first message
+        if (i > 0) waTyping.classList.remove('show');
+
+        const isLink = !!item.href;
+        const el = document.createElement(isLink ? 'a' : 'div');
+        el.className = 'wa-msg';
+        if (isLink) {
+          el.href = item.href;
+          if (!item.href.startsWith('#')) el.target = '_blank';
+          el.addEventListener('click', closeMenu);
+        }
+        el.innerHTML = `<span class="wa-emoji">${item.emoji}</span>${item.text}<span class="wa-tick">✓✓</span>`;
+        // Insert before typing bubble
+        waBody.insertBefore(el, waTyping);
+
+        // Animate in
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => el.classList.add('show'));
+        });
+
+        // Show typing again after each message (except last)
+        if (i < MENU_MESSAGES.length - 1) {
+          timers.push(setTimeout(() => waTyping.classList.add('show'), 120));
+        } else {
+          waStatus.textContent = 'online';
+        }
+      }, item.delay));
+    });
+  }
+
+  function closeMenu() {
+    if (!isOpen) return;
+    isOpen = false;
+    clearTimers();
+    menuBtn.classList.remove('open');
+    waOverlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  menuBtn.addEventListener('click', () => isOpen ? closeMenu() : openMenu());
+  waClose.addEventListener('click', closeMenu);
+  waBackdrop.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+
+  // Smooth scroll for anchor links inside the menu
+  waBody.addEventListener('click', e => {
+    const a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
+  });
 </script>
 
 </body>
