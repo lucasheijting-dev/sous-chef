@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kalender & reminders — Sous-Chef</title>
-<meta name="description" content="Stuur een appje en de afspraak staat meteen in je eigen agenda. Apple Calendar, Google Calendar — gewoon waar jij al werkt." />
+<title>{{ pageTitle }} — Sous-Chef</title>
+<meta name="description" content="{{ metaDescription }}" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Titan+One&display=swap" rel="stylesheet" />
@@ -16,6 +16,7 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; color: var(--fg); background: var(--bg); font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased; }
   .container { max-width: 860px; margin: 0 auto; padding: 0 32px; }
   @media (max-width: 640px) { .container { padding: 0 20px; } }
@@ -34,25 +35,12 @@
   .page-hero .lead { font-size: clamp(17px, 1.5vw, 20px); color: rgba(0,0,0,.75); font-weight: 500; max-width: 54ch; margin: 0; line-height: 1.45; }
 
   .body-section { padding: 80px 0; }
+  .body-section + .body-section { padding-top: 0; }
   .alt-bg { background: var(--bg-2); padding: 80px 0; }
 
   h2.block-title { font-family: var(--display); font-weight: 400; font-size: clamp(28px, 3.5vw, 44px); text-transform: uppercase; margin: 0 0 20px; line-height: 1.05; }
   p.block-text { color: var(--fg-2); font-size: 17px; margin: 0 0 16px; max-width: 60ch; }
-
-  /* Big emphasis block */
-  .emphasis-block {
-    background: #000; color: #fff;
-    border-radius: 28px; padding: 48px 44px;
-    border: 3px solid #000;
-    box-shadow: 8px 8px 0 var(--accent);
-    margin: 48px 0;
-  }
-  .emphasis-block h3 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 3vw, 40px); text-transform: uppercase; margin: 0 0 16px; color: var(--accent); line-height: 1.05; }
-  .emphasis-block p { font-size: 17px; color: rgba(255,255,255,.82); margin: 0 0 12px; max-width: 56ch; }
-  .emphasis-block p:last-child { margin-bottom: 0; }
-  .cal-logos { display: flex; align-items: center; gap: 20px; margin-top: 28px; flex-wrap: wrap; }
-  .cal-pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.25); border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 700; color: #fff; }
-  .cal-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+  p.block-text:last-child { margin-bottom: 0; }
 
   .examples { display: flex; flex-direction: column; gap: 12px; margin-top: 32px; }
   .example-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -67,7 +55,23 @@
   .feature-card h3 { font-family: var(--display); font-weight: 400; font-size: 20px; text-transform: uppercase; margin: 0 0 10px; }
   .feature-card p { color: var(--fg-2); font-size: 15px; margin: 0; line-height: 1.5; }
 
-  .cta-block { background: var(--accent); border-top: 4px solid #000; padding: 100px 0; text-align: center; }
+  /* Big emphasis block (kalender) */
+  .emphasis-block { background: #000; color: #fff; border-radius: 28px; padding: 48px 44px; border: 3px solid #000; box-shadow: 8px 8px 0 var(--accent); margin: 48px 0; }
+  .emphasis-block h3 { font-family: var(--display); font-weight: 400; font-size: clamp(26px, 3vw, 40px); text-transform: uppercase; margin: 0 0 16px; color: var(--accent); line-height: 1.05; }
+  .emphasis-block p { font-size: 17px; color: rgba(255,255,255,.82); margin: 0 0 12px; max-width: 56ch; }
+  .emphasis-block p:last-child { margin-bottom: 0; }
+  .cal-logos { display: flex; align-items: center; gap: 20px; margin-top: 28px; flex-wrap: wrap; }
+  .cal-pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.25); border-radius: 999px; padding: 8px 16px; font-size: 14px; font-weight: 700; color: #fff; }
+  .cal-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* Medals (habits) */
+  .medals { display: flex; gap: 20px; margin: 40px 0; flex-wrap: wrap; }
+  .medal-card { flex: 1; min-width: 180px; background: #fff; border: 3px solid #000; border-radius: 24px; padding: 28px 24px; box-shadow: 5px 5px 0 #000; text-align: center; }
+  .medal-card .medal-icon { font-size: 48px; margin-bottom: 12px; }
+  .medal-card h3 { font-family: var(--display); font-weight: 400; font-size: 22px; text-transform: uppercase; margin: 0 0 8px; }
+  .medal-card p { color: var(--fg-2); font-size: 14px; margin: 0; line-height: 1.45; }
+
+  .cta-block { background: var(--accent); border-top: 4px solid #000; border-bottom: 4px solid #000; padding: 100px 0; text-align: center; }
   .cta-block h2 { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 5vw, 72px); text-transform: uppercase; margin: 0 0 16px; }
   .cta-block p { font-size: 18px; color: rgba(0,0,0,.7); font-weight: 500; margin: 0 0 36px; }
   .btn-dark { display: inline-flex; align-items: center; background: #000; color: #fff; font-family: inherit; font-weight: 800; font-size: 16px; text-decoration: none; padding: 16px 30px; border-radius: 999px; border: 3px solid #000; box-shadow: 5px 5px 0 #fff, 5px 5px 0 1px #000; transition: transform .12s, box-shadow .12s; text-transform: uppercase; }
@@ -171,87 +175,7 @@
   </div>
 </div>
 
-<div class="page-hero">
-  <div class="container">
-    <div class="hero-eyebrow">Feature</div>
-    <h1>Kalender & reminders</h1>
-    <p class="lead">Stuur een appje en de afspraak staat meteen in je eigen agenda. Geen nieuwe app leren. Geen dubbele kalenders. Gewoon WhatsApp, en jouw agenda doet de rest.</p>
-  </div>
-</div>
-
-<div class="body-section">
-  <div class="container">
-    <h2 class="block-title">Recht in je eigen kalender.</h2>
-    <p class="block-text">Dit is het belangrijkste: Sous-Chef zet afspraken niet in een eigen silo. De afspraak gaat direct naar <strong>jouw native agenda</strong> — Apple Calendar, Google Calendar, of welke kalender-app je ook gebruikt.</p>
-    <p class="block-text">Je iPhone-meldingen werken gewoon. Je kalender op je Mac staat gewoon bij. Niets verandert aan hoe je nu werkt, behalve dat je afspraken sneller toevoegt.</p>
-
-    <div class="emphasis-block">
-      <h3>Werkt met je agenda die je al hebt.</h3>
-      <p>Via iCal-synchronisatie verschijnen afspraken automatisch in je bestaande agenda-app. Geen import, geen export, geen gedoe. Stuur een appje — en de afspraak staat er gewoon in.</p>
-      <div class="cal-logos">
-        <div class="cal-pill"><span class="dot" style="background:#007AFF;"></span>Apple Calendar</div>
-        <div class="cal-pill"><span class="dot" style="background:#4285F4;"></span>Google Calendar</div>
-        <div class="cal-pill"><span class="dot" style="background:#0078D4;"></span>Outlook</div>
-        <div class="cal-pill"><span class="dot" style="background:#FFD000;"></span>Elke iCal-app</div>
-      </div>
-    </div>
-
-    <div class="examples">
-      <div class="example-row">
-        <div class="bubble-out">tandarts donderdag 14:00</div>
-        <div class="arrow">→</div>
-        <div class="bubble-in">📅 Toegevoegd. Staat in je agenda.</div>
-      </div>
-      <div class="example-row">
-        <div class="bubble-out">verjaardag Stan 27 juli</div>
-        <div class="arrow">→</div>
-        <div class="bubble-in">🎂 Klaar! Reminder op 26 juli ingesteld.</div>
-      </div>
-      <div class="example-row">
-        <div class="bubble-out">elke maandag standup om 9u</div>
-        <div class="arrow">→</div>
-        <div class="bubble-in">🔁 Wekelijks toegevoegd aan je agenda.</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="alt-bg">
-  <div class="container">
-    <h2 class="block-title">Reminders via WhatsApp.</h2>
-    <p class="block-text">Naast je agenda-melding kan Sous-Chef je ook een WhatsApp sturen op het juiste moment. Handig voor verjaardagen, medicijnen, of alles wat je echt niet wilt vergeten.</p>
-    <div class="feature-grid">
-      <div class="feature-card">
-        <div class="icon">📅</div>
-        <h3>Native agenda</h3>
-        <p>Afspraken gaan direct naar Apple Calendar, Google Calendar of Outlook via iCal-sync. Jouw meldingen, jouw interface.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">🎂</div>
-        <h3>Verjaardagen</h3>
-        <p>Sous-Chef herkent verjaardagen automatisch en stelt een reminder in voor de dag ervoor. Nooit meer vergeten.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">🔁</div>
-        <h3>Terugkerende afspraken</h3>
-        <p>Wekelijkse vergadering, maandelijkse afspraak — gewoon zeggen hoe vaak, en het staat er elke keer in.</p>
-      </div>
-      <div class="feature-card">
-        <div class="icon">⏰</div>
-        <h3>WhatsApp reminders</h3>
-        <p>Stel in dat Sous-Chef je een WhatsApp stuurt op een specifiek tijdstip. Extra herinnering, recht in je chats.</p>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="cta-block">
-  <div class="container">
-    <h2>Afspraken maken in 5 seconden.</h2>
-    <p>14 dagen gratis proberen. Geen creditcard nodig.</p>
-    <a href="/#prijs" class="btn-dark">Begin nu gratis →</a>
-  </div>
-</div>
+{{ content | safe }}
 
 <footer class="site">
   <div class="container footer-inner">
@@ -345,6 +269,5 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
   backLink.addEventListener('click', e => { e.preventDefault(); navigateTo('/'); });
 </script>
-
 </body>
 </html>

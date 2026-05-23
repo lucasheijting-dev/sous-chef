@@ -3,75 +3,102 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Contact — Sous-Chef</title>
-<meta name="description" content="Neem contact op met Sous-Chef." />
+<title>{{ pageTitle }} — Sous-Chef</title>
+<meta name="description" content="{{ metaDescription }}" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Titan+One&display=swap" rel="stylesheet" />
 <style>
   :root {
     --accent: #FFD000;
-    --fg: #0a0a0a; --fg-2: #1d1d1f; --muted: #6b6b70;
-    --line: #e7e7ea; --bg: #ffffff; --footer: #111113;
+    --fg: #0a0a0a;
+    --fg-2: #1d1d1f;
+    --muted: #6b6b70;
+    --line: #e7e7ea;
+    --bg: #ffffff;
+    --bg-2: #f5f5f7;
+    --footer: #111113;
     --display: 'Titan One', 'Inter', system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    color: var(--fg); background: var(--bg);
-    font-weight: 400; line-height: 1.6; -webkit-font-smoothing: antialiased;
+    color: var(--fg);
+    background: var(--bg);
+    font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
   }
   .container { max-width: 740px; margin: 0 auto; padding: 0 32px; }
   @media (max-width: 640px) { .container { padding: 0 20px; } }
+
   nav.top {
     position: sticky; top: 0; z-index: 50;
     backdrop-filter: saturate(180%) blur(20px);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
-    background: rgba(255,255,255,.85); border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.85);
+    border-bottom: 1px solid var(--line);
   }
-  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between; height: 72px;
+  }
   .brand { display: inline-flex; align-items: center; text-decoration: none; }
   .brand-logo { height: 36px; width: auto; }
-  .nav-back { font-size: 14px; font-weight: 600; color: var(--muted); text-decoration: none; transition: color .15s; }
+  .nav-back {
+    font-size: 14px; font-weight: 600; color: var(--muted);
+    text-decoration: none; transition: color .15s;
+  }
   .nav-back:hover { color: var(--fg); }
-  .page-hero { background: var(--accent); border-bottom: 4px solid #000; padding: 64px 0 48px; }
+  .nav-cta { background: var(--accent); color: #000; text-decoration: none; font-weight: 800; font-size: 13px; padding: 9px 16px; border-radius: 999px; border: 2.5px solid #000; box-shadow: 3px 3px 0 #000; transition: transform .12s, box-shadow .12s; text-transform: uppercase; white-space: nowrap; }
+  .nav-cta:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 #000; }
+
+  .page-hero {
+    background: var(--accent);
+    border-bottom: 4px solid #000;
+    padding: 64px 0 48px;
+  }
   .page-hero h1 {
-    font-family: var(--display); font-weight: 400;
-    font-size: clamp(36px, 5vw, 60px); text-transform: uppercase; margin: 0 0 12px; line-height: 1;
-  }
-  .page-hero .meta { font-size: 16px; color: rgba(0,0,0,.65); font-weight: 500; }
-  .contact-body { padding: 80px 0 120px; }
-  .contact-card {
-    background: #fff;
-    border: 3px solid #000;
-    border-radius: 28px;
-    padding: 48px 44px;
-    box-shadow: 8px 8px 0 #000;
-  }
-  .contact-card h2 {
-    font-family: var(--display); font-weight: 400;
-    font-size: 28px; text-transform: uppercase;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(36px, 5vw, 60px);
+    text-transform: uppercase;
     margin: 0 0 12px;
+    line-height: 1;
   }
-  .contact-card p { color: var(--fg-2); font-size: 16px; margin: 0 0 32px; }
-  .mail-btn {
-    display: inline-flex; align-items: center; gap: 10px;
-    background: var(--accent); color: #000;
-    font-family: inherit; font-weight: 800; font-size: 16px;
-    text-decoration: none;
-    padding: 16px 28px; border-radius: 999px;
-    border: 3px solid #000; box-shadow: 5px 5px 0 #000;
-    transition: transform .12s ease, box-shadow .12s ease;
-    text-transform: uppercase; letter-spacing: 0.01em;
+  .page-hero .meta {
+    font-size: 14px; color: rgba(0,0,0,.6); font-weight: 500;
   }
-  .mail-btn:hover { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 #000; }
-  .mail-btn svg { flex-shrink: 0; }
-  .contact-note {
-    margin-top: 24px; font-size: 14px; color: var(--muted); font-weight: 500;
+
+  .prose {
+    padding: 64px 0 96px;
   }
-  footer.site { background: var(--footer); color: #c0c0c5; padding: 40px 0; }
-  .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .prose h2 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 22px;
+    text-transform: uppercase;
+    margin: 48px 0 14px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #000;
+  }
+  .prose h2:first-child { margin-top: 0; }
+  .prose p { color: var(--fg-2); font-size: 16px; margin: 0 0 16px; }
+  .prose ul { color: var(--fg-2); font-size: 16px; padding-left: 20px; margin: 0 0 16px; }
+  .prose li { margin-bottom: 8px; }
+  .prose a { color: #000; font-weight: 600; }
+  .prose a:hover { color: var(--muted); }
+  .prose strong { font-weight: 700; color: var(--fg); }
+
+  footer.site {
+    background: var(--footer); color: #c0c0c5; padding: 40px 0;
+  }
+  .footer-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 24px; flex-wrap: wrap;
+  }
+  .footer-brand { display: inline-flex; align-items: center; }
   .footer-links { display: flex; gap: 28px; list-style: none; margin: 0; padding: 0; }
   .footer-links a { color: #c0c0c5; text-decoration: none; font-size: 14px; transition: color .15s; }
   .footer-links a:hover { color: #fff; }
@@ -83,8 +110,6 @@
   .back-bar { background: var(--bg-2); border-bottom: 1px solid var(--line); padding: 11px 0; }
   .back-link { font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; transition: color .15s; }
   .back-link:hover { color: var(--fg); }
-  .nav-cta { background: var(--accent); color: #000; text-decoration: none; font-weight: 800; font-size: 13px; padding: 9px 16px; border-radius: 999px; border: 2.5px solid #000; box-shadow: 3px 3px 0 #000; transition: transform .12s, box-shadow .12s; text-transform: uppercase; white-space: nowrap; }
-  .nav-cta:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 #000; }
   .nav-hamburger { display: flex; flex-direction: column; justify-content: center; gap: 5px; width: 38px; height: 38px; background: none; border: 2.5px solid #000; border-radius: 10px; cursor: pointer; padding: 8px 9px; box-shadow: 2px 2px 0 #000; transition: transform .12s, box-shadow .12s; flex-shrink: 0; }
   .nav-hamburger:hover { transform: translate(-1px,-1px); box-shadow: 4px 4px 0 #000; }
   .nav-hamburger span { display: block; height: 2px; background: #000; border-radius: 2px; transition: transform .2s, opacity .2s; transform-origin: center; }
@@ -127,60 +152,36 @@
     <a href="/" class="brand"><img class="brand-logo" src="/assets/sous-chef-logo.png" alt="Sous-Chef" /></a>
     <div style="display:flex;align-items:center;gap:10px;">
       <a href="/#prijs" class="nav-cta">Gratis proberen</a>
-      <button class="nav-hamburger" id="menuBtn" aria-label="Menu openen">
-        <span></span><span></span><span></span>
-      </button>
+      <button class="nav-hamburger" id="menuBtn" aria-label="Menu openen"><span></span><span></span><span></span></button>
     </div>
   </div>
 </nav>
 <div class="back-bar">
-  <div class="container">
-    <a href="/" class="back-link" id="backLink">← Terug naar Sous-Chef</a>
-  </div>
+  <div class="container"><a href="/" class="back-link" id="backLink">← Terug naar Sous-Chef</a></div>
 </div>
-
 <div class="wa-overlay" id="waOverlay">
   <div class="wa-backdrop" id="waBackdrop"></div>
-  <div class="wa-panel">
+  <div class="wa-panel" id="waPanel">
     <div class="wa-header">
-      <div class="wa-avatar">👨‍🍳</div>
-      <div>
-        <div class="wa-header-name">Sous-Chef</div>
-        <div class="wa-header-status">online</div>
-      </div>
+      <div class="wa-avatar">🍳</div>
+      <div style="flex:1;"><div class="wa-header-name">Sous-Chef</div><div class="wa-header-status" id="waStatus">aan het typen…</div></div>
       <button class="wa-header-close" id="waClose">✕</button>
     </div>
-    <div class="wa-body" id="waBody">
-      <div class="wa-typing" id="waTyping"><span></span><span></span><span></span></div>
-    </div>
-    <div class="wa-footer">
-      <div class="wa-input-fake">Stuur een bericht</div>
-      <div class="wa-send-btn">▶</div>
-    </div>
+    <div class="wa-body" id="waBody"><div class="wa-typing" id="waTyping"><span></span><span></span><span></span></div></div>
+    <div class="wa-footer"><div class="wa-input-fake">Stuur een bericht…</div><div class="wa-send-btn">➤</div></div>
   </div>
 </div>
 
 <div class="page-hero">
   <div class="container">
-    <h1>Contact</h1>
-    <div class="meta">Vragen, feedback of hulp nodig? Stuur gerust een mailtje.</div>
+    <h1>{{ heroTitle }}</h1>
+    <div class="meta">{{ heroMeta }}</div>
   </div>
 </div>
 
-<div class="contact-body">
+<div class="prose">
   <div class="container">
-    <div class="contact-card">
-      <h2>Neem contact op</h2>
-      <p>We reageren doorgaans binnen één werkdag. Voor snelle vragen kun je ook een WhatsApp sturen naar de assistent zelf.</p>
-      <a href="mailto:lucas@sous-chef.nl" class="mail-btn">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="4" width="20" height="16" rx="2"/>
-          <path d="M2 7l10 7 10-7"/>
-        </svg>
-        lucas@sous-chef.nl
-      </a>
-      <div class="contact-note">Of stuur een WhatsApp naar de assistent — die geeft je ook door aan ons.</div>
-    </div>
+    {{ content | safe }}
   </div>
 </div>
 
@@ -199,58 +200,49 @@
 </footer>
 
 <script>
-const MENU_MESSAGES = [
-  { emoji: '👋', text: 'Hoi! Waar wil je naartoe?', href: null,        delay: 0    },
-  { emoji: '🛒', text: 'Slimme lijsten',             href: '/lijsten',  delay: 480  },
-  { emoji: '📅', text: 'Kalender & reminders',       href: '/kalender', delay: 880  },
-  { emoji: '📝', text: 'Persoonlijke notities',      href: '/notities', delay: 1260 },
-  { emoji: '🏅', text: 'Habit tracker',              href: '/habits',   delay: 1620 },
-  { emoji: '💰', text: 'Wat kost het?',              href: '/#prijs',   delay: 1980 },
-];
-const menuBtn    = document.getElementById('menuBtn');
-const waOverlay  = document.getElementById('waOverlay');
-const waBackdrop = document.getElementById('waBackdrop');
-const waClose    = document.getElementById('waClose');
-const waBody     = document.getElementById('waBody');
-const waTyping   = document.getElementById('waTyping');
-let waStatus = 'closed', timers = [];
-function navigateTo(href) {
-  document.body.classList.add('page-exit');
-  setTimeout(() => { window.location.href = href; }, 260);
-}
-function openMenu() {
-  if (waStatus === 'open') return;
-  waStatus = 'open';
-  waOverlay.classList.add('open');
-  menuBtn.classList.add('open');
-  document.body.style.overflow = 'hidden';
-  [...waBody.querySelectorAll('.wa-msg')].forEach(el => el.remove());
-  waTyping.classList.remove('show');
-  timers.forEach(clearTimeout); timers = [];
-  timers.push(setTimeout(() => { waTyping.classList.add('show'); }, 120));
-  MENU_MESSAGES.forEach((m, i) => {
-    timers.push(setTimeout(() => {
-      if (i === 0) waTyping.classList.remove('show');
-      const a = document.createElement(m.href ? 'a' : 'div');
-      a.className = 'wa-msg';
-      if (m.href) { a.href = '#'; a.addEventListener('click', e => { e.preventDefault(); navigateTo(m.href); }); }
-      a.innerHTML = `<span class="wa-emoji">${m.emoji}</span>${m.text}${m.href ? '<span class="wa-tick">✓✓</span>' : ''}`;
-      waBody.appendChild(a);
-      requestAnimationFrame(() => requestAnimationFrame(() => a.classList.add('show')));
-    }, m.delay + 160));
-  });
-}
-function closeMenu() {
-  waStatus = 'closed';
-  waOverlay.classList.remove('open');
-  menuBtn.classList.remove('open');
-  document.body.style.overflow = '';
-  timers.forEach(clearTimeout); timers = [];
-}
-menuBtn.addEventListener('click', () => waStatus === 'open' ? closeMenu() : openMenu());
-waBackdrop.addEventListener('click', closeMenu);
-waClose.addEventListener('click', closeMenu);
-document.getElementById('backLink').addEventListener('click', e => { e.preventDefault(); navigateTo('/'); });
+  const MENU_MESSAGES = [
+    { emoji: '👋', text: 'Hoi! Waar wil je naartoe?', href: null,        delay: 0    },
+    { emoji: '🛒', text: 'Slimme lijsten',             href: '/lijsten',  delay: 480  },
+    { emoji: '📅', text: 'Kalender & reminders',       href: '/kalender', delay: 880  },
+    { emoji: '📝', text: 'Persoonlijke notities',      href: '/notities', delay: 1260 },
+    { emoji: '🏅', text: 'Habit tracker',              href: '/habits',   delay: 1620 },
+    { emoji: '💰', text: 'Wat kost het?',              href: '/#prijs',   delay: 1980 },
+  ];
+  const menuBtn = document.getElementById('menuBtn');
+  const waOverlay = document.getElementById('waOverlay');
+  const waBackdrop = document.getElementById('waBackdrop');
+  const waClose = document.getElementById('waClose');
+  const waBody = document.getElementById('waBody');
+  const waTyping = document.getElementById('waTyping');
+  const waStatus = document.getElementById('waStatus');
+  const backLink = document.getElementById('backLink');
+  let isOpen = false, timers = [];
+  function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+  function navigateTo(href) { document.body.classList.add('page-exit'); setTimeout(() => { window.location.href = href; }, 260); }
+  function openMenu() {
+    if (isOpen) return; isOpen = true;
+    menuBtn.classList.add('open'); waOverlay.classList.add('open'); document.body.style.overflow = 'hidden';
+    clearTimers(); waBody.querySelectorAll('.wa-msg').forEach(el => el.remove()); waTyping.classList.remove('show'); waStatus.textContent = 'aan het typen…';
+    timers.push(setTimeout(() => waTyping.classList.add('show'), 80));
+    MENU_MESSAGES.forEach((item, i) => {
+      timers.push(setTimeout(() => {
+        if (i > 0) waTyping.classList.remove('show');
+        const el = document.createElement(item.href ? 'a' : 'div');
+        el.className = 'wa-msg';
+        if (item.href) { el.href = item.href; el.addEventListener('click', e => { e.preventDefault(); closeMenu(); setTimeout(() => navigateTo(item.href), 150); }); }
+        el.innerHTML = '<span class="wa-emoji">' + item.emoji + '</span>' + item.text + '<span class="wa-tick">✓✓</span>';
+        waBody.insertBefore(el, waTyping);
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+        if (i < MENU_MESSAGES.length - 1) { timers.push(setTimeout(() => waTyping.classList.add('show'), 120)); } else { waStatus.textContent = 'online'; }
+      }, item.delay));
+    });
+  }
+  function closeMenu() { if (!isOpen) return; isOpen = false; clearTimers(); menuBtn.classList.remove('open'); waOverlay.classList.remove('open'); document.body.style.overflow = ''; }
+  menuBtn.addEventListener('click', () => isOpen ? closeMenu() : openMenu());
+  waClose.addEventListener('click', closeMenu);
+  waBackdrop.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+  backLink.addEventListener('click', e => { e.preventDefault(); navigateTo('/'); });
 </script>
 </body>
 </html>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stop met post-its — Sous-Chef Blog</title>
-  <meta name="description" content="Hoe ik mijn hoofd leeg maakte door gewoon een appje te sturen. Over post-its, vergeten boodschappen en één simpele gewoonte die alles veranderde." />
+  <title>{{ title }} — Sous-Chef Blog</title>
+  <meta name="description" content="{{ description }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Titan+One&display=swap" rel="stylesheet" />
@@ -96,6 +96,15 @@
     .footer-links a { color: #c0c0c5; text-decoration: none; font-size: 14px; transition: color .15s; }
     .footer-links a:hover { color: #fff; }
     .footer-copy { color: #6c6c72; font-size: 13px; }
+    /* Extra classes used in gewoontes-volhouden article */
+    .level-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 28px 0; }
+    @media (max-width: 560px) { .level-grid { grid-template-columns: 1fr; } }
+    .level-card { border: 3px solid #000; border-radius: 16px; padding: 18px 16px; text-align: center; }
+    .level-card.bronze { background: #f5e6cc; }
+    .level-card.silver { background: #e8e8ea; }
+    .level-card.gold { background: var(--accent); }
+    .level-label { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
+    .level-goal { font-size: 15px; font-weight: 700; color: #000; line-height: 1.3; }
   </style>
 </head>
 <body>
@@ -130,69 +139,25 @@
 <section class="page-hero">
   <div class="container">
     <div class="hero-meta">
-      <span class="hero-tag">Productiviteit</span>
-      <span class="hero-date">12 mei 2026</span>
-      <span class="hero-readtime">· 4 min lezen</span>
+      <span class="hero-tag">{{ category }}</span>
+      <span class="hero-date">{{ date | date("d MMMM yyyy", "nl") }}</span>
+      <span class="hero-readtime">· {{ readtime }} min lezen</span>
     </div>
-    <h1>Stop met post-its</h1>
-    <p class="lead">Hoe ik mijn hoofd leeg maakte door gewoon een appje te sturen.</p>
+    <h1>{{ title }}</h1>
+    <p class="lead">{{ description }}</p>
   </div>
 </section>
 
 <div class="article-body">
   <div class="container">
-
-    <h2>De post-it op mijn monitor</h2>
-    <p>Er hing ooit een post-it op mijn monitor met de tekst "bel tandarts". Dat briefje hing daar zo lang dat ik het op een gegeven moment niet meer zag. Het was onderdeel van het meubilair geworden. Eronder zat nog een post-it met "nieuwe sportschoenen!!!" — met drie uitroeptekens, alsof dat zou helpen. Het hielp niet.</p>
-    <p>Ik ben niet de enige. Kantoorruimtes, koelkasten, dashboards — overal plakken die gele lapjes als confetti na een feestje waar iemand heel dringend iets moest onthouden maar dat toch vergat. Post-its zijn niet nutteloos. Ze zijn alleen <strong>niet betrouwbaar genoeg</strong> voor de dingen die er echt toe doen.</p>
-    <p>Het probleem met een fysiek briefje is simpel: het is niet bij jou als je het nodig hebt. De post-it met "azijn kopen" hangt thuis als jij in de supermarkt staat. Het notitieblok met je ideeën voor dat project ligt op je bureau als jij onderweg in de trein zit. Het hoofd vergeet. Het papier vergeet ook, op zijn eigen manier.</p>
-
-    <h2>Je telefoon is wél altijd bij je</h2>
-    <p>We dragen al jaren het meest krachtige notitieboekje ter wereld in onze broekzak. En toch — als er iets te onthouden valt, is onze eerste reflex nog steeds een pen pakken, een Post-it afscheuren, of "ik moet dat echt onthouden" tegen onszelf zeggen. Dat laatste werkt nooit. Nooit.</p>
-    <p>Het enige dat wél werkt, is het onmiddellijk kwijtraken. Niet bewaren in je hoofd, maar dumpen. Ergens neerzetten en er niet meer aan denken. De uitdaging is dat "ergens neerzetten" laagdrempelig genoeg moet zijn dat je het altijd doet — ook als je moe bent, ook als je haast hebt, ook als je één hand bezet hebt met koffie.</p>
-
-    <div class="callout">
-      <p>💡 De gouden regel: als je langer dan drie seconden nadenkt over <em>waar</em> je iets opschrijft, doe je het niet. En dan vergeet je het alsnog.</p>
-    </div>
-
-    <h2>Gewoon een appje sturen</h2>
-    <p>Dat is letterlijk alles wat ik nu doe. Ik stuur een WhatsApp-berichtje naar Sous-Chef. Geen app openen, geen categorie kiezen, geen tag toevoegen. Gewoon typen wat er in mijn hoofd zit en op verzenden drukken.</p>
-    <p>Sous-Chef snapt wat ik bedoel. Als ik schrijf "tandarts bellen morgen", zet het dat in mijn agenda. Als ik zeg "nieuwe sportschoenen", voegt het dat toe aan mijn boodschappenlijst of mijn wenslijst — afhankelijk van hoe ik het eerder heb ingesteld. En als ik midden in een vergadering denk "moet ik nog nagaan of die offerte al is verstuurd", dan stuur ik dat gewoon als memo en vind ik het terug in mijn notities.</p>
-
-    <div class="wa-example">
-      <div class="bubble-out">tandarts bellen morgen ochtend</div>
-      <div class="bubble-in">✅ Reminder gezet voor morgen 09:00 — "Tandarts bellen". Ik stuur je een seintje!</div>
-      <div class="bubble-out">en voeg azijn toe aan boodschappenlijst</div>
-      <div class="bubble-in">🛒 Azijn toegevoegd aan je Boodschappen-lijst. Nog iets?</div>
-      <div class="bubble-out">ook: idee voor verjaardag Lisa — escape room boeken</div>
-      <div class="bubble-in">📝 Opgeslagen als notitie: "Idee verjaardag Lisa — escape room boeken". Goed idee trouwens 😄</div>
-    </div>
-
-    <h2>Wat er in je hoofd gebeurt</h2>
-    <p>Er is een bekend begrip in productiviteitskringen: <strong>cognitive load</strong>. Het is de mentale moeite die het kost om dingen in je hoofd te houden. Elke onafgemaakte taak, elk onthouden-idee, elke "dit moet ik niet vergeten" occupeert ruimte in je werkgeheugen. En dat werkgeheugen is klein. Kleiner dan je denkt.</p>
-    <p>Zodra je iets opschrijft — écht ergens vastlegt, op een plek die je vertrouwt — laat je brein het los. Niet helemaal, maar genoeg. Je hoeft er niet meer op te letten. Je hoofd wordt leger. En een leger hoofd denkt beter.</p>
-    <p>Dat klinkt groot, maar het is gewoon praktisch. Ik merk het elke avond: als ik alles wat me die dag is binnengevallen heb doorgestuurd naar Sous-Chef, zit ik rustiger op de bank. Er is geen mentale lijst die zachtjes in de achtergrond staat te tollen.</p>
-
-    <h2>Automatisch op de juiste plek</h2>
-    <p>Het mooie aan WhatsApp als invoermethode is dat het <strong>context-vrij</strong> is. Jij hoeft niet na te denken over categorieën. Je stuurt, en Sous-Chef zorgt voor de indeling. Een taak is een taak. Een idee is een notitie. Een "koop X"-bericht gaat naar je lijst. Een datum gaat naar je agenda.</p>
-    <p>En als je het terugzoekt? Dan open je de app, of je vraagt het gewoon: "Wat stond er ook alweer op mijn boodschappenlijst?" of "Wat had ik maandag in mijn agenda?" Geen scrollen door een app met 47 schermen. Gewoon vragen en krijgen.</p>
-
-    <div class="callout">
-      <p>📌 Post-its zijn niet weg. Ze hangen nog steeds bij mij thuis. Maar nu staan er dingen op zoals "leuk weekend!" en "fijne koffie hier" — dingen die er níet in de weg staan als ik iets moet onthouden.</p>
-    </div>
-
-    <h2>Begin met één ding</h2>
-    <p>Je hoeft niet meteen alles te veranderen. Begin met één gewoonte: de volgende keer dat je denkt "dit moet ik onthouden", stuur je het direct naar Sous-Chef. Niet even later. Nu. Het duurt letterlijk vijf seconden.</p>
-    <p>Na een week merk je dat je hoofd rustiger is. Na twee weken merk je dat je bijna niets meer vergeet. En na een maand vraag je je af waarom je ooit post-its gebruikte voor iets dat écht belangrijk was.</p>
-    <p>Je telefoon is er toch al. WhatsApp staat er toch al op. Gebruik het gewoon slimmer.</p>
-
+    {{ content | safe }}
   </div>
 </div>
 
 <section class="article-cta">
   <div class="container">
-    <h2>Probeer het zelf</h2>
-    <p>Stuur je eerste berichtje naar Sous-Chef en merk hoe rustig je hoofd wordt.</p>
+    <h2>{{ ctaTitle if ctaTitle else "Probeer het zelf" }}</h2>
+    <p>{{ ctaText if ctaText else "Stuur je eerste berichtje naar Sous-Chef." }}</p>
     <a href="/#prijs" class="btn-dark">Gratis starten</a>
   </div>
 </section>

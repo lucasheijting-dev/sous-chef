@@ -1,0 +1,14 @@
+# Eleventy outputs clean URL directories (e.g. /lijsten/index.html),
+# so no HTML extension rewrites are needed. These redirects handle
+# any legacy direct .html links just in case.
+/privacy.html    /privacy/    301
+/terms.html      /terms/      301
+/contact.html    /contact/    301
+/lijsten.html    /lijsten/    301
+/kalender.html   /kalender/   301
+/notities.html   /notities/   301
+/habits.html     /habits/     301
+/blog/stop-met-post-its.html      /blog/stop-met-post-its/      301
+/blog/gewoontes-volhouden.html    /blog/gewoontes-volhouden/    301
+/blog/nooit-meer-vergeten.html    /blog/nooit-meer-vergeten/    301
+/blog/agenda-altijd-bij.html      /blog/agenda-altijd-bij/      301

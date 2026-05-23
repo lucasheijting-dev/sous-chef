@@ -1,0 +1,11 @@
+{
+  "name": "sous-chef-website",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "eleventy",
+    "dev": "eleventy --serve"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "^3.0.0"
+  }
+}

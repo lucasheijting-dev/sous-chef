@@ -13,6 +13,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Dependencies installeren
+        working-directory: website
+        run: npm install
+
+      - name: Website bouwen
+        working-directory: website
+        run: npm run build
+
       - name: Deploy via rsync
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -24,5 +37,5 @@ jobs:
           ssh-keyscan -H $HOST >> ~/.ssh/known_hosts
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key" \
-            website/ \
+            website/_site/ \
             deploy@$HOST:/var/www/sous-chef/
