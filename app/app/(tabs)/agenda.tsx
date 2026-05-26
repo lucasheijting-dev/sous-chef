@@ -622,7 +622,7 @@ function AgendaLite() {
 
       {/* Period pills */}
       <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, paddingTop: 22, paddingBottom: 10 }}>
-        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Periode</Text>
+        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Periode</Text>
         <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {PERIOD_LABELS.map(([p, label]) => {
             const count = periodCounts[p];
@@ -631,11 +631,11 @@ function AgendaLite() {
               <TouchableOpacity
                 key={p}
                 onPress={() => selectPeriod(p)}
-                style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: active ? Colors.yellow : '#DDDCDC' }}
+                style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: active ? Colors.yellow : colors.gray200 }}
               >
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: colors.black, lineHeight: 18 }}>
                   {label}{' '}
-                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: count === 0 ? '#aaa' : '#333' }}>
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: count === 0 ? colors.gray400 : colors.gray600 }}>
                     ({count})
                   </Text>
                 </Text>
@@ -646,7 +646,7 @@ function AgendaLite() {
       </View>
 
       {/* Separator */}
-      <View style={{ height: 1, backgroundColor: '#E8E8E8', marginHorizontal: 20, marginTop: 4, marginBottom: 4 }} />
+      <View style={{ height: 1, backgroundColor: colors.gray200, marginHorizontal: 20, marginTop: 4, marginBottom: 4 }} />
 
       {/* Category chips */}
       {(() => {
@@ -657,14 +657,14 @@ function AgendaLite() {
         ];
         return (
           <View style={{ flexGrow: 0, flexShrink: 0, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 16 }}>
-            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Categorie</Text>
+            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Categorie</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(null); }} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : '#DDDCDC' }}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#111', lineHeight: 18 }}>Alles</Text>
+              <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(null); }} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === null ? Colors.yellow : colors.gray200 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: colors.black, lineHeight: 18 }}>Alles</Text>
               </TouchableOpacity>
               {mergedStreams.map(st => (
-                <TouchableOpacity key={st.id} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key); }} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : '#DDDCDC' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : '#111', lineHeight: 18 }}>{st.emoji} {st.name}</Text>
+                <TouchableOpacity key={st.id} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(streamFilter === st.claude_key ? null : st.claude_key); }} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 24, backgroundColor: streamFilter === st.claude_key ? st.color : colors.gray200 }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: streamFilter === st.claude_key ? '#fff' : colors.black, lineHeight: 18 }}>{st.emoji} {st.name}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -972,7 +972,12 @@ function AgendaLite() {
           <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => setQuickAddVisible(false)}>
             <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 14 }} onPress={() => {}}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 4 }} />
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Nieuwe afspraak</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Nieuwe afspraak</Text>
+                <TouchableOpacity onPress={() => setQuickAddVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={colors.gray600} />
+                </TouchableOpacity>
+              </View>
               <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 4 }}>
                 <TextInputRN
                   style={{ fontFamily: 'Inter_400Regular', fontSize: 16, color: colors.black, paddingVertical: 12 }}
@@ -1034,7 +1039,12 @@ function AgendaLite() {
           <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} onPress={() => setEditEvent(null)}>
             <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32, gap: 14 }} onPress={() => {}}>
               <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.gray200, alignSelf: 'center', marginBottom: 4 }} />
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Afspraak bewerken</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Afspraak bewerken</Text>
+                <TouchableOpacity onPress={() => setEditEvent(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={colors.gray600} />
+                </TouchableOpacity>
+              </View>
               {editEvent?.source === 'phone' && (
                 <View style={{ backgroundColor: colors.gray100, borderRadius: Radius.md, padding: 12, flexDirection: 'row', gap: 8, alignItems: 'center' }}>
                   <Ionicons name="information-circle-outline" size={16} color={colors.gray400} />

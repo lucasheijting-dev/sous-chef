@@ -459,6 +459,8 @@ export default function LijstenTab() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const emptyBreath = useRef(new Animated.Value(1)).current;
   const breathLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const undoSlide = useRef(new Animated.Value(60)).current;
+  const undoOpacity = useRef(new Animated.Value(0)).current;
   const fetchListsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showBanner = settings.onboarding_done && !settings.getting_started_dismissed;
@@ -582,6 +584,12 @@ export default function LijstenTab() {
     setDeleteSheet(null);
     setPendingListDelete({ listId, listName, items: snapshot });
     setListUndoVisible(true);
+    undoSlide.setValue(60);
+    undoOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(undoSlide, { toValue: 0, useNativeDriver: true, tension: 160, friction: 12 }),
+      Animated.timing(undoOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+    ]).start();
     if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
     listUndoTimer.current = setTimeout(async () => {
       setListUndoVisible(false);
@@ -1187,12 +1195,12 @@ export default function LijstenTab() {
 
       {/* Undo snackbar */}
       {listUndoVisible && (
-        <View style={[undoStyles.snackbar, { bottom: insets.bottom + 90 }]}>
+        <Animated.View style={[undoStyles.snackbar, { bottom: insets.bottom + 90, opacity: undoOpacity, transform: [{ translateY: undoSlide }] }]}>
           <Text style={undoStyles.snackbarText}>"{pendingListDelete?.listName}" verwijderd</Text>
           <TouchableOpacity onPress={undoListDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={undoStyles.undoBtn}>Ongedaan maken</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
 
       {/* Peek modal */}
