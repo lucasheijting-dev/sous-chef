@@ -1571,7 +1571,7 @@ Voeg hem toe aan je iPhone:
 Je agenda's (Afspraken, Verjaardagen, Werk, Persoonlijk) verschijnen automatisch. Alle afspraken die je via WhatsApp instuurt komen er direct in.`;
 }
 
-function fmtDate(isoDate, tz = 'Europe/Amsterdam') {
+function formatDate(isoDate, tz = 'Europe/Amsterdam') {
   if (!isoDate) return '';
   // Parse as local date (not UTC) by treating YYYY-MM-DD as noon in the user tz
   const [y, m, d] = isoDate.split('-').map(Number);
