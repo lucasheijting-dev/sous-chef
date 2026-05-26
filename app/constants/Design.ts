@@ -3,6 +3,7 @@ export const LightColors = {
   white: '#FFFFFF',
   yellow: '#FCC10C',
   yellowDark: '#E5A800',
+  yellowText: '#9A6700', // AA-compliant on white (contrast ~5.1:1)
   yellowLight: '#FFF9CC',
   offWhite: '#F7F7F7',
   gray100: '#F0F0F0',
@@ -17,6 +18,7 @@ export const DarkColors = {
   white: '#111111',
   yellow: '#FCC10C',
   yellowDark: '#E5A800',
+  yellowText: '#FCC10C', // on dark backgrounds yellow is fine as-is
   yellowLight: 'rgba(252,193,12,0.10)',
   offWhite: '#080808',
   gray100: '#1E1E1E',
@@ -68,7 +70,7 @@ export const Shadow = {
   },
 };
 
-export const TAB_BAR_CLEARANCE = 120;
+export const TAB_BAR_CLEARANCE = 80;
 
 export const Typography = {
   display: {

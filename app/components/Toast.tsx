@@ -76,7 +76,7 @@ export function useToast() {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 160,
     left: 24,
     right: 24,
     backgroundColor: Colors.black,

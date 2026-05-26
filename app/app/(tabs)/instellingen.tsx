@@ -94,17 +94,25 @@ function SettingsRow({
   return inner;
 }
 
-function CredRow({ label, value, colors, onCopy }: { label: string; value: string; colors: any; onCopy: (v: string) => void }) {
+function CredRow({ label, value, colors, onCopy, secret }: { label: string; value: string; colors: any; onCopy: (v: string) => void; secret?: boolean }) {
+  const [revealed, setRevealed] = useState(false);
+  const display = secret && !revealed ? '••••••••••••' : value;
   return (
-    <TouchableOpacity
-      style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }}
-      onPress={() => onCopy(value)}
-      activeOpacity={0.6}
-    >
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 }}>
       <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: colors.gray400, flex: 1 }}>{label}</Text>
-      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, flex: 2, textAlign: 'right' }} numberOfLines={1}>{value}</Text>
-      <Ionicons name="copy-outline" size={13} color={colors.gray400} style={{ marginLeft: 6 }} />
-    </TouchableOpacity>
+      <TouchableOpacity onPress={() => onCopy(value)} activeOpacity={0.6} style={{ flex: 2, alignItems: 'flex-end' }}>
+        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, textAlign: 'right' }} numberOfLines={1}>{display}</Text>
+      </TouchableOpacity>
+      {secret ? (
+        <TouchableOpacity onPress={() => setRevealed(v => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 6 }}>
+          <Ionicons name={revealed ? 'eye-off-outline' : 'eye-outline'} size={13} color={colors.gray400} />
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity onPress={() => onCopy(value)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 6 }}>
+          <Ionicons name="copy-outline" size={13} color={colors.gray400} />
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }
 
@@ -1538,7 +1546,7 @@ export default function InstellingenTab() {
                       </Text>
                       <CredRow label="Server" value="caldav.sous-chef.nl" colors={colors} onCopy={copyToClipboard} />
                       <CredRow label="Gebruikersnaam" value={caldavCreds.username} colors={colors} onCopy={copyToClipboard} />
-                      <CredRow label="Wachtwoord" value={caldavCreds.password} colors={colors} onCopy={copyToClipboard} />
+                      <CredRow label="Wachtwoord" value={caldavCreds.password} colors={colors} onCopy={copyToClipboard} secret />
                     </View>
                   )}
                 </>
@@ -1598,15 +1606,16 @@ export default function InstellingenTab() {
               <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
               <SettingsRow icon="download-outline" label="Exporteer mijn data" onPress={handleExportData} />
             </View>
-            <View style={[styles.card, styles.dangerCard, { backgroundColor: colors.white }]}>
+            <View style={[styles.card, styles.dangerCard, { backgroundColor: '#FFF5F5' }]}>
               <SettingsRow icon="log-out-outline" label="Koppeling verwijderen" danger onPress={confirmLogout} />
               <View style={styles.dangerCardSubtitleWrap}>
                 <Text style={styles.dangerCardSubtitle}>Je WhatsApp-koppeling wordt verwijderd. Data blijft bewaard.</Text>
               </View>
-              <View style={[styles.divider, { backgroundColor: '#FEE2E2' }]} />
+            </View>
+            <View style={[styles.card, styles.dangerCard, { backgroundColor: '#FFF5F5', marginTop: 8 }]}>
               <SettingsRow icon="trash-outline" label="Account verwijderen" danger onPress={confirmDeleteAccount} />
               <View style={styles.dangerCardSubtitleWrap}>
-                <Text style={styles.dangerCardSubtitle}>Al je data wordt permanent verwijderd.</Text>
+                <Text style={[styles.dangerCardSubtitle, { color: '#EF4444' }]}>Alle data wordt permanent en onomkeerbaar verwijderd.</Text>
               </View>
             </View>
           </ScrollView>
@@ -1668,7 +1677,7 @@ export default function InstellingenTab() {
                 </Text>
                 {section.items.map((item, i) => (
                   <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 8 }}>
-                    <Text style={{ color: Colors.yellow, fontSize: 14, lineHeight: 20 }}>›</Text>
+                    <Text style={{ color: '#9A6700', fontSize: 14, lineHeight: 20 }}>›</Text>
                     <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray600 ?? '#555', flex: 1, lineHeight: 20, fontStyle: 'italic' }}>{item}</Text>
                   </View>
                 ))}

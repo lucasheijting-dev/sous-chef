@@ -287,6 +287,15 @@ export function MorningScreen() {
       />
 
       <SafeAreaView style={{ flex: 1 }}>
+        {/* ── Close button ──────────────────────────────────────────── */}
+        <Pressable
+          onPress={() => Animated.timing(masterOpacity, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => setVisible(false))}
+          style={[styles.closeBtn, { top: insets.top + 12 }]}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="close" size={20} color="#5A3C00" />
+        </Pressable>
+
         <Animated.View style={[styles.content, { opacity: screenOpacity }]}>
 
           {/* ── Greeting ──────────────────────────────────────────── */}
@@ -540,5 +549,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#92700A',
     opacity: 0.5,
+  },
+  closeBtn: {
+    position: 'absolute',
+    right: 20,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

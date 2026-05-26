@@ -55,6 +55,10 @@ router.post('/', async (req, res) => {
     await handleMessage({ from, text });
   } catch (err) {
     console.error('Webhook error:', err);
+    if (from) {
+      const { sendMessage } = require('./whatsapp');
+      sendMessage(from, '⚠️ Er is een onverwachte fout opgetreden. Probeer het opnieuw of neem contact op met Lucas.').catch(() => {});
+    }
   }
 });
 

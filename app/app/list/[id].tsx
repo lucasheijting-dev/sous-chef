@@ -72,7 +72,7 @@ function AnimatedCheckbox({ checked, onPress }: { checked: boolean; onPress: () 
   }
 
   return (
-    <TouchableOpacity onPress={handlePress} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={1}>
+    <TouchableOpacity onPress={handlePress} hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }} activeOpacity={1} style={{ padding: 2 }}>
       <Animated.View style={[styles.checkbox, checked && styles.checkboxDone, { transform: [{ scale }] }]}>
         {checked && <Ionicons name="checkmark" size={13} color={Colors.black} />}
       </Animated.View>
@@ -142,7 +142,7 @@ function SwipeableItem({
       overshootLeft={false}
       overshootRight={false}
       onSwipeableOpen={(direction) => {
-        if (direction === 'left') {
+        if (direction === 'right') {
           handleToggleFromSwipe();
         }
       }}
@@ -353,7 +353,7 @@ export default function ListDetailScreen() {
     const timer = setTimeout(async () => {
       await supabase.from('list_items').delete().eq('id', itemId);
       setPendingDelete(null);
-    }, 3000);
+    }, 6000);
 
     setPendingDelete({ item: target, timer });
   }
@@ -510,8 +510,13 @@ export default function ListDetailScreen() {
 
         {/* Progress bar */}
         {!loading && totalCount > 0 && (
-          <View style={{ height: 4, backgroundColor: '#E0E0E0', marginHorizontal: 20, borderRadius: 2, marginTop: 8, marginBottom: 4 }}>
-            <View style={{ height: 4, backgroundColor: progress === 1 ? '#4CAF50' : '#FCC10C', width: `${progress * 100}%` as any, borderRadius: 2 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 8, marginBottom: 4, gap: 8 }}>
+            <View style={{ flex: 1, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2 }}>
+              <View style={{ height: 4, backgroundColor: progress === 1 ? '#4CAF50' : '#FCC10C', width: `${progress * 100}%` as any, borderRadius: 2 }} />
+            </View>
+            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: Colors.gray400 }}>
+              {checkedCount}/{totalCount}
+            </Text>
           </View>
         )}
 

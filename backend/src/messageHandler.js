@@ -592,11 +592,16 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       if (caldav.isConfigured()) {
         caldavCreds = await db.getCalDAVCredentials(userId);
         if (!caldavCreds) {
-          const { username, password } = caldav.generateCredentials(userId);
-          await caldav.provisionUser(username, password);
-          await db.storeCalDAVCredentials(userId, username, password);
-          caldavCreds = { username, password };
-          isNewCalDAVUser = true;
+          try {
+            const { username, password } = caldav.generateCredentials(userId);
+            await caldav.provisionUser(username, password);
+            await db.storeCalDAVCredentials(userId, username, password);
+            caldavCreds = { username, password };
+            isNewCalDAVUser = true;
+          } catch (err) {
+            console.error('CalDAV provisioning failed:', err.message);
+            return '⚠️ Er is een technisch probleem met je agenda. Probeer het later nog eens of neem contact op met Lucas.';
+          }
         }
       }
 
