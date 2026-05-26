@@ -35,6 +35,7 @@ import { CalEvent } from '@/lib/types';
 import { Colors, Radius, Shadow, ThemeColors, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type CalendarStream = { id: string; claude_key: string; color: string; name: string; emoji: string };
 
@@ -299,6 +300,12 @@ function AgendaLite() {
 
   const [viewMode, setViewMode]           = useState<'list' | 'calendar'>('list');
   const [selectedDate, setSelectedDate]   = useState(TODAY);
+
+  useEffect(() => {
+    AsyncStorage.getItem('agenda_view_mode').then(v => {
+      if (v === 'list' || v === 'calendar') setViewMode(v);
+    });
+  }, []);
   const [dayDetailMode, setDayDetailMode] = useState(false);
   const monthsRef = useRef<FlatList>(null);
   const { settings } = useModuleSettings();
@@ -592,7 +599,12 @@ function AgendaLite() {
         <View style={s.bannerRow}>
           <Text style={s.bannerTitle}>Agenda</Text>
           <TouchableOpacity
-            onPress={() => { setViewMode(v => v === 'list' ? 'calendar' : 'list'); setDayDetailMode(false); }}
+            onPress={() => {
+              const next = viewMode === 'list' ? 'calendar' : 'list';
+              setViewMode(next);
+              setDayDetailMode(false);
+              AsyncStorage.setItem('agenda_view_mode', next);
+            }}
             style={{ padding: 8, marginRight: -4 }}
             activeOpacity={0.7}
           >

@@ -992,6 +992,7 @@ export default function InstellingenTab() {
               <SettingsRow
                 icon="trophy-outline"
                 label="Habits tab"
+                subtitle="Dagelijkse gewoontes bijhouden met streaks."
                 right={
                   saving ? (
                     <ActivityIndicator size="small" color={Colors.yellow} />

@@ -243,6 +243,7 @@ export default function ListDetailScreen() {
   const prevItemCount = useRef(0);
   const newItemAnim = useRef(new Animated.Value(0)).current;
   const newItemSlide = useRef(new Animated.Value(40)).current;
+  const contentFade = useRef(new Animated.Value(0)).current;
 
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
   const batchDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -303,7 +304,13 @@ export default function ListDetailScreen() {
       prevItemCount.current = data.length;
       setItems(data);
     }
-    setLoading(false);
+    setLoading(prev => {
+      if (prev) {
+        contentFade.setValue(0);
+        Animated.timing(contentFade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      }
+      return false;
+    });
     setRefreshing(false);
   }, [id]);
 
@@ -369,14 +376,17 @@ export default function ListDetailScreen() {
   }
 
   async function addItem() {
-    if (!newItemText.trim()) return;
-    setAdding(true);
+    const text = newItemText.trim();
+    if (!text) return;
     haptic('medium');
-    await supabase.from('list_items').insert({ list_id: id, text: newItemText.trim(), checked: false });
+    const tempId = `temp_${Date.now()}`;
+    const optimistic = { id: tempId, list_id: id as string, text, checked: false, created_at: new Date().toISOString() };
+    setItems(prev => [...prev, optimistic]);
     setNewItemText('');
-    setAdding(false);
     Keyboard.dismiss();
-    showToast(`"${newItemText.trim()}" toegevoegd`, 'success');
+    setAdding(true);
+    await supabase.from('list_items').insert({ list_id: id, text, checked: false });
+    setAdding(false);
     fetchItems();
   }
 
@@ -520,21 +530,23 @@ export default function ListDetailScreen() {
           </View>
         )}
 
-        {/* Search bar + Alles afvinken */}
+        {/* Search bar (only when 10+ items) + Alles afvinken */}
         {!loading && items.length > 0 && (
-          <View style={[styles.searchRow]}>
-            <View style={[styles.searchBar, { backgroundColor: colors.white, borderColor: colors.gray100, flex: 1 }]}>
-              <Ionicons name="search-outline" size={16} color={colors.gray400} />
-              <TextInput
-                style={[styles.searchInput, { color: colors.black }]}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Zoeken in lijst..."
-                placeholderTextColor={colors.gray400}
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-              />
-            </View>
+          <View style={[styles.searchRow, items.length < 10 && { justifyContent: 'flex-end' }]}>
+            {items.length >= 10 && (
+              <View style={[styles.searchBar, { backgroundColor: colors.white, borderColor: colors.gray100, flex: 1 }]}>
+                <Ionicons name="search-outline" size={16} color={colors.gray400} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.black }]}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Zoeken in lijst..."
+                  placeholderTextColor={colors.gray400}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                />
+              </View>
+            )}
             {unchecked.length > 0 && (
               <TouchableOpacity
                 onPress={checkAllItems}
@@ -565,6 +577,7 @@ export default function ListDetailScreen() {
             {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
           </View>
         ) : (
+          <Animated.View style={{ flex: 1, opacity: contentFade }}>
           <FlatList
             data={flatItems}
             keyExtractor={(i) => i.id}
@@ -579,7 +592,7 @@ export default function ListDetailScreen() {
                   <Text style={styles.allDoneText}>Alles afgevinkt!</Text>
                 </View>
               ) : filteredUnchecked.length > 0 ? (
-                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen · veeg links om af te vinken</Text>
+                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen · veeg om af te vinken · houd vast om te bewerken</Text>
               ) : null
             }
             ListEmptyComponent={
@@ -640,6 +653,7 @@ export default function ListDetailScreen() {
               ) : itemView;
             }}
           />
+          </Animated.View>
         )}
 
         <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14 }]}>

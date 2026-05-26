@@ -1,4 +1,4 @@
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +17,7 @@ const ALL_TABS = [
   { name: 'instellingen', label: 'Instellingen', icon: 'settings-sharp', iconOff: 'settings-outline' },
 ] as const;
 
-function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label: string }) {
+function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean; label: string }) {
   const prevFocused = useRef(focused);
 
   useEffect(() => {
@@ -29,7 +29,8 @@ function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label
 
   return (
     <View style={styles.iconCol}>
-      <Ionicons name={name} size={24} color={focused ? Colors.yellow : 'rgba(255,255,255,0.82)'} />
+      <Ionicons name={name} size={22} color={focused ? Colors.yellow : 'rgba(255,255,255,0.65)'} />
+      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
     </View>
   );
 }
@@ -52,7 +53,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false,
+        tabBarShowLabel: false, // labels rendered inside TabIcon
         tabBarItemStyle: styles.tabBarItem,
         tabBarIconStyle: styles.tabBarIcon,
         tabBarBackground: () => <GlassBar />,
@@ -89,10 +90,10 @@ const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
     bottom: Platform.OS === 'web' ? 16 : 32,
-    left: 60,
-    right: 60,
-    height: 62,
-    borderRadius: 31,
+    left: 44,
+    right: 44,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: 'rgba(10,10,10,0.65)',
     borderTopWidth: 0,
     borderWidth: 0.5,
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tabBarItem: {
-    height: 62,
+    height: 68,
     paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
@@ -122,6 +123,17 @@ const styles = StyleSheet.create({
   iconCol: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 44,
+    gap: 2,
+    paddingTop: 2,
+  },
+  tabLabel: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.50)',
+    letterSpacing: 0.2,
+  },
+  tabLabelActive: {
+    color: Colors.yellow,
+    fontFamily: 'Inter_600SemiBold',
   },
 });
