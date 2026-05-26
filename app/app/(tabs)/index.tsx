@@ -7,6 +7,7 @@ import {
   StyleSheet,
   RefreshControl,
   Animated,
+  LayoutAnimation,
   Pressable,
   Platform,
   TextInput,
@@ -33,6 +34,7 @@ import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { List, Note } from '@/lib/types';
 import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { SkeletonListCard } from '@/components/SkeletonCard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -189,7 +191,7 @@ function AnimatedCard({
                 allDone ? (
                   <Text style={[styles.tileCount, { color: '#4CAF50', opacity: 1, fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
                 ) : (
-                  <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>{openCount} open</Text>
+                  <Text style={[styles.tileCount, { color: fg, opacity: 0.72 }]}>{totalCount - openCount}/{totalCount}</Text>
                 )
               ) : (
                 <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>Leeg</Text>
@@ -263,7 +265,13 @@ function NoteCard({ item, index, onPress, isDark }: { item: Note; index: number;
         <Text style={[styles.noteCardBody, { color: style.body }]} numberOfLines={5}>{item.body}</Text>
         <View style={styles.noteCardFooter}>
           <Text style={[styles.noteCardDate, { color: style.date }]}>
-            {new Date(item.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}
+            {(() => {
+              const diff = Math.floor((Date.now() - new Date(item.created_at).getTime()) / 86400000);
+              if (diff === 0) return 'Vandaag';
+              if (diff === 1) return 'Gisteren';
+              if (diff < 7) return `${diff} dg geleden`;
+              return new Date(item.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+            })()}
           </Text>
           <Ionicons name="open-outline" size={12} color={style.date} />
         </View>
@@ -426,6 +434,17 @@ export default function LijstenTab() {
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState<Tab>('lists');
+
+  useEffect(() => {
+    AsyncStorage.getItem('home_active_tab').then(v => {
+      if (v === 'lists' || v === 'notes' || v === 'receipts') setActiveTab(v as Tab);
+    });
+  }, []);
+
+  function switchTab(tab: Tab) {
+    setActiveTab(tab);
+    AsyncStorage.setItem('home_active_tab', tab);
+  }
   const [lists, setLists] = useState<(List & { item_count: number; open_count: number })[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -580,6 +599,7 @@ export default function LijstenTab() {
 
   function deleteList(listId: string, listName: string) {
     const snapshot = lists;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setLists(prev => prev.filter(l => l.id !== listId));
     setDeleteSheet(null);
     setPendingListDelete({ listId, listName, items: snapshot });
@@ -638,6 +658,7 @@ export default function LijstenTab() {
       sort_order: lists.length,
     }).select('id, name, emoji, sort_order, list_type, user_id, created_at').single();
     if (data) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setLists(prev => [...prev, { ...data, item_count: 0, open_count: 0 }]);
     }
     setNewListCreating(false);
@@ -720,18 +741,18 @@ export default function LijstenTab() {
       {/* Toggle */}
       {(showNotesTab || showReceiptsTab) && (
         <View style={[styles.tabToggleWrap, { backgroundColor: colors.offWhite }]}>
-          <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('lists')}>
+          <TouchableOpacity style={styles.tabTextBtn} onPress={() => switchTab('lists')}>
             <Text style={[styles.tabTextLabel, { color: activeTab === 'lists' ? colors.black : colors.gray400 }]}>Lijsten</Text>
             {activeTab === 'lists' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
           </TouchableOpacity>
           {showNotesTab && (
-            <TouchableOpacity style={styles.tabTextBtn} onPress={() => setActiveTab('notes')}>
+            <TouchableOpacity style={styles.tabTextBtn} onPress={() => switchTab('notes')}>
               <Text style={[styles.tabTextLabel, { color: activeTab === 'notes' ? colors.black : colors.gray400 }]}>Notities</Text>
               {activeTab === 'notes' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
             </TouchableOpacity>
           )}
           {showReceiptsTab && (
-            <TouchableOpacity style={styles.tabTextBtn} onPress={() => { setActiveTab('receipts'); fetchReceipts(); }}>
+            <TouchableOpacity style={styles.tabTextBtn} onPress={() => { switchTab('receipts'); fetchReceipts(); }}>
               <Text style={[styles.tabTextLabel, { color: activeTab === 'receipts' ? colors.black : colors.gray400 }]}>Bonnetjes</Text>
               {activeTab === 'receipts' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
             </TouchableOpacity>
@@ -1316,7 +1337,12 @@ export default function LijstenTab() {
         <Pressable style={sheetStyles.overlay} onPress={() => setNewListModalVisible(false)}>
           <Pressable style={[sheetStyles.sheet, { backgroundColor: colors.white, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32 }]} onPress={() => {}}>
             <View style={sheetStyles.handle} />
-            <Text style={[sheetStyles.title, { color: colors.black }]}>Nieuwe lijst</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+              <Text style={[sheetStyles.title, { color: colors.black, marginBottom: 0, textAlign: 'left' }]}>Nieuwe lijst</Text>
+              <TouchableOpacity onPress={() => setNewListModalVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="close" size={16} color={colors.gray600} />
+              </TouchableOpacity>
+            </View>
             <View style={[fabStyles.inputWrap, { backgroundColor: colors.gray100 }]}>
               <TextInput
                 style={[fabStyles.input, { color: colors.black }]}

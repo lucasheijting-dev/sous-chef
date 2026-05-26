@@ -40,59 +40,9 @@ import {
   stopGeoAlertTask,
 } from '@/lib/geoAlert';
 import { SkeletonListCard } from '@/components/SkeletonCard';
+import Confetti from '@/components/Confetti';
 
 const ADD_INPUT_ACCESSORY_ID = 'sous-chef-add-input';
-
-const CONFETTI_COLORS = ['#FCC10C', '#E8734A', '#4A6FA5', '#4CAF50', '#E91E63', '#9C27B0'];
-const PIECE_COUNT = 28;
-
-function ConfettiBurst({ triggerKey }: { triggerKey: number }) {
-  const anims = useRef(
-    Array.from({ length: PIECE_COUNT }, () => ({
-      x: new Animated.Value(0),
-      y: new Animated.Value(0),
-      opacity: new Animated.Value(0),
-      rotate: new Animated.Value(0),
-    }))
-  ).current;
-
-  useEffect(() => {
-    if (triggerKey === 0) return;
-    anims.forEach((a, i) => {
-      a.x.setValue(0); a.y.setValue(0); a.opacity.setValue(1); a.rotate.setValue(0);
-      const angle = (i / PIECE_COUNT) * 2 * Math.PI + (Math.random() - 0.5) * 0.8;
-      const dist = 120 + Math.random() * 160;
-      Animated.parallel([
-        Animated.timing(a.x, { toValue: Math.cos(angle) * dist, duration: 700, useNativeDriver: true }),
-        Animated.timing(a.y, { toValue: -Math.abs(Math.sin(angle)) * dist - 80, duration: 700, useNativeDriver: true }),
-        Animated.sequence([
-          Animated.delay(300),
-          Animated.timing(a.opacity, { toValue: 0, duration: 400, useNativeDriver: true }),
-        ]),
-        Animated.timing(a.rotate, { toValue: (Math.random() > 0.5 ? 1 : -1) * 4, duration: 700, useNativeDriver: true }),
-      ]).start();
-    });
-  }, [triggerKey]);
-
-  if (triggerKey === 0) return null;
-  return (
-    <View style={{ position: 'absolute', top: '40%', left: '50%', zIndex: 100 }} pointerEvents="none">
-      {anims.map((a, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            position: 'absolute',
-            width: 8, height: 8,
-            borderRadius: i % 2 === 0 ? 4 : 2,
-            backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-            opacity: a.opacity,
-            transform: [{ translateX: a.x }, { translateY: a.y }, { rotate: a.rotate.interpolate({ inputRange: [-4, 4], outputRange: ['-720deg', '720deg'] }) }],
-          }}
-        />
-      ))}
-    </View>
-  );
-}
 
 function haptic(style: 'light' | 'medium' | 'warning' = 'light') {
   if (Platform.OS === 'web') return;
@@ -299,7 +249,7 @@ export default function ListDetailScreen() {
 
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
   const batchDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [confettiKey, setConfettiKey] = useState(0);
+  const [confettiActive, setConfettiActive] = useState(false);
   const prevAllDone = useRef(false);
 
   function showBatchDeleteBanner() {
@@ -526,7 +476,8 @@ export default function ListDetailScreen() {
   useEffect(() => {
     if (allDone && !prevAllDone.current) {
       haptic('warning');
-      setConfettiKey(k => k + 1);
+      setConfettiActive(true);
+      setTimeout(() => setConfettiActive(false), 3500);
     }
     prevAllDone.current = allDone;
   }, [allDone]);
@@ -560,7 +511,7 @@ export default function ListDetailScreen() {
     <GestureHandlerRootView style={styles.root}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
-        <ConfettiBurst triggerKey={confettiKey} />
+        <Confetti active={confettiActive} />
         {isGroceryList && (
           <View style={[styles.geoBanner, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
             <View style={styles.geoLeft}>
