@@ -302,7 +302,7 @@ function parseIcal(ics) {
 
 // Lightweight connectivity check — PROPFIND with depth 0 on the root
 async function checkConnection(username, password) {
-  const url = `${process.env.CALDAV_URL}/dav/${username}/`;
+  const url = `${process.env.CALDAV_URL}/${username}/`;
   const res = await fetch(url, {
     method: 'PROPFIND',
     headers: {
