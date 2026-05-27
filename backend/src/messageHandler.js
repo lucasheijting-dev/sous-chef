@@ -35,29 +35,37 @@ const SEASONAL_LINES = () => {
 
 const DAYS_NL = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
 
-// ── Push notification helper ───────────────────────────────────────────────────
+// ── Push notification helpers ──────────────────────────────────────────────────
 
-async function sendCalendarPush(userId, event) {
-  const token = await db.getUserPushToken(userId);
+async function sendPush(token, { title, body, data = {}, silent = false }) {
   if (!token || !token.startsWith('ExponentPushToken[')) return;
-
   await fetch('https://exp.host/--/api/v2/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
       to: token,
-      title: 'Nieuw agenda-event',
-      body: event.title,
-      data: {
-        type: 'calendar_event',
-        title: event.title,
-        date: event.date,
-        time: event.time ?? null,
-        calendarStream: event.calendarStream ?? 'personal',
-      },
-      priority: 'high',
-      _contentAvailable: true, // required for background delivery on iOS
+      title,
+      body,
+      data,
+      priority: silent ? 'normal' : 'high',
+      ...(silent ? { _contentAvailable: true } : {}),
     }),
+  });
+}
+
+async function sendCalendarPush(userId, event) {
+  const token = await db.getUserPushToken(userId);
+  await sendPush(token, {
+    title: 'Nieuw agenda-event',
+    body: event.title,
+    data: {
+      type: 'calendar_event',
+      title: event.title,
+      date: event.date,
+      time: event.time ?? null,
+      calendarStream: event.calendarStream ?? 'personal',
+    },
+    silent: true,
   });
 }
 
@@ -1588,4 +1596,4 @@ function levelLabel(level) {
   return { mini: 'Brons', good: 'Zilver', elite: 'Goud' }[level] ?? level;
 }
 
-module.exports = { handleMessage };
+module.exports = { handleMessage, sendPush };

@@ -9,6 +9,7 @@ const calendarStreamsRouter   = require('./src/calendarStreams');
 const receiptsRouter          = require('./src/receipts');
 const receiptCategoriesRouter = require('./src/receiptCategories');
 const calendarSyncRouter      = require('./src/calendarSync');
+const authRouter              = require('./src/auth');
 const cronJobs           = require('./src/cronJobs');
 
 const app = express();
@@ -23,6 +24,7 @@ app.use('/calendar-streams', calendarStreamsRouter);
 app.use('/receipts', receiptsRouter);
 app.use('/receipt-categories', receiptCategoriesRouter);
 app.use('/calendar-sync', calendarSyncRouter);
+app.use('/auth', authRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3000;

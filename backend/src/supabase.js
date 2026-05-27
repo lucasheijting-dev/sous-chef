@@ -347,10 +347,34 @@ async function getHabitReminderUsers(currentHour) {
 
   const { data: users } = await supabase
     .from('users')
-    .select('id, whatsapp_number')
+    .select('id, whatsapp_number, push_token')
     .in('id', matched.map(p => p.user_id));
 
   return users ?? [];
+}
+
+async function getEventsDueForPushReminder() {
+  // Events starting within the next 35 minutes that haven't had a push reminder sent yet
+  const now = new Date();
+  const soon = new Date(now.getTime() + 35 * 60 * 1000);
+  const today = now.toISOString().split('T')[0];
+  const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const soonTime = `${String(soon.getHours()).padStart(2, '0')}:${String(soon.getMinutes()).padStart(2, '0')}`;
+
+  const { data } = await supabase
+    .from('events')
+    .select('id, user_id, title, date, time, users(push_token)')
+    .eq('date', today)
+    .is('push_reminder_sent_at', null)
+    .not('time', 'is', null)
+    .gte('time', nowTime)
+    .lte('time', soonTime);
+
+  return (data ?? []).map(e => ({ ...e, push_token: e.users?.push_token }));
+}
+
+async function markEventPushReminderSent(eventId) {
+  await supabase.from('events').update({ push_reminder_sent_at: new Date().toISOString() }).eq('id', eventId);
 }
 
 async function getUsersForSuggestions() {
@@ -848,6 +872,42 @@ async function logMessage(userId, rawText, category) {
   await supabase.from('messages_log').insert({ user_id: userId, raw_text: rawText, category });
 }
 
+// ── OTP Auth ──────────────────────────────────────────────────────────────────
+
+async function getUserByPhone(phone) {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number, push_token')
+    .eq('whatsapp_number', phone)
+    .single();
+  return data ?? null;
+}
+
+async function createOTP(phone, code, expiresAt) {
+  // Invalidate any existing unused OTPs for this number first
+  await supabase.from('otp_codes').update({ used: true }).eq('phone', phone).eq('used', false);
+  await supabase.from('otp_codes').insert({ phone, code, expires_at: expiresAt });
+}
+
+async function verifyOTP(phone, code) {
+  const { data } = await supabase
+    .from('otp_codes')
+    .select('id, code, expires_at, used')
+    .eq('phone', phone)
+    .eq('used', false)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (!data) return { ok: false, reason: 'Geen actieve code gevonden. Vraag een nieuwe aan.' };
+  if (data.used) return { ok: false, reason: 'Code al gebruikt.' };
+  if (new Date(data.expires_at) < new Date()) return { ok: false, reason: 'Code verlopen. Vraag een nieuwe aan.' };
+  if (data.code !== code) return { ok: false, reason: 'Onjuiste code.' };
+
+  await supabase.from('otp_codes').update({ used: true }).eq('id', data.id);
+  return { ok: true };
+}
+
 module.exports = {
   getOrCreateUserFull,
   markOnboardingComplete,
@@ -879,6 +939,11 @@ module.exports = {
   getEventsDueForReminder,
   markEventReminderSent,
   getHabitReminderUsers,
+  getEventsDueForPushReminder,
+  markEventPushReminderSent,
+  getUserByPhone,
+  createOTP,
+  verifyOTP,
   getUsersForSuggestions,
   claimSuggestionSlot,
   getUsersForContextBuilding,

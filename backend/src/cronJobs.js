@@ -4,6 +4,7 @@ const cron         = require('node-cron');
 const db           = require('./supabase');
 const caldav       = require('./caldav');
 const { sendMessage } = require('./whatsapp');
+const { sendPush } = require('./messageHandler');
 const { sendWeeklySuggestions } = require('./suggestions');
 const { buildContextForAllUsers } = require('./contextBuilder');
 const { syncUserCalendar } = require('./calendarSyncCore');
@@ -139,6 +140,15 @@ cron.schedule('0 * * * *', async () => {
         `• *${h.name}* — 🥉 ${h.mini_goal} / 🥈 ${h.good_goal} / 🥇 ${h.elite_goal}`
       ).join('\n');
       await sendMessage(user.whatsapp_number, `🏋️ *Habit herinnering!*\n\n${lines}\n\nLog je voortgang door een berichtje te sturen.`);
+
+      // Also send push notification
+      if (user.push_token) {
+        await sendPush(user.push_token, {
+          title: '🏋️ Habit herinnering',
+          body: `${habits.length} habit${habits.length === 1 ? '' : 's'} wachten op jou`,
+          data: { type: 'habit_reminder', screen: 'habits' },
+        }).catch(() => {});
+      }
       console.log(`[Habits] Reminder sent to ${user.whatsapp_number}`);
     }
   } catch (err) {
@@ -156,6 +166,28 @@ cron.schedule('0 * * * *', async () => {
     }
   } catch (err) {
     console.error('[Reminder] Error:', err);
+  }
+});
+
+// ── Event Push Reminders — every 5 minutes ───────────────────────────────────
+// Sends a push notification 30 min before an event starts
+
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const events = await db.getEventsDueForPushReminder();
+    for (const e of events) {
+      if (!e.push_token) continue;
+      const timeStr = e.time ? ` om ${e.time}` : '';
+      await sendPush(e.push_token, {
+        title: `📅 Zo te beginnen: ${e.title}`,
+        body: `Begint${timeStr} — over ongeveer 30 minuten`,
+        data: { type: 'event_reminder', screen: 'agenda' },
+      }).catch(() => {});
+      await db.markEventPushReminderSent(e.id);
+      console.log(`[PushReminder] Sent for "${e.title}"`);
+    }
+  } catch (err) {
+    console.error('[PushReminder] Error:', err.message);
   }
 });
 
