@@ -145,10 +145,13 @@ function AnimatedCard({
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const hintX = useRef(new Animated.Value(0)).current;
+  const doneFlash = useRef(new Animated.Value(0)).current;
   const swipeRef = useRef<Swipeable>(null);
 
   const bg = TILE_ACCENTS[index % TILE_ACCENTS.length];
   const fg = TILE_TEXT_FG[index % TILE_TEXT_FG.length];
+  const allDone = item.item_count > 0 && item.open_count === 0;
+  const prevAllDone = useRef(allDone);
 
   useEffect(() => {
     Animated.parallel([
@@ -166,10 +169,21 @@ function AnimatedCard({
     });
   }, []);
 
+  useEffect(() => {
+    if (allDone && !prevAllDone.current) {
+      Animated.sequence([
+        Animated.spring(scale, { toValue: 1.06, useNativeDriver: true, speed: 60 }),
+        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 60 }),
+        Animated.timing(doneFlash, { toValue: 1, duration: 120, useNativeDriver: true }),
+        Animated.timing(doneFlash, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start();
+    }
+    prevAllDone.current = allDone;
+  }, [allDone]);
+
   const typeLabel = item.list_type === 'links' ? 'Links' : item.list_type === 'tips' ? 'Tips' : null;
   const totalCount = item.item_count;
   const openCount = item.open_count;
-  const allDone = totalCount > 0 && openCount === 0;
   const progress = totalCount > 0 ? (totalCount - openCount) / totalCount : 0;
 
   const renderLeftActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
@@ -222,6 +236,10 @@ function AnimatedCard({
               <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#4CAF50' : Colors.yellow }]} />
             </View>
           )}
+          <Animated.View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFill, { borderRadius: Radius.xl, backgroundColor: '#4CAF50', opacity: doneFlash }]}
+          />
         </Pressable>
       </Swipeable>
     </Animated.View>
@@ -713,6 +731,11 @@ export default function LijstenTab() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
+      <LinearGradient
+        colors={['rgba(252,193,12,0.07)', 'transparent']}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 340 }}
+        pointerEvents="none"
+      />
       {/* Banner */}
       <Animated.View style={[styles.banner, { paddingTop: insets.top + 44, transform: [{ translateY: bannerTranslateY }] }]}>
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />

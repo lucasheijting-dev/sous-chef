@@ -101,6 +101,18 @@ function SwipeableItem({
   const swipeRef = useRef<Swipeable>(null);
   const [editText, setEditText] = useState(item.text);
   const isEditing = editingItemId === item.id;
+  const rowBounce = useRef(new Animated.Value(1)).current;
+  const prevChecked = useRef(item.checked);
+
+  useEffect(() => {
+    if (item.checked !== prevChecked.current) {
+      Animated.sequence([
+        Animated.spring(rowBounce, { toValue: item.checked ? 0.96 : 1.03, useNativeDriver: true, speed: 80, bounciness: 0 }),
+        Animated.spring(rowBounce, { toValue: 1, useNativeDriver: true, tension: 180, friction: 7 }),
+      ]).start();
+    }
+    prevChecked.current = item.checked;
+  }, [item.checked]);
 
   function handleDelete() {
     swipeRef.current?.close();
@@ -149,35 +161,37 @@ function SwipeableItem({
         }
       }}
     >
-      <Pressable
-        style={({ pressed }) => [
-          styles.item,
-          { backgroundColor: colors.white },
-          item.checked && { backgroundColor: colors.gray100 },
-          pressed && { transform: [{ scale: 0.98 }] },
-        ]}
-        onPress={() => { haptic('light'); onToggle(); }}
-        onLongPress={() => { haptic('medium'); onLongPress(); }}
-      >
-        <AnimatedCheckbox checked={item.checked} onPress={onToggle} />
-        {isEditing ? (
-          <TextInput
-            style={[styles.itemText, { color: colors.black, flex: 1, borderBottomWidth: 1, borderBottomColor: Colors.yellow, padding: 0 }]}
-            value={editText}
-            onChangeText={setEditText}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={() => onEditSubmit(item.id, editText)}
-            onBlur={() => onEditSubmit(item.id, editText)}
-            selectionColor={Colors.yellow}
-          />
-        ) : (
-          <Text style={[styles.itemText, { color: colors.black }, item.checked && { color: colors.gray400, textDecorationLine: 'line-through' }]}>{item.text}</Text>
-        )}
-        {!item.checked && !isEditing && (
-          <Ionicons name="reorder-three" size={18} color={colors.gray200} />
-        )}
-      </Pressable>
+      <Animated.View style={{ transform: [{ scale: rowBounce }] }}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.item,
+            { backgroundColor: colors.white },
+            item.checked && { backgroundColor: colors.gray100 },
+            pressed && { transform: [{ scale: 0.98 }] },
+          ]}
+          onPress={() => { haptic('light'); onToggle(); }}
+          onLongPress={() => { haptic('medium'); onLongPress(); }}
+        >
+          <AnimatedCheckbox checked={item.checked} onPress={onToggle} />
+          {isEditing ? (
+            <TextInput
+              style={[styles.itemText, { color: colors.black, flex: 1, borderBottomWidth: 1, borderBottomColor: Colors.yellow, padding: 0 }]}
+              value={editText}
+              onChangeText={setEditText}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => onEditSubmit(item.id, editText)}
+              onBlur={() => onEditSubmit(item.id, editText)}
+              selectionColor={Colors.yellow}
+            />
+          ) : (
+            <Text style={[styles.itemText, { color: colors.black }, item.checked && { color: colors.gray400, textDecorationLine: 'line-through' }]}>{item.text}</Text>
+          )}
+          {!item.checked && !isEditing && (
+            <Ionicons name="reorder-three" size={18} color={colors.gray200} />
+          )}
+        </Pressable>
+      </Animated.View>
     </Swipeable>
   );
 }

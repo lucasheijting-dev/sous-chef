@@ -101,6 +101,20 @@ function computeWeekScore(logs: HabitLog[]): number {
     .reduce((s, l) => s + (LEVELS.find(lv => lv.key === l.level)?.pts ?? 0), 0);
 }
 
+function AnimatedCounter({ value, style }: { value: number; style?: any }) {
+  const animVal = useRef(new Animated.Value(0)).current;
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    animVal.setValue(0);
+    Animated.timing(animVal, { toValue: value, duration: 600, useNativeDriver: false }).start();
+    const id = animVal.addListener(({ value: v }) => setDisplay(Math.round(v)));
+    return () => animVal.removeListener(id);
+  }, [value]);
+
+  return <Text style={style}>{display}</Text>;
+}
+
 function computePerfectDays(habits: Habit[], monthLogs: HabitLog[]): number {
   const now = new Date();
   let count = 0;
@@ -829,12 +843,15 @@ export default function HabitsTab() {
           </View>
           <View style={s.bannerStats}>
             <View style={s.statTile}>
-              <Text style={s.statNum}>{habits.length}</Text>
+              <AnimatedCounter value={habits.length} style={s.statNum} />
               <Text style={s.statLabel}>{habits.length === 1 ? 'habit' : 'habits'}</Text>
             </View>
             {weekScore > 0 && (
               <View style={[s.statTile, s.statTileAccent]}>
-                <Text style={[s.statNum, { color: Colors.black }]}>⭐ {weekScore}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={[s.statNum, { color: Colors.black }]}>⭐</Text>
+                  <AnimatedCounter value={weekScore} style={[s.statNum, { color: Colors.black }]} />
+                </View>
                 <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>punten deze week</Text>
               </View>
             )}

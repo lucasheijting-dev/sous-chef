@@ -1,22 +1,43 @@
 import { useEffect, useRef } from 'react';
 import { Animated, View, StyleSheet, ViewStyle } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Radius } from '@/constants/Design';
 
+const BASE_BG = Colors.gray100;
+const SHIMMER_W = 200;
+
 function SkeletonBlock({ style }: { style?: ViewStyle }) {
-  const shimmer = useRef(new Animated.Value(0)).current;
+  const shimmerX = useRef(new Animated.Value(-SHIMMER_W)).current;
 
   useEffect(() => {
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
-        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
-      ]),
+      Animated.timing(shimmerX, {
+        toValue: SHIMMER_W * 4,
+        duration: 1400,
+        useNativeDriver: true,
+      }),
     ).start();
   }, []);
 
-  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
-
-  return <Animated.View style={[{ opacity }, style]} />;
+  return (
+    <View style={[{ backgroundColor: BASE_BG, overflow: 'hidden' }, style]}>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 0, bottom: 0,
+          width: SHIMMER_W,
+          transform: [{ translateX: shimmerX }],
+        }}
+      >
+        <LinearGradient
+          colors={['transparent', 'rgba(255,255,255,0.55)', 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+    </View>
+  );
 }
 
 export function SkeletonListCard() {
@@ -52,8 +73,6 @@ export function SkeletonHabitCard() {
   );
 }
 
-const BASE_BG = Colors.gray100;
-
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
@@ -68,10 +87,10 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  emojiBox: { width: 50, height: 50, borderRadius: Radius.md, backgroundColor: BASE_BG, marginRight: 14 },
+  emojiBox: { width: 50, height: 50, borderRadius: Radius.md, marginRight: 14 },
   textCol: { flex: 1, gap: 8 },
-  titleLine: { height: 16, width: '60%', borderRadius: 6, backgroundColor: BASE_BG },
-  subtitleLine: { height: 12, width: 80, borderRadius: 6, backgroundColor: BASE_BG },
+  titleLine: { height: 16, width: '60%', borderRadius: 6 },
+  subtitleLine: { height: 12, width: 80, borderRadius: 6 },
   noteCard: {
     flex: 1,
     backgroundColor: Colors.white,
@@ -85,9 +104,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  noteTitleLine: { height: 15, width: 120, borderRadius: 6, backgroundColor: BASE_BG },
-  noteLine2: { height: 12, width: 160, borderRadius: 6, backgroundColor: BASE_BG },
-  noteLine3: { height: 12, width: 110, borderRadius: 6, backgroundColor: BASE_BG },
+  noteTitleLine: { height: 15, width: 120, borderRadius: 6 },
+  noteLine2: { height: 12, width: 160, borderRadius: 6 },
+  noteLine3: { height: 12, width: 110, borderRadius: 6 },
   habitCard: {
     backgroundColor: Colors.white,
     borderRadius: Radius.lg,
@@ -100,7 +119,7 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  habitTitle: { height: 20, width: '50%', borderRadius: 6, backgroundColor: BASE_BG },
+  habitTitle: { height: 20, width: '50%', borderRadius: 6 },
   levelRow: { flexDirection: 'row', gap: 8 },
-  levelBtn: { flex: 1, height: 52, borderRadius: Radius.md, backgroundColor: BASE_BG },
+  levelBtn: { flex: 1, height: 52, borderRadius: Radius.md },
 });

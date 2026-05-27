@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated } from 'react-native';
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,20 +17,22 @@ const ALL_TABS = [
   { name: 'instellingen', label: 'Instellingen', icon: 'settings-sharp', iconOff: 'settings-outline' },
 ] as const;
 
-function TabIcon({ name, focused, label }: { name: IoniconName; focused: boolean; label: string }) {
+function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label: string }) {
   const prevFocused = useRef(focused);
+  const glowAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
     if (focused && !prevFocused.current) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+    Animated.timing(glowAnim, { toValue: focused ? 1 : 0, duration: 200, useNativeDriver: true }).start();
     prevFocused.current = focused;
   }, [focused]);
 
   return (
     <View style={styles.iconCol}>
-      <Ionicons name={name} size={22} color={focused ? Colors.yellow : 'rgba(255,255,255,0.65)'} />
-      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
+      <Animated.View style={[styles.glowDot, { opacity: glowAnim }]} />
+      <Ionicons name={name} size={24} color={focused ? Colors.yellow : 'rgba(255,255,255,0.55)'} />
     </View>
   );
 }
@@ -89,24 +91,24 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
-    bottom: Platform.OS === 'web' ? 16 : 32,
-    left: 44,
-    right: 44,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(10,10,10,0.65)',
+    bottom: Platform.OS === 'web' ? 16 : 28,
+    left: 56,
+    right: 56,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: 'rgba(10,10,10,0.70)',
     borderTopWidth: 0,
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.14)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.5,
     shadowRadius: 24,
     elevation: 20,
     overflow: 'hidden',
   },
   tabBarItem: {
-    height: 68,
+    height: 58,
     paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
@@ -123,8 +125,21 @@ const styles = StyleSheet.create({
   iconCol: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    paddingTop: 2,
+    gap: 4,
+  },
+  glowDot: {
+    position: 'absolute',
+    top: -16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.yellow,
+    opacity: 0,
+    // blur effect via large shadow
+    shadowColor: Colors.yellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 16,
   },
   tabLabel: {
     fontFamily: 'Inter_400Regular',

@@ -70,7 +70,7 @@ export const Shadow = {
   },
 };
 
-export const TAB_BAR_CLEARANCE = 80;
+export const TAB_BAR_CLEARANCE = 74;
 
 export const Typography = {
   display: {
