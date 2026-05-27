@@ -129,6 +129,8 @@ function AnimatedCard({
   onPress,
   onDeleteConfirm,
   onLongPress,
+  showHint,
+  onHintComplete,
 }: {
   item: List & { item_count: number; open_count: number };
   index: number;
@@ -136,10 +138,13 @@ function AnimatedCard({
   onDeleteConfirm: () => void;
   onLongPress?: () => void;
   colors: any;
+  showHint?: boolean;
+  onHintComplete?: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const hintX = useRef(new Animated.Value(0)).current;
   const swipeRef = useRef<Swipeable>(null);
 
   const bg = TILE_ACCENTS[index % TILE_ACCENTS.length];
@@ -149,7 +154,16 @@ function AnimatedCard({
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, delay: index * 40, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 200, delay: index * 40, useNativeDriver: true }),
-    ]).start();
+    ]).start(() => {
+      if (showHint) {
+        setTimeout(() => {
+          Animated.sequence([
+            Animated.timing(hintX, { toValue: -22, duration: 220, useNativeDriver: true }),
+            Animated.spring(hintX, { toValue: 0, useNativeDriver: true, damping: 12, stiffness: 180 }),
+          ]).start(() => onHintComplete?.());
+        }, 400);
+      }
+    });
   }, []);
 
   const typeLabel = item.list_type === 'links' ? 'Links' : item.list_type === 'tips' ? 'Tips' : null;
@@ -174,7 +188,7 @@ function AnimatedCard({
   };
 
   return (
-    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }]}>
+    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { translateX: hintX }, { scale }] }]}>
       <Swipeable ref={swipeRef} renderLeftActions={renderLeftActions} leftThreshold={60} overshootLeft={false}>
         <Pressable
           onPress={onPress}
@@ -374,10 +388,10 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
         <TouchableOpacity
           key={opt.key}
           onPress={() => onChange(opt.key)}
-          style={[sortStyles.pill, { backgroundColor: value === opt.key ? Colors.yellow : '#DDDCDC' }]}
+          style={[sortStyles.pill, { backgroundColor: value === opt.key ? Colors.yellow : colors.gray200 }]}
           activeOpacity={0.75}
         >
-          <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : '#555' }]}>{opt.label}</Text>
+          <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : colors.gray600 }]}>{opt.label}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -467,6 +481,7 @@ export default function LijstenTab() {
   const [pendingListDelete, setPendingListDelete] = useState<{ listId: string; listName: string; items: typeof lists } | null>(null);
   const [listUndoVisible, setListUndoVisible] = useState(false);
   const listUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [swipeHintDone, setSwipeHintDone] = useState(true);
   const [peekTarget, setPeekTarget] = useState<{ list: (typeof lists)[0]; x: number; y: number } | null>(null);
   const [peekItems, setPeekItems] = useState<{ id: string; text: string; checked: boolean }[]>([]);
   const [reorderModalVisible, setReorderModalVisible] = useState(false);
@@ -530,6 +545,12 @@ export default function LijstenTab() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [user, fetchLists, fetchNotes]);
+
+  useEffect(() => {
+    AsyncStorage.getItem('swipe_hint_done').then(v => {
+      if (!v) setSwipeHintDone(false);
+    });
+  }, []);
 
   const filteredNotes = notes.filter(n =>
     n.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -718,20 +739,20 @@ export default function LijstenTab() {
 
         {activeTab === 'notes' && (
           <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-            <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : '#555'} />
+            <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : colors.gray400} />
             <TextInput
               style={styles.searchInput}
               value={search}
               onChangeText={setSearch}
               placeholder="Zoeken in notities..."
-              placeholderTextColor="#444"
+              placeholderTextColor={colors.gray400}
               selectionColor={Colors.yellow}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle-outline" size={16} color="#666" />
+                <Ionicons name="close-circle-outline" size={16} color={colors.gray400} />
               </TouchableOpacity>
             )}
           </View>
@@ -838,6 +859,8 @@ export default function LijstenTab() {
               <View style={styles.tileRow}>
                 {activeLists.map((item, index) => (
                   <AnimatedCard key={item.id} item={item} index={index} colors={colors}
+                    showHint={!swipeHintDone && index === 0}
+                    onHintComplete={() => { setSwipeHintDone(true); AsyncStorage.setItem('swipe_hint_done', '1'); }}
                     onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                     onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
                     onLongPress={() => openPeek(item)}
@@ -1243,6 +1266,16 @@ export default function LijstenTab() {
                 <Text style={peekStyles.openBtnText}>Open</Text>
               </TouchableOpacity>
             </View>
+            {(peekTarget?.list.item_count ?? 0) > 0 && (
+              <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.gray100, marginBottom: 12, overflow: 'hidden' }}>
+                <View style={{
+                  height: 4,
+                  borderRadius: 2,
+                  width: `${((peekTarget!.list.item_count - peekTarget!.list.open_count) / peekTarget!.list.item_count) * 100}%` as any,
+                  backgroundColor: peekTarget!.list.open_count === 0 ? '#4CAF50' : Colors.yellow,
+                }} />
+              </View>
+            )}
             {peekItems.length === 0 ? (
               <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, paddingVertical: 8 }}>Geen items</Text>
             ) : (

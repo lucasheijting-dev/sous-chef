@@ -682,7 +682,11 @@ function AgendaLite() {
         {...swipePanResponder.panHandlers}
       >
         {loading ? (
-          <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />
+          <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 10 }}>
+            {[0.9, 0.7, 0.85, 0.6, 0.75].map((w, i) => (
+              <View key={i} style={{ borderRadius: Radius.lg, backgroundColor: colors.gray100, height: 72, width: `${w * 100}%` as any, opacity: 1 - i * 0.12 }} />
+            ))}
+          </View>
         ) : visibleEvents.length === 0 ? (
           (() => {
             const es = EMPTY_STATE[timePeriod];
@@ -748,10 +752,12 @@ function AgendaLite() {
       {/* QuickAdd FAB */}
       <TouchableOpacity
         onPress={() => openQuickAdd()}
-        style={{ position: 'absolute', right: 20, bottom: TAB_BAR_CLEARANCE - 20, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
+        style={{ position: 'absolute', right: 20, bottom: TAB_BAR_CLEARANCE - 20, width: 52, height: 52, borderRadius: 26, overflow: 'hidden', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}
         activeOpacity={0.85}
       >
-        <Ionicons name="add" size={26} color={Colors.black} />
+        <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Ionicons name="add" size={26} color={Colors.black} />
+        </LinearGradient>
       </TouchableOpacity>
 
       </> /* end list view */}

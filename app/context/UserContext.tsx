@@ -24,6 +24,8 @@ type UserContextType = {
   prefs: UserPrefs | null;
   isLoading: boolean;
   setWhatsAppNumber: (number: string) => Promise<{ success: boolean; isNew: boolean }>;
+  requestOTP: (phone: string) => Promise<{ ok: boolean; error?: string }>;
+  verifyOTP: (phone: string, code: string) => Promise<{ ok: boolean; error?: string; isNew?: boolean }>;
   logout: () => Promise<void>;
   refreshPrefs: () => Promise<void>;
 };
@@ -114,6 +116,42 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function requestOTP(phone: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+      const res = await fetch(`${apiBase}/auth/request-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const json = await res.json();
+      if (!res.ok) return { ok: false, error: json.error ?? 'Onbekende fout' };
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Geen verbinding' };
+    }
+  }
+
+  async function verifyOTP(phone: string, code: string): Promise<{ ok: boolean; error?: string; isNew?: boolean }> {
+    try {
+      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+      const res = await fetch(`${apiBase}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code }),
+      });
+      const json = await res.json();
+      if (!res.ok) return { ok: false, error: json.error ?? 'Onjuiste code' };
+      const { user: userData } = json;
+      setUser(userData);
+      await AsyncStorage.setItem('whatsapp_number', phone);
+      await fetchPrefs(userData.id);
+      return { ok: true, isNew: false };
+    } catch {
+      return { ok: false, error: 'Geen verbinding' };
+    }
+  }
+
   async function logout() {
     await AsyncStorage.removeItem('whatsapp_number');
     setUser(null);
@@ -125,7 +163,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <UserContext.Provider value={{ user, prefs, isLoading, setWhatsAppNumber, logout, refreshPrefs }}>
+    <UserContext.Provider value={{ user, prefs, isLoading, setWhatsAppNumber, requestOTP, verifyOTP, logout, refreshPrefs }}>
       {children}
     </UserContext.Provider>
   );

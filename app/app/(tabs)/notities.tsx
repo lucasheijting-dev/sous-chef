@@ -264,20 +264,20 @@ export default function NotitiesTab() {
           </View>
         </View>
         <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-          <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : '#555'} />
+          <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : 'rgba(255,255,255,0.4)'} />
           <TextInput
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
             placeholder="Zoeken in notities..."
-            placeholderTextColor="#444"
+            placeholderTextColor="rgba(255,255,255,0.3)"
             selectionColor={Colors.yellow}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle-outline" size={16} color="#666" />
+              <Ionicons name="close-circle-outline" size={16} color="rgba(255,255,255,0.4)" />
             </TouchableOpacity>
           )}
         </View>

@@ -512,6 +512,15 @@ export default function ListDetailScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
+        {totalCount > 0 && (
+          <View style={{ height: 3, backgroundColor: colors.gray100, overflow: 'hidden' }}>
+            <View style={{
+              height: 3,
+              width: `${progress * 100}%` as any,
+              backgroundColor: allDone ? '#4CAF50' : Colors.yellow,
+            }} />
+          </View>
+        )}
         {isGroceryList && (
           <View style={[styles.geoBanner, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
             <View style={styles.geoLeft}>
@@ -536,7 +545,7 @@ export default function ListDetailScreen() {
         {/* Progress bar */}
         {!loading && totalCount > 0 && (
           <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 8, marginBottom: 4, gap: 8 }}>
-            <View style={{ flex: 1, height: 4, backgroundColor: '#E0E0E0', borderRadius: 2 }}>
+            <View style={{ flex: 1, height: 4, backgroundColor: colors.gray200, borderRadius: 2 }}>
               <View style={{ height: 4, backgroundColor: progress === 1 ? '#4CAF50' : '#FCC10C', width: `${progress * 100}%` as any, borderRadius: 2 }} />
             </View>
             <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: Colors.gray400 }}>

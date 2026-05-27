@@ -130,6 +130,7 @@ function computeOverallStreak(habits: Habit[], logs: HabitLog[]): number {
 // ── Completion Ring ────────────────────────────────────────────────────────────
 
 function CompletionRing({ level }: { level: string | undefined }) {
+  const { colors } = useTheme();
   const dots = [
     level === 'mini' || level === 'good' || level === 'elite',
     level === 'good' || level === 'elite',
@@ -140,7 +141,7 @@ function CompletionRing({ level }: { level: string | undefined }) {
       {dots.map((filled, i) => (
         <View
           key={i}
-          style={[ring.dot, filled ? ring.dotFilled : ring.dotEmpty]}
+          style={[ring.dot, filled ? ring.dotFilled : [ring.dotEmpty, { borderColor: colors.gray200 }]]}
         />
       ))}
     </View>
@@ -151,26 +152,35 @@ const ring = StyleSheet.create({
   wrap: { flexDirection: 'row', gap: 3, alignItems: 'center' },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotFilled: { backgroundColor: Colors.yellow },
-  dotEmpty: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#D1D5DB' },
+  dotEmpty: { backgroundColor: 'transparent', borderWidth: 1.5 },
 });
 
 // ── Spark Line ─────────────────────────────────────────────────────────────────
 
 function SparkLine({ habitId, logs }: { habitId: string; logs: HabitLog[] }) {
+  const { colors } = useTheme();
   const last7 = strip.slice(-7);
   return (
-    <View style={spark.row}>
+    <View style={spark.wrap}>
       {last7.map(day => {
         const log = logs.find(l => l.habit_id === habitId && l.date === day.date);
         const isFuture = day.date > today;
+        const isToday = day.date === today;
+        const filled = !isFuture && !!log;
         const bg = isFuture ? 'transparent'
           : log?.level === 'elite' ? Colors.yellow
           : log?.level === 'good'  ? '#6B7280'
-          : log?.level === 'mini'  ? '#92400E'
-          : '#E0E0E0';
-        const borderColor = isFuture ? '#E0E0E0' : bg;
+          : log?.level === 'mini'  ? '#B45309'
+          : colors.gray200;
         return (
-          <View key={day.date} style={[spark.dot, { backgroundColor: bg, borderColor }]} />
+          <View key={day.date} style={spark.col}>
+            <Text style={[spark.label, { color: isToday ? Colors.yellow : colors.gray400 }]}>{day.day[0]}</Text>
+            <View style={[
+              spark.dot,
+              { backgroundColor: bg, borderColor: isFuture ? colors.gray200 : bg },
+              isToday && !filled && { borderColor: Colors.yellow, borderWidth: 1.5 },
+            ]} />
+          </View>
         );
       })}
     </View>
@@ -178,8 +188,10 @@ function SparkLine({ habitId, logs }: { habitId: string; logs: HabitLog[] }) {
 }
 
 const spark = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 4, marginTop: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, borderWidth: 1 },
+  wrap: { flexDirection: 'row', gap: 5, marginTop: 10 },
+  col:  { alignItems: 'center', gap: 3 },
+  label: { fontFamily: 'Inter_400Regular', fontSize: 9, lineHeight: 11 },
+  dot:  { width: 10, height: 10, borderRadius: 5, borderWidth: 1 },
 });
 
 // ── Logged Pill ────────────────────────────────────────────────────────────────
@@ -455,7 +467,7 @@ function HabitsLite() {
         <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
         <Text style={s.bannerTitle}>Habits</Text>
-        <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: '#888', marginTop: 4 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
+        <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 4 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }}>
         {loading ? (
@@ -571,8 +583,8 @@ function HabitCard({
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginRight: 10 }}>
                 <Text style={[s.habitName, { color: colors.black }]}>{habit.name}</Text>
-                <View style={s.streakChip}>
-                  <Text style={s.streakChipText}>
+                <View style={[s.streakChip, { backgroundColor: colors.gray100 }]}>
+                  <Text style={[s.streakChipText, { color: colors.gray600 }]}>
                     🔥 {streak > 0 ? streak : '—'}
                   </Text>
                 </View>
@@ -987,7 +999,9 @@ export default function HabitsTab() {
         onPress={() => setQuickAddVisible(true)}
         activeOpacity={0.85}
       >
-        <Ionicons name="add" size={26} color={Colors.black} />
+        <LinearGradient colors={['#FCC10C', '#E5A800']} style={mStyles.fabGrad}>
+          <Ionicons name="add" size={26} color={Colors.black} />
+        </LinearGradient>
       </TouchableOpacity>
 
       {/* Quick-add habit sheet */}
@@ -1090,8 +1104,8 @@ const s = StyleSheet.create({
   habitHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
   habitName: { fontFamily: 'Inter_700Bold', fontSize: 17, marginRight: 8, marginBottom: 0, flexShrink: 1 },
 
-  streakChip: { backgroundColor: '#FEF3C7', borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
-  streakChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: '#92400E' },
+  streakChip: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
+  streakChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
 
   streakBadge: { fontFamily: 'Inter_400Regular', fontSize: 12 },
 
@@ -1141,7 +1155,8 @@ const mStyles = StyleSheet.create({
   milestoneSub: { fontFamily: 'Inter_300Light', fontSize: 15, textAlign: 'center', lineHeight: 22 },
   milestoneBtn: { marginTop: 12, backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingHorizontal: 28, paddingVertical: 14 },
   milestoneBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black },
-  fab: { position: 'absolute', right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+  fab: { position: 'absolute', right: 20, width: 52, height: 52, borderRadius: 26, overflow: 'hidden', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
+  fabGrad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });
 
 const m = StyleSheet.create({
