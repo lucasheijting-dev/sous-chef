@@ -866,7 +866,7 @@ export default function LijstenTab() {
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
             scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
-            contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }]}
+            contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }, { paddingBottom: insets.bottom + 160 }]}
           >
             {showBanner && (
               <GettingStartedBanner userId={user?.id ?? null} onDismiss={() => updateSetting('getting_started_dismissed', true)} colors={colors} />

@@ -31,8 +31,13 @@ function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label
 
   return (
     <View style={styles.iconCol}>
-      <Animated.View style={[styles.glowDot, { opacity: glowAnim }]} />
+      {Platform.OS !== 'android' && (
+        <Animated.View style={[styles.glowDot, { opacity: glowAnim }]} />
+      )}
       <Ionicons name={name} size={24} color={focused ? Colors.yellow : 'rgba(255,255,255,0.55)'} />
+      {Platform.OS === 'android' && (
+        <Animated.View style={[styles.androidDot, { opacity: glowAnim }]} />
+      )}
     </View>
   );
 }
@@ -62,7 +67,8 @@ export default function TabLayout() {
       }}
     >
       {ALL_TABS.map(({ name, label, icon, iconOff }) => {
-        const href = name === 'habits' ? (prefs?.habits_enabled ? '/habits' : null) : undefined;
+        // Show habits tab by default until prefs load (null = still loading → show tab)
+        const href = name === 'habits' ? (prefs === null || prefs.habits_enabled ? '/habits' : null) : undefined;
         return (
           <Tabs.Screen
             key={name}
@@ -140,6 +146,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.9,
     shadowRadius: 16,
+  },
+  androidDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: Colors.yellow,
+    marginTop: 2,
   },
   tabLabel: {
     fontFamily: 'Inter_400Regular',
