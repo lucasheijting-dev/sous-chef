@@ -291,12 +291,12 @@ export default function ListDetailScreen() {
   useEffect(() => {
     const badge = listType === 'links' ? ' 🔗' : listType === 'tips' ? ' 💡' : '';
     navigation.setOptions({
-      title: `${emoji || '📝'} ${name}${badge}`,
-      headerRight: () => (
+      title: `${name}${badge}`,
+      headerRight: items.length > 0 ? () => (
         <TouchableOpacity onPress={shareList} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 4 }}>
           <Ionicons name="share-outline" size={22} color={Colors.black} />
         </TouchableOpacity>
-      ),
+      ) : undefined,
     });
   }, [name, emoji, listType, items]);
 
@@ -630,7 +630,7 @@ export default function ListDetailScreen() {
                   <Text style={styles.allDoneText}>Alles afgevinkt!</Text>
                 </View>
               ) : filteredUnchecked.length > 0 ? (
-                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen · veeg om af te vinken · houd vast om te bewerken</Text>
+                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen</Text>
               ) : null
             }
             ListEmptyComponent={
@@ -658,7 +658,7 @@ export default function ListDetailScreen() {
                     onPress={() => setDoneExpanded(v => !v)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.sectionLabel}>Gedaan ({filteredChecked.length})</Text>
+                    <Text style={styles.doneSectionLabel}>Gedaan ({filteredChecked.length})</Text>
                     <Ionicons
                       name={doneExpanded ? 'chevron-up' : 'chevron-down'}
                       size={16}
@@ -898,6 +898,10 @@ const styles = StyleSheet.create({
   doneSectionHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  doneSectionLabel: {
+    fontFamily: 'Inter_700Bold', fontSize: 13,
+    color: Colors.gray400, letterSpacing: 0.2,
   },
   klaarBar: {
     flexDirection: 'row', justifyContent: 'flex-end',

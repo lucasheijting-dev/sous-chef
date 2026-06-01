@@ -406,7 +406,10 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
         <TouchableOpacity
           key={opt.key}
           onPress={() => onChange(opt.key)}
-          style={[sortStyles.pill, { backgroundColor: value === opt.key ? Colors.yellow : colors.gray200 }]}
+          style={[sortStyles.pill, value === opt.key
+            ? { backgroundColor: Colors.yellow }
+            : { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.gray200 }
+          ]}
           activeOpacity={0.75}
         >
           <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : colors.gray600 }]}>{opt.label}</Text>
@@ -473,9 +476,17 @@ export default function LijstenTab() {
     });
   }, []);
 
+  const listsScrollRef = useRef<any>(null);
+  const notesScrollRef = useRef<any>(null);
+
   function switchTab(tab: Tab) {
+    if (tab === activeTab) return;
     setActiveTab(tab);
     AsyncStorage.setItem('home_active_tab', tab);
+    setTimeout(() => {
+      if (tab === 'lists') listsScrollRef.current?.scrollTo({ y: 0, animated: false });
+      if (tab === 'notes') notesScrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+    }, 50);
   }
   const [lists, setLists] = useState<(List & { item_count: number; open_count: number })[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -651,8 +662,13 @@ export default function LijstenTab() {
     ]).start();
     if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
     listUndoTimer.current = setTimeout(async () => {
-      setListUndoVisible(false);
-      setPendingListDelete(null);
+      Animated.parallel([
+        Animated.timing(undoOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(undoSlide, { toValue: 60, duration: 220, useNativeDriver: true }),
+      ]).start(() => {
+        setListUndoVisible(false);
+        setPendingListDelete(null);
+      });
       await supabase.from('lists').delete().eq('id', listId);
     }, 4000);
   }
@@ -662,7 +678,10 @@ export default function LijstenTab() {
     if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
     setLists(pendingListDelete.items);
     setPendingListDelete(null);
-    setListUndoVisible(false);
+    Animated.parallel([
+      Animated.timing(undoOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(undoSlide, { toValue: 60, duration: 180, useNativeDriver: true }),
+    ]).start(() => setListUndoVisible(false));
   }
 
   async function openPeek(list: (typeof lists)[0]) {
@@ -862,6 +881,7 @@ export default function LijstenTab() {
           </ScrollView>
         ) : (
           <ScrollView
+            ref={listsScrollRef}
             style={{ backgroundColor: colors.offWhite }}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
             scrollEventThrottle={16}
@@ -931,6 +951,7 @@ export default function LijstenTab() {
           </View>
         ) : (
           <FlatList
+            ref={notesScrollRef}
             data={filteredNotes}
             keyExtractor={(n) => n.id}
             numColumns={2}
@@ -1375,7 +1396,7 @@ export default function LijstenTab() {
       )}
 
       {/* New list FAB */}
-      {activeTab === 'lists' && (
+      {activeTab === 'lists' && lists.length > 0 && (
         <TouchableOpacity
           style={[fabStyles.fab, { bottom: insets.bottom + 90 }]}
           onPress={() => { setNewListName(''); setNewListModalVisible(true); }}
@@ -1490,7 +1511,7 @@ const styles = StyleSheet.create({
   tileCount: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill },
   typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.4 },
-  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(0,0,0,0.12)', borderBottomLeftRadius: 22, borderBottomRightRadius: 22, overflow: 'hidden' },
+  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(255,255,255,0.18)', borderBottomLeftRadius: 22, borderBottomRightRadius: 22, overflow: 'hidden' },
   tileProgressFill: { height: 5, borderBottomLeftRadius: 22 },
   retryBtn: { borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   retryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },

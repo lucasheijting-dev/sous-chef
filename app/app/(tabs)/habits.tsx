@@ -102,10 +102,13 @@ function computeWeekScore(logs: HabitLog[]): number {
 }
 
 function AnimatedCounter({ value, style }: { value: number; style?: any }) {
-  const animVal = useRef(new Animated.Value(0)).current;
-  const [display, setDisplay] = useState(0);
+  const animVal = useRef(new Animated.Value(value)).current;
+  const [display, setDisplay] = useState(value);
+  const prevValue = useRef(value);
 
   useEffect(() => {
+    if (value === prevValue.current) return;
+    prevValue.current = value;
     animVal.setValue(0);
     Animated.timing(animVal, { toValue: value, duration: 600, useNativeDriver: false }).start();
     const id = animVal.addListener(({ value: v }) => setDisplay(Math.round(v)));
