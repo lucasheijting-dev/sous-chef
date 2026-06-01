@@ -48,7 +48,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setUser(DEV_USER);
         setPrefs(DEFAULT_PREFS);
       } else if (storedNumber) {
-        await fetchUser(storedNumber);
+        const timeout = new Promise<void>(resolve => setTimeout(resolve, 8000));
+        await Promise.race([fetchUser(storedNumber), timeout]);
       }
     } finally {
       setIsLoading(false);

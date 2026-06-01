@@ -101,7 +101,12 @@ export default function RootLayout() {
 
   useEffect(() => { checkForOTAUpdate(); }, []);
   useEffect(() => { if (error) throw error; }, [error]);
-  useEffect(() => { if (loaded) SplashScreen.hideAsync(); }, [loaded]);
+  useEffect(() => {
+    if (loaded) { SplashScreen.hideAsync(); return; }
+    // Fallback: hide splash after 5s even if fonts are still loading (Android/slow networks)
+    const t = setTimeout(() => SplashScreen.hideAsync(), 5000);
+    return () => clearTimeout(t);
+  }, [loaded]);
 
   if (!loaded) return null;
 
