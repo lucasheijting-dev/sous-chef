@@ -47,7 +47,11 @@ Stuur gewoon een berichtje — ik snap je vanzelf! 🍳`,
 
 async function getOnboardingStep(userId) {
   const prefs = await db.getUserPrefs(userId) ?? {};
-  return prefs.onboarding_step ?? 0;
+  const raw = prefs.onboarding_step;
+  if (raw === 'done') return 'done';
+  if (raw === null || raw === undefined) return 0;
+  const n = Number(raw);
+  return isNaN(n) ? 0 : n;
 }
 
 async function setOnboardingStep(userId, step) {

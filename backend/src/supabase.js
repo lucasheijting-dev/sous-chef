@@ -954,7 +954,6 @@ async function verifyOTP(phone, code) {
     .limit(1)
     .single();
 
-  console.log('[DB] verifyOTP query for phone:', phone, '→ found:', !!data);
   if (!data) return { ok: false, reason: 'Geen actieve code gevonden. Vraag een nieuwe aan.' };
   if (data.used) return { ok: false, reason: 'Code al gebruikt.' };
   if (new Date(data.expires_at) < new Date()) return { ok: false, reason: 'Code verlopen. Vraag een nieuwe aan.' };

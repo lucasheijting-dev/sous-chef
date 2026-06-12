@@ -20,7 +20,6 @@ router.post('/request-otp', async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'phone required' });
 
     const normalized = normalizePhone(String(phone));
-    console.log('[Auth] request-otp raw:', phone, '→ normalized:', normalized);
 
     // Must be an existing user
     const user = await db.getUserByPhone(normalized);
@@ -30,7 +29,6 @@ router.post('/request-otp', async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
 
     await db.createOTP(normalized, code, expiresAt);
-    console.log('[Auth] OTP created for:', normalized, 'expires:', expiresAt);
 
     await sendMessage(normalized,
       `🔐 *Inlogcode: ${code}*\n\nVoer deze code in de Sous-Chef app in. Geldig voor 10 minuten.\n\n_(Niet jij? Negeer dit bericht.)_`
@@ -50,7 +48,6 @@ router.post('/verify-otp', async (req, res) => {
     if (!phone || !code) return res.status(400).json({ error: 'phone and code required' });
 
     const normalized = normalizePhone(String(phone));
-    console.log('[Auth] verify-otp raw:', phone, '→ normalized:', normalized, 'code:', code);
     const result = await db.verifyOTP(normalized, String(code));
 
     if (!result.ok) {
