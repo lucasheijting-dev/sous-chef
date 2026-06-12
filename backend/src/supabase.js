@@ -940,7 +940,8 @@ async function getUserByPhone(phone) {
 async function createOTP(phone, code, expiresAt) {
   // Invalidate any existing unused OTPs for this number first
   await supabase.from('otp_codes').update({ used: true }).eq('phone', phone).eq('used', false);
-  await supabase.from('otp_codes').insert({ phone, code, expires_at: expiresAt });
+  const { error } = await supabase.from('otp_codes').insert({ phone, code, expires_at: expiresAt });
+  if (error) console.error('[DB] createOTP insert error:', error.message, error.details);
 }
 
 async function verifyOTP(phone, code) {
@@ -953,6 +954,7 @@ async function verifyOTP(phone, code) {
     .limit(1)
     .single();
 
+  console.log('[DB] verifyOTP query for phone:', phone, '→ found:', !!data);
   if (!data) return { ok: false, reason: 'Geen actieve code gevonden. Vraag een nieuwe aan.' };
   if (data.used) return { ok: false, reason: 'Code al gebruikt.' };
   if (new Date(data.expires_at) < new Date()) return { ok: false, reason: 'Code verlopen. Vraag een nieuwe aan.' };
