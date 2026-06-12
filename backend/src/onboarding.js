@@ -1,7 +1,8 @@
 'use strict';
 
 // Guided onboarding conversation for new users.
-// State is stored in user prefs under onboarding_step (0 = not started, done = finished).
+// Step state is kept in-memory (Map). Once finished, onboarding_completed=true
+// is written to the users table which is the only persistent flag needed.
 
 const db      = require('./supabase');
 const { sendMessage } = require('./whatsapp');
@@ -45,39 +46,31 @@ Stuur gewoon een berichtje — ik snap je vanzelf! 🍳`,
   },
 ];
 
-async function getOnboardingStep(userId) {
-  const prefs = await db.getUserPrefs(userId) ?? {};
-  const raw = prefs.onboarding_step;
-  console.log('[Onboarding] step raw value:', JSON.stringify(raw), 'for user:', userId);
-  if (raw === 'done') return 'done';
-  if (raw === null || raw === undefined) return 0;
-  const n = Number(raw);
-  return isNaN(n) ? 0 : n;
-}
+// userId → { step: number, name: string }
+const state = new Map();
 
-async function setOnboardingStep(userId, step) {
-  await db.updateUserPrefs(userId, { onboarding_step: step });
-}
+function getStep(userId)        { return state.get(userId)?.step ?? 0; }
+function setStep(userId, step)  { state.set(userId, { ...(state.get(userId) ?? {}), step }); }
+function setName(userId, name)  { state.set(userId, { ...(state.get(userId) ?? {}), name }); }
+function getName(userId)        { return state.get(userId)?.name ?? 'je'; }
 
 // Returns true if the user is still in the onboarding flow and the message was handled.
-async function handleOnboardingMessage({ from, text, userId, user }) {
-  const step = await getOnboardingStep(userId);
-  if (step === 'done') return false;
-
-  const lc = text.toLowerCase().trim();
+async function handleOnboardingMessage({ from, text, userId }) {
+  const step = getStep(userId);
+  const lc   = text.toLowerCase().trim();
 
   // Step 0: hasn't been welcomed yet — send first message
   if (step === 0) {
-    await setOnboardingStep(userId, 1);
+    setStep(userId, 1);
     await sendMessage(from, STEPS[0].ask);
     return true;
   }
 
   // Step 1: received name
   if (step === 1) {
-    const name = text.trim().split(' ')[0]; // first word as name
-    await db.updateUserPrefs(userId, { onboarding_name: name, onboarding_step: 2 });
-    const prefs = await db.getUserPrefs(userId) ?? {};
+    const name = text.trim().split(' ')[0];
+    setStep(userId, 2);
+    setName(userId, name);
     await sendMessage(from, STEPS[1].ask(name));
     return true;
   }
@@ -97,7 +90,7 @@ async function handleOnboardingMessage({ from, text, userId, user }) {
         } catch {}
       }
     }
-    await setOnboardingStep(userId, 3);
+    setStep(userId, 3);
     await sendMessage(from, STEPS[2].ask);
     return true;
   }
@@ -116,9 +109,8 @@ async function handleOnboardingMessage({ from, text, userId, user }) {
       }
     }
 
-    const prefs = await db.getUserPrefs(userId) ?? {};
-    const name = prefs.onboarding_name ?? 'je';
-    await setOnboardingStep(userId, 'done');
+    const name = getName(userId);
+    state.delete(userId);
     await db.markOnboardingComplete(userId);
     await sendMessage(from, STEPS[3].ask(name));
     return true;
