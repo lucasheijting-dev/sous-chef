@@ -83,9 +83,10 @@ async function getUserPrefs(userId) {
 }
 
 async function updateUserPrefs(userId, updates) {
-  await supabase
+  const { error } = await supabase
     .from('user_prefs')
     .upsert({ user_id: userId, ...updates }, { onConflict: 'user_id' });
+  if (error) console.error('[DB] updateUserPrefs error:', error.message, JSON.stringify(updates));
 }
 
 async function trackActiveHour(userId, hour) {

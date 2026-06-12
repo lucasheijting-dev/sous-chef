@@ -48,6 +48,7 @@ Stuur gewoon een berichtje — ik snap je vanzelf! 🍳`,
 async function getOnboardingStep(userId) {
   const prefs = await db.getUserPrefs(userId) ?? {};
   const raw = prefs.onboarding_step;
+  console.log('[Onboarding] step raw value:', JSON.stringify(raw), 'for user:', userId);
   if (raw === 'done') return 'done';
   if (raw === null || raw === undefined) return 0;
   const n = Number(raw);
