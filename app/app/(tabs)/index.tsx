@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Animated,
   LayoutAnimation,
+  PanResponder,
   Pressable,
   Platform,
   TextInput,
@@ -19,12 +20,12 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Share,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -32,9 +33,10 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { List, Note } from '@/lib/types';
-import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE } from '@/constants/Design';
+import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE, getTone, TONE_ORDER, Tones } from '@/constants/Design';
 import { SkeletonListCard } from '@/components/SkeletonCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCache, setCache } from '@/lib/cache';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -48,8 +50,8 @@ function getGreeting(): string {
   return 'Goedenavond';
 }
 
-const TILE_ACCENTS  = ['#FCC10C', '#1A1A1A', '#E8734A', '#4A6FA5'];
-const TILE_TEXT_FG  = ['#0A0A0A', '#FFFFFF',  '#FFFFFF',  '#FFFFFF'];
+// Tone order for list tiles — cycles through 6 warm tones
+const TILE_TONE_ORDER = TONE_ORDER;
 
 // ── Bottom Sheet ───────────────────────────────────────────────────────────────
 
@@ -137,7 +139,6 @@ function AnimatedCard({
   onPress: () => void;
   onDeleteConfirm: () => void;
   onLongPress?: () => void;
-  colors: any;
   showHint?: boolean;
   onHintComplete?: () => void;
 }) {
@@ -147,9 +148,10 @@ function AnimatedCard({
   const hintX = useRef(new Animated.Value(0)).current;
   const doneFlash = useRef(new Animated.Value(0)).current;
   const swipeRef = useRef<Swipeable>(null);
+  const longPressDidFire = useRef(false);
 
-  const bg = TILE_ACCENTS[index % TILE_ACCENTS.length];
-  const fg = TILE_TEXT_FG[index % TILE_TEXT_FG.length];
+  const { colors, isDark } = useTheme();
+  const tone = getTone(index, isDark);
   const allDone = item.item_count > 0 && item.open_count === 0;
   const prevAllDone = useRef(allDone);
 
@@ -205,40 +207,52 @@ function AnimatedCard({
     <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { translateX: hintX }, { scale }] }]}>
       <Swipeable ref={swipeRef} renderLeftActions={renderLeftActions} leftThreshold={60} overshootLeft={false}>
         <Pressable
-          onPress={onPress}
-          onLongPress={onLongPress}
+          onPress={() => { if (longPressDidFire.current) { longPressDidFire.current = false; return; } onPress(); }}
+          onLongPress={() => { longPressDidFire.current = true; onLongPress?.(); }}
+          delayLongPress={400}
           onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
           onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-          style={[styles.tile, { backgroundColor: bg }]}
+          style={[styles.tile, { backgroundColor: colors.surface }]}
         >
-          <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
+          {/* Tone icon tile */}
+          <View style={[styles.tileIconBox, { backgroundColor: tone.bg }]}>
+            <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
+          </View>
+
           <View style={styles.tileBottom}>
-            <Text style={[styles.tileName, { color: fg }]} numberOfLines={2}>{item.name}</Text>
+            <Text style={[styles.tileName, { color: colors.black }]} numberOfLines={2}>{item.name}</Text>
             <View style={styles.tileCountRow}>
               {totalCount > 0 ? (
                 allDone ? (
-                  <Text style={[styles.tileCount, { color: '#4CAF50', opacity: 1, fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
+                  <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
                 ) : (
-                  <Text style={[styles.tileCount, { color: fg, opacity: 0.72 }]}>{totalCount - openCount}/{totalCount}</Text>
+                  <Text style={[styles.tileCount, { color: colors.gray400 }]}>{totalCount - openCount}/{totalCount}</Text>
                 )
               ) : (
-                <Text style={[styles.tileCount, { color: fg, opacity: 0.65 }]}>Leeg</Text>
+                <Text style={[styles.tileCount, { color: colors.gray400 }]}>Leeg</Text>
               )}
               {typeLabel && (
-                <View style={[styles.typeBadge, { backgroundColor: 'rgba(0,0,0,0.15)' }]}>
-                  <Text style={[styles.typeBadgeText, { color: fg }]}>{typeLabel}</Text>
+                <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>
+                  <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
                 </View>
               )}
             </View>
           </View>
+
           {totalCount > 0 && (
             <View style={styles.tileProgressBg}>
-              <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#4CAF50' : Colors.yellow }]} />
+              <View style={[StyleSheet.absoluteFillObject, { opacity: 0.15, backgroundColor: tone.fg }]} />
+              <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#5A8A5A' : tone.fg }]} />
             </View>
           )}
+
+          {/* Long-press hint */}
+          <View style={{ position: 'absolute', top: 10, right: 10, opacity: 0.30 }}>
+            <Ionicons name="ellipsis-horizontal" size={14} color={colors.gray400} />
+          </View>
           <Animated.View
             pointerEvents="none"
-            style={[StyleSheet.absoluteFill, { borderRadius: Radius.xl, backgroundColor: '#4CAF50', opacity: doneFlash }]}
+            style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: '#5A8A5A', opacity: doneFlash }]}
           />
         </Pressable>
       </Swipeable>
@@ -269,43 +283,67 @@ function getCardStyles(isDark: boolean) {
   ];
 }
 
-function NoteCard({ item, index, onPress, isDark }: { item: Note; index: number; onPress: () => void; isDark: boolean }) {
+function HighlightText({ text, query, style, numberOfLines }: { text: string; query: string; style: any; numberOfLines?: number }) {
+  if (!query.trim()) return <Text style={style} numberOfLines={numberOfLines}>{text}</Text>;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return (
+    <Text style={style} numberOfLines={numberOfLines}>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <Text key={i} style={[style, { backgroundColor: Colors.yellow + 'AA', color: Colors.black, borderRadius: 2 }]}>{part}</Text>
+          : part
+      )}
+    </Text>
+  );
+}
+
+function NoteCard({ item, index, onPress, search }: { item: Note; index: number; onPress: () => void; isDark?: boolean; search?: string }) {
+  const { colors, isDark } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const CARD_STYLES = getCardStyles(isDark);
-  const style = CARD_STYLES[index % CARD_STYLES.length];
+  const tone = getTone(index, isDark);
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, delay: (index % 4) * 50, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, delay: (index % 4) * 50, tension: 80, friction: 12, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 280, delay: (index % 4) * 45, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, delay: (index % 4) * 45, tension: 80, friction: 12, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  const dateLabel = (() => {
+    const diff = Math.floor((Date.now() - new Date(item.created_at).getTime()) / 86400000);
+    if (diff === 0) return 'Vandaag';
+    if (diff === 1) return 'Gisteren';
+    if (diff < 7) return `${diff}d geleden`;
+    return new Date(item.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+  })();
 
   return (
     <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }}>
       <Pressable
         onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start()}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.975, useNativeDriver: true, speed: 50 }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.noteCard, { backgroundColor: style.bg }]}
+        style={[styles.noteCard, { backgroundColor: colors.surface }]}
       >
-        <Text style={[styles.noteCardTitle, { color: style.title }]} numberOfLines={2}>
-          {item.title || item.body.slice(0, 40)}
-        </Text>
-        <Text style={[styles.noteCardBody, { color: style.body }]} numberOfLines={5}>{item.body}</Text>
+        <HighlightText
+          text={item.title || item.body.slice(0, 60)}
+          query={search ?? ''}
+          style={[styles.noteCardTitle, { color: colors.black }]}
+          numberOfLines={2}
+        />
+        <HighlightText
+          text={item.body}
+          query={search ?? ''}
+          style={[styles.noteCardBody, { color: colors.gray400 }]}
+          numberOfLines={4}
+        />
         <View style={styles.noteCardFooter}>
-          <Text style={[styles.noteCardDate, { color: style.date }]}>
-            {(() => {
-              const diff = Math.floor((Date.now() - new Date(item.created_at).getTime()) / 86400000);
-              if (diff === 0) return 'Vandaag';
-              if (diff === 1) return 'Gisteren';
-              if (diff < 7) return `${diff} dg geleden`;
-              return new Date(item.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
-            })()}
-          </Text>
-          <Ionicons name="open-outline" size={12} color={style.date} />
+          <View style={[styles.noteCardTag, { backgroundColor: tone.bg }]}>
+            <Text style={[styles.noteCardTagText, { color: tone.fg }]}>Notitie</Text>
+          </View>
+          <Text style={[styles.noteCardDate, { color: colors.gray400 }]}>{dateLabel}</Text>
         </View>
       </Pressable>
     </Animated.View>
@@ -394,10 +432,11 @@ function GettingStartedBanner({ userId, onDismiss, colors }: { userId: string | 
 
 type SortMode = 'recent' | 'az' | 'complete';
 
-function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v: SortMode) => void; colors: any }) {
+function SortToggle({ value, onChange }: { value: SortMode; onChange: (v: SortMode) => void }) {
+  const { colors } = useTheme();
   const options: { key: SortMode; label: string }[] = [
-    { key: 'recent', label: 'Recent' },
-    { key: 'az', label: 'A-Z' },
+    { key: 'recent', label: 'Eigen' },
+    { key: 'az', label: 'A–Z' },
     { key: 'complete', label: 'Compleet' },
   ];
   return (
@@ -406,13 +445,15 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
         <TouchableOpacity
           key={opt.key}
           onPress={() => onChange(opt.key)}
-          style={[sortStyles.pill, value === opt.key
-            ? { backgroundColor: Colors.yellow }
-            : { backgroundColor: colors.white, borderWidth: 1, borderColor: colors.gray200 }
+          style={[sortStyles.chip, value === opt.key
+            ? { backgroundColor: colors.black }
+            : { backgroundColor: colors.gray100, borderColor: 'transparent' }
           ]}
           activeOpacity={0.75}
         >
-          <Text style={[sortStyles.pillText, { color: value === opt.key ? Colors.black : colors.gray600 }]}>{opt.label}</Text>
+          <Text style={[sortStyles.chipText, { color: value === opt.key ? colors.offWhite : colors.gray400 }]}>
+            {opt.label}
+          </Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -420,9 +461,9 @@ function SortToggle({ value, onChange, colors }: { value: SortMode; onChange: (v
 }
 
 const sortStyles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 6, paddingTop: 20, paddingBottom: 20 },
-  pill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: Radius.pill },
-  pillText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
+  row: { flexDirection: 'row', gap: 7 },
+  chip: { height: 34, paddingHorizontal: 15, borderRadius: Radius.pill, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  chipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13.5 },
 });
 
 // ── Main ───────────────────────────────────────────────────────────────────────
@@ -478,14 +519,18 @@ export default function LijstenTab() {
 
   const listsScrollRef = useRef<any>(null);
   const notesScrollRef = useRef<any>(null);
+  const receiptsScrollRef = useRef<any>(null);
 
   function switchTab(tab: Tab) {
     if (tab === activeTab) return;
+    if (activeTab === 'lists') setListSearch('');
+    if (activeTab === 'notes') setSearch('');
     setActiveTab(tab);
     AsyncStorage.setItem('home_active_tab', tab);
     setTimeout(() => {
       if (tab === 'lists') listsScrollRef.current?.scrollTo({ y: 0, animated: false });
       if (tab === 'notes') notesScrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+      if (tab === 'receipts') receiptsScrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     }, 50);
   }
   const [lists, setLists] = useState<(List & { item_count: number; open_count: number })[]>([]);
@@ -515,9 +560,19 @@ export default function LijstenTab() {
   const [peekItems, setPeekItems] = useState<{ id: string; text: string; checked: boolean }[]>([]);
   const [reorderModalVisible, setReorderModalVisible] = useState(false);
   const [reorderList, setReorderList] = useState<typeof lists>([]);
+  const [reorderDragIndex, setReorderDragIndex] = useState<number | null>(null);
+  const [reorderTargetIndex, setReorderTargetIndex] = useState<number | null>(null);
+  const [isDraggingReorder, setIsDraggingReorder] = useState(false);
+  const reorderDragIndexRef = useRef<number | null>(null);
+  const reorderTargetIndexRef = useRef<number | null>(null);
+  const REORDER_ROW_H = 56;
   const [newListModalVisible, setNewListModalVisible] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [newListCreating, setNewListCreating] = useState(false);
+  const [listSearch, setListSearch] = useState('');
+  const [editingNote, setEditingNote] = useState(false);
+  const [editNoteBody, setEditNoteBody] = useState('');
+  const [editNoteTitle, setEditNoteTitle] = useState('');
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const emptyBreath = useRef(new Animated.Value(1)).current;
@@ -537,12 +592,14 @@ export default function LijstenTab() {
         .eq('user_id', user.id)
         .order('sort_order', { ascending: true });
       if (listsRes.data) {
-        setLists(listsRes.data.map((l: any) => {
+        const processed = listsRes.data.map((l: any) => {
           const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
           const totalCount = items.length;
           const openCount = items.filter((li: any) => !li.checked).length;
           return { ...l, item_count: totalCount, open_count: openCount };
-        }));
+        });
+        setLists(processed);
+        setCache('cache_lists', processed);
         setFetchError(false);
       } else {
         setFetchError(true);
@@ -557,7 +614,7 @@ export default function LijstenTab() {
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') return;
     const { data } = await supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    if (data) setNotes(data);
+    if (data) { setNotes(data); setCache('cache_notes', data); }
   }, [user]);
 
   useEffect(() => {
@@ -581,10 +638,38 @@ export default function LijstenTab() {
     });
   }, []);
 
+  useEffect(() => {
+    getCache<(List & { item_count: number; open_count: number })[]>('cache_lists').then(d => {
+      if (d) { setLists(d); setLoading(false); }
+    });
+    getCache<Note[]>('cache_notes').then(d => {
+      if (d) setNotes(d);
+    });
+  }, []);
+
   const filteredNotes = notes.filter(n =>
     n.title?.toLowerCase().includes(search.toLowerCase()) ||
     n.body.toLowerCase().includes(search.toLowerCase())
   );
+
+  async function deleteNote(noteId: string) {
+    setSelectedNote(null);
+    setEditingNote(false);
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+    await supabase.from('notes').delete().eq('id', noteId);
+  }
+
+  async function saveNoteEdit() {
+    if (!selectedNote) return;
+    const body = editNoteBody.trim();
+    if (!body) return;
+    const title = editNoteTitle.trim() || null;
+    const updated = { ...selectedNote, body, title };
+    setNotes(prev => prev.map(n => n.id === selectedNote.id ? updated : n));
+    setSelectedNote(updated);
+    setEditingNote(false);
+    await supabase.from('notes').update({ body, title }).eq('id', selectedNote.id);
+  }
 
   const sortedLists = [...lists].sort((a, b) => {
     if (sortMode === 'az') return a.name.localeCompare(b.name, 'nl');
@@ -599,8 +684,12 @@ export default function LijstenTab() {
     if (aDone !== bDone) return aDone - bDone;
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
-  const activeLists = sortedLists.filter(l => !(l.item_count > 0 && l.open_count === 0));
-  const doneLists   = sortedLists.filter(l => l.item_count > 0 && l.open_count === 0);
+  const listSearchTerm = listSearch.trim().toLowerCase();
+  const filteredSortedLists = listSearchTerm
+    ? sortedLists.filter(l => l.name.toLowerCase().includes(listSearchTerm))
+    : sortedLists;
+  const activeLists = filteredSortedLists.filter(l => !(l.item_count > 0 && l.open_count === 0));
+  const doneLists   = filteredSortedLists.filter(l => l.item_count > 0 && l.open_count === 0);
 
   const fetchReceipts = useCallback(async () => {
     if (!user || user.id === 'dev') return;
@@ -700,10 +789,25 @@ export default function LijstenTab() {
   async function saveReorder() {
     const updated = reorderList.map((l, i) => ({ ...l, sort_order: i }));
     setLists(updated);
+    setSortMode('recent');
     setReorderModalVisible(false);
     for (const l of updated) {
       await supabase.from('lists').update({ sort_order: l.sort_order }).eq('id', l.id);
     }
+  }
+
+  async function duplicateList(item: (typeof lists)[0]) {
+    if (!user || user.id === 'dev') return;
+    const { data: newList } = await supabase.from('lists').insert({
+      user_id: user.id, name: `${item.name} (kopie)`, emoji: item.emoji,
+      sort_order: lists.length, list_type: item.list_type ?? 'checklist',
+    }).select('id').single();
+    if (!newList) return;
+    const { data: srcItems } = await supabase.from('list_items').select('text, checked').eq('list_id', item.id);
+    if (srcItems?.length) {
+      await supabase.from('list_items').insert(srcItems.map(i => ({ list_id: newList.id, user_id: user.id, text: i.text, checked: false })));
+    }
+    fetchLists();
   }
 
   async function createNewList() {
@@ -742,68 +846,36 @@ export default function LijstenTab() {
     return () => { breathLoopRef.current?.stop(); };
   }, [lists.length, loading]);
 
-  const bannerTranslateY = scrollY.interpolate({ inputRange: [0, 120], outputRange: [0, -36], extrapolate: 'clamp' });
-
   const showNotesTab    = settings.notes_enabled;
   const showReceiptsTab = settings.receipts_enabled;
+
+  const pageTitle = activeTab === 'lists' ? 'Mijn lijsten' : activeTab === 'notes' ? 'Notities' : 'Bonnetjes';
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
-      <LinearGradient
-        colors={['rgba(252,193,12,0.07)', 'transparent']}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 340 }}
-        pointerEvents="none"
-      />
-      {/* Banner */}
-      <Animated.View style={[styles.banner, { paddingTop: insets.top + 44, transform: [{ translateY: bannerTranslateY }] }]}>
-        <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
-        <Text style={styles.bannerEyebrow}>
-          {settings.user_name ? `${getGreeting()}, ${settings.user_name} 👋` : `${getGreeting()} 👋`}
-        </Text>
-        <Text style={styles.bannerTitle}>
-          {activeTab === 'lists' ? 'Mijn lijsten' : activeTab === 'notes' ? 'Notities' : 'Bonnetjes'}
-        </Text>
 
-        {activeTab === 'lists' && (
-          <View style={styles.bannerStats}>
-            <View style={styles.statTile}>
-              <Text style={styles.statNum}>{lists.length}</Text>
-              <Text style={styles.statLabel}>{lists.length === 1 ? 'lijst' : 'lijsten'}</Text>
-            </View>
-            <View style={[styles.statTile, styles.statTileAccent]}>
-              <Text style={[styles.statNum, { color: Colors.black }]}>{lists.reduce((s, l) => s + l.item_count, 0)}</Text>
-              <Text style={[styles.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>items totaal</Text>
-            </View>
-          </View>
-        )}
-
-        {activeTab === 'notes' && (
-          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-            <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : colors.gray400} />
-            <TextInput
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Zoeken in notities..."
-              placeholderTextColor={colors.gray400}
-              selectionColor={Colors.yellow}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="close-circle-outline" size={16} color={colors.gray400} />
-              </TouchableOpacity>
+      {/* ── Clean warm header ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            {settings.user_name ? (
+              <Text style={[styles.headerGreet, { color: colors.gray400 }]}>
+                {getGreeting()}, {settings.user_name}
+              </Text>
+            ) : (
+              <Text style={[styles.headerGreet, { color: colors.gray400 }]}>{getGreeting()}</Text>
             )}
+            <Text style={[styles.headerTitle, { color: colors.black }]} numberOfLines={1}>
+              {pageTitle}
+            </Text>
           </View>
-        )}
-      </Animated.View>
+        </View>
+      </View>
 
-      {/* Toggle */}
+      {/* ── Top tabs (Lijsten / Notities / Bonnetjes) ── */}
       {(showNotesTab || showReceiptsTab) && (
-        <View style={[styles.tabToggleWrap, { backgroundColor: colors.offWhite }]}>
+        <View style={[styles.tabToggleWrap, { backgroundColor: colors.offWhite, zIndex: 2 }]}>
           <TouchableOpacity style={styles.tabTextBtn} onPress={() => switchTab('lists')}>
             <Text style={[styles.tabTextLabel, { color: activeTab === 'lists' ? colors.black : colors.gray400 }]}>Lijsten</Text>
             {activeTab === 'lists' && <View style={[styles.tabTextUnderline, { backgroundColor: Colors.yellow }]} />}
@@ -829,7 +901,7 @@ export default function LijstenTab() {
           <View style={styles.skeletonList}>
             {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
           </View>
-        ) : fetchError ? (
+        ) : (fetchError && lists.length === 0) ? (
           <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
             <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
               <Ionicons name="cloud-offline-outline" size={32} color={colors.gray400} />
@@ -858,7 +930,7 @@ export default function LijstenTab() {
               />
             )}
             <View style={styles.emptyContainer}>
-              <LinearGradient colors={['#FCC10C22', '#FCC10C00']} style={styles.emptyGlow} />
+              <LinearGradient colors={[Colors.yellow + '22', Colors.yellow + '00']} style={styles.emptyGlow} />
               <Animated.View style={[styles.emptyIcon, { backgroundColor: colors.gray100, transform: [{ scale: emptyBreath }] }]}>
                 <Ionicons name="layers-outline" size={32} color={colors.gray400} />
               </Animated.View>
@@ -872,7 +944,7 @@ export default function LijstenTab() {
                 style={styles.emptyActionBtn}
                 activeOpacity={0.8}
               >
-                <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.emptyActionBtnGrad}>
+                <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={styles.emptyActionBtnGrad}>
                   <Ionicons name="logo-whatsapp" size={16} color={Colors.black} />
                   <Text style={styles.emptyActionBtnText}>Open WhatsApp</Text>
                 </LinearGradient>
@@ -880,10 +952,48 @@ export default function LijstenTab() {
             </View>
           </ScrollView>
         ) : (
+          <>
+            {/* Sort pills + search sticky above scroll */}
+            <View style={[styles.sortSticky, { backgroundColor: colors.offWhite, zIndex: 2 }]}>
+              <SortToggle value={sortMode} onChange={setSortMode} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity onPress={() => setListSearch(s => s ? '' : ' ')} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+                  <Ionicons name={listSearch.trim() ? 'close-circle' : 'search-outline'} size={18} color={listSearch.trim() ? Colors.yellow : colors.gray400} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={openReorder} hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }} style={{ paddingRight: 4 }}>
+                  <Ionicons name="swap-vertical-outline" size={20} color={colors.gray400} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {listSearch.trim().length > 0 && (
+              <View style={[styles.searchBar, { marginHorizontal: 16, marginBottom: 4, backgroundColor: colors.gray100, borderColor: colors.gray200 }]}>
+                <Ionicons name="search-outline" size={15} color={Colors.yellow} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.black }]}
+                  value={listSearch}
+                  onChangeText={setListSearch}
+                  placeholder="Zoek in lijsten..."
+                  placeholderTextColor={colors.gray400}
+                  selectionColor={Colors.yellow}
+                  autoFocus
+                />
+                <TouchableOpacity onPress={() => setListSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle-outline" size={16} color={colors.gray400} />
+                </TouchableOpacity>
+              </View>
+            )}
+            {listSearch.trim().length > 0 && filteredSortedLists.length === 0 ? (
+              <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
+                <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
+                  <Ionicons name="search-outline" size={32} color={colors.gray400} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: colors.black }]}>Geen lijsten gevonden</Text>
+                <Text style={[styles.emptyText, { color: colors.gray400 }]}>Geen lijsten voor "{listSearch.trim()}".</Text>
+              </View>
+            ) : (
           <ScrollView
             ref={listsScrollRef}
             style={{ backgroundColor: colors.offWhite }}
-            onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
             scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchLists(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
             contentContainerStyle={[styles.tileGrid, showBanner && { paddingTop: 0 }, { paddingBottom: insets.bottom + 160 }]}
@@ -891,17 +1001,11 @@ export default function LijstenTab() {
             {showBanner && (
               <GettingStartedBanner userId={user?.id ?? null} onDismiss={() => updateSetting('getting_started_dismissed', true)} colors={colors} />
             )}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <SortToggle value={sortMode} onChange={setSortMode} colors={colors} />
-              <TouchableOpacity onPress={openReorder} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="swap-vertical-outline" size={18} color={colors.gray400} />
-              </TouchableOpacity>
-            </View>
             {/* Active lists */}
             {activeLists.length > 0 && (
               <View style={styles.tileRow}>
                 {activeLists.map((item, index) => (
-                  <AnimatedCard key={item.id} item={item} index={index} colors={colors}
+                  <AnimatedCard key={item.id} item={item} index={index}
                     showHint={!swipeHintDone && index === 0}
                     onHintComplete={() => { setSwipeHintDone(true); AsyncStorage.setItem('swipe_hint_done', '1'); }}
                     onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
@@ -909,6 +1013,7 @@ export default function LijstenTab() {
                     onLongPress={() => openPeek(item)}
                   />
                 ))}
+                {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
               </View>
             )}
             {/* Done lists sink to bottom */}
@@ -921,32 +1026,68 @@ export default function LijstenTab() {
                 </View>
                 <View style={styles.tileRow}>
                   {doneLists.map((item, index) => (
-                    <AnimatedCard key={item.id} item={item} index={activeLists.length + index} colors={colors}
+                    <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                       onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
                       onLongPress={() => openPeek(item)}
                     />
                   ))}
+                  {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
                 </View>
               </>
             )}
           </ScrollView>
+            )}
+          </>
         )
       )}
 
       {/* Notes view */}
       {activeTab === 'notes' && (
-        filteredNotes.length === 0 ? (
-          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
-            <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
-              <Ionicons name="document-text-outline" size={32} color={colors.gray400} />
+        <>
+          {notes.length > 0 && (
+            <View style={[styles.searchBar, searchFocused && styles.searchBarFocused, { marginHorizontal: 16, marginTop: 12, marginBottom: 8, backgroundColor: colors.gray100, borderColor: searchFocused ? Colors.yellow + '60' : colors.gray200 }]}>
+              <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : colors.gray400} />
+              <TextInput
+                style={[styles.searchInput, { color: colors.black }]}
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Zoeken in notities..."
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+              />
+              {search.length > 0 && (
+                <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="close-circle-outline" size={16} color={colors.gray400} />
+                </TouchableOpacity>
+              )}
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.black }]}>{search ? 'Geen resultaten' : 'Geen notities'}</Text>
+          )}
+          {filteredNotes.length === 0 ? (
+          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
+            <View style={[styles.emptyIcon, { backgroundColor: '#FFF3E0' }]}>
+              <Text style={{ fontSize: 32 }}>💡</Text>
+            </View>
+            <Text style={[styles.emptyTitle, { color: colors.black }]}>{search ? 'Geen resultaten' : 'Nog geen notities'}</Text>
             {!search && (
-              <Text style={[styles.emptyText, { color: colors.gray400 }]}>
-                Stuur via WhatsApp:{'\n'}
-                <Text style={styles.exampleMsg}>"onthoud: altijd bellen voor je bij Jan langskomt"</Text>
-              </Text>
+              <>
+                <Text style={[styles.emptyText, { color: colors.gray400 }]}>
+                  Stuur een bericht naar de bot:{'\n'}
+                  <Text style={styles.exampleMsg}>"onthoud: na 22u geen koffie meer"</Text>
+                </Text>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL(`whatsapp://send?phone=${BOT_NUMBER}&text=onthoud:`)}
+                  style={styles.emptyActionBtn}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={styles.emptyActionBtnGrad}>
+                    <Ionicons name="logo-whatsapp" size={16} color={Colors.black} />
+                    <Text style={styles.emptyActionBtnText}>Open WhatsApp</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </>
             )}
           </View>
         ) : (
@@ -960,10 +1101,11 @@ export default function LijstenTab() {
             style={{ backgroundColor: colors.offWhite }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
             renderItem={({ item, index }) => (
-              <NoteCard item={item} index={index} isDark={isDark} onPress={() => setSelectedNote(item)} />
+              <NoteCard item={item} index={index} search={search} onPress={() => setSelectedNote(item)} />
             )}
           />
-        )
+        )}
+        </>
       )}
 
       {/* Receipts view */}
@@ -1044,6 +1186,7 @@ export default function LijstenTab() {
               </View>
             ) : (
               <FlatList
+                ref={receiptsScrollRef}
                 data={filteredReceipts}
                 keyExtractor={r => r.id}
                 contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
@@ -1253,21 +1396,85 @@ export default function LijstenTab() {
       </Modal>
 
       {/* Note detail modal */}
-      <Modal visible={!!selectedNote} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={!!selectedNote} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSelectedNote(null); setEditingNote(false); }}>
         <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
-            <TouchableOpacity onPress={() => setSelectedNote(null)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+            <TouchableOpacity onPress={() => { setSelectedNote(null); setEditingNote(false); }} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
               <Ionicons name="close" size={18} color={colors.black} />
             </TouchableOpacity>
-            <Text style={[styles.modalDate, { color: colors.gray400 }]}>
-              {selectedNote ? new Date(selectedNote.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
-            </Text>
-            <View style={{ width: 34 }} />
+            {editingNote ? (
+              <Text style={[styles.modalDate, { color: colors.gray400 }]}>Bewerken</Text>
+            ) : (
+              <Text style={[styles.modalDate, { color: colors.gray400 }]}>
+                {selectedNote ? new Date(selectedNote.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+              </Text>
+            )}
+            {editingNote ? (
+              <TouchableOpacity onPress={saveNoteEdit} style={[styles.closeBtn, { backgroundColor: Colors.yellow }]}>
+                <Ionicons name="checkmark" size={18} color={Colors.black} />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => { setEditNoteTitle(selectedNote?.title ?? ''); setEditNoteBody(selectedNote?.body ?? ''); setEditingNote(true); }}
+                  style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+                >
+                  <Ionicons name="pencil-outline" size={16} color={colors.black} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => selectedNote && Share.share({ message: `${selectedNote.title ? selectedNote.title + '\n\n' : ''}${selectedNote.body}` })}
+                  style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+                >
+                  <Ionicons name="share-outline" size={18} color={colors.black} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-          <ScrollView contentContainerStyle={styles.modalContent}>
-            {selectedNote?.title && <Text style={[styles.modalTitle, { color: colors.black }]}>{selectedNote.title}</Text>}
-            <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selectedNote?.body}</Text>
-          </ScrollView>
+          {editingNote ? (
+            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={[styles.modalTitle, { color: colors.black, borderBottomWidth: 1, borderBottomColor: colors.gray100, marginBottom: 16, padding: 0 }]}
+                value={editNoteTitle}
+                onChangeText={setEditNoteTitle}
+                placeholder="Titel (optioneel)"
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                multiline={false}
+              />
+              <TextInput
+                style={[styles.modalBody, { color: colors.gray800, minHeight: 120, textAlignVertical: 'top', padding: 0 }]}
+                value={editNoteBody}
+                onChangeText={setEditNoteBody}
+                placeholder="Notitie..."
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                multiline
+                autoFocus
+              />
+            </ScrollView>
+          ) : (
+            <ScrollView contentContainerStyle={styles.modalContent}>
+              {selectedNote?.title && <Text style={[styles.modalTitle, { color: colors.black }]}>{selectedNote.title}</Text>}
+              <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selectedNote?.body}</Text>
+            </ScrollView>
+          )}
+          {!editingNote && (
+            <View style={{ paddingHorizontal: 20, paddingBottom: 20, paddingTop: 8 }}>
+              <TouchableOpacity
+                onPress={() => selectedNote && Alert.alert('Notitie verwijderen?', 'Dit kan niet ongedaan worden gemaakt.', [
+                  { text: 'Annuleer', style: 'cancel' },
+                  { text: 'Verwijder', style: 'destructive', onPress: () => selectedNote && deleteNote(selectedNote.id) },
+                ])}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: Radius.md, backgroundColor: '#FEE2E2' }}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#EF4444' }}>Verwijder notitie</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
 
@@ -1294,7 +1501,12 @@ export default function LijstenTab() {
       {/* Peek modal */}
       <Modal visible={!!peekTarget} transparent animationType="fade" onRequestClose={() => setPeekTarget(null)}>
         <Pressable style={peekStyles.overlay} onPress={() => setPeekTarget(null)}>
-          <Pressable style={[peekStyles.card, { backgroundColor: colors.white }]} onPress={() => {}}>
+          <Pressable style={[peekStyles.card, { backgroundColor: colors.white }]} onPress={() => {
+            if (peekTarget) {
+              setPeekTarget(null);
+              router.push({ pathname: '/list/[id]', params: { id: peekTarget.list.id, name: peekTarget.list.name, emoji: peekTarget.list.emoji, list_type: peekTarget.list.list_type ?? 'checklist' } });
+            }
+          }}>
             <View style={peekStyles.header}>
               <Text style={peekStyles.emoji}>{peekTarget?.list.emoji || '📝'}</Text>
               <View style={{ flex: 1 }}>
@@ -1351,39 +1563,71 @@ export default function LijstenTab() {
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black }}>Opslaan</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ padding: 16, gap: 8 }}>
-            {reorderList.map((item, index) => (
-              <View key={item.id} style={[reorderStyles.row, { backgroundColor: colors.offWhite }]}>
-                <Text style={{ fontSize: 20 }}>{item.emoji || '📝'}</Text>
-                <Text style={[reorderStyles.name, { color: colors.black }]} numberOfLines={1}>{item.name}</Text>
-                <View style={reorderStyles.arrows}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (index === 0) return;
-                      const next = [...reorderList];
-                      [next[index - 1], next[index]] = [next[index], next[index - 1]];
-                      setReorderList(next);
-                    }}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    disabled={index === 0}
-                  >
-                    <Ionicons name="chevron-up" size={20} color={index === 0 ? colors.gray200 : colors.gray400} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => {
-                      if (index === reorderList.length - 1) return;
-                      const next = [...reorderList];
-                      [next[index], next[index + 1]] = [next[index + 1], next[index]];
-                      setReorderList(next);
-                    }}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    disabled={index === reorderList.length - 1}
-                  >
-                    <Ionicons name="chevron-down" size={20} color={index === reorderList.length - 1 ? colors.gray200 : colors.gray400} />
+          <ScrollView scrollEnabled={!isDraggingReorder} contentContainerStyle={{ padding: 16, gap: 8 }}>
+            {reorderList.map((item, index) => {
+              const isActive = reorderDragIndex === index;
+              const isTarget = reorderTargetIndex === index && !isActive;
+              const panResponder = PanResponder.create({
+                onStartShouldSetPanResponder: () => true,
+                onPanResponderGrant: () => {
+                  reorderDragIndexRef.current = index;
+                  reorderTargetIndexRef.current = index;
+                  setReorderDragIndex(index);
+                  setReorderTargetIndex(index);
+                  setIsDraggingReorder(true);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                },
+                onPanResponderMove: (_, g) => {
+                  const newTarget = Math.min(reorderList.length - 1, Math.max(0, Math.round(index + g.dy / REORDER_ROW_H)));
+                  if (newTarget !== reorderTargetIndexRef.current) {
+                    reorderTargetIndexRef.current = newTarget;
+                    setReorderTargetIndex(newTarget);
+                    Haptics.selectionAsync();
+                  }
+                },
+                onPanResponderRelease: () => {
+                  const from = reorderDragIndexRef.current;
+                  const to = reorderTargetIndexRef.current;
+                  if (from !== null && to !== null && from !== to) {
+                    setReorderList(prev => {
+                      const next = [...prev];
+                      const [moved] = next.splice(from, 1);
+                      next.splice(to, 0, moved);
+                      return next;
+                    });
+                  }
+                  reorderDragIndexRef.current = null;
+                  reorderTargetIndexRef.current = null;
+                  setReorderDragIndex(null);
+                  setReorderTargetIndex(null);
+                  setIsDraggingReorder(false);
+                },
+                onPanResponderTerminate: () => {
+                  reorderDragIndexRef.current = null;
+                  reorderTargetIndexRef.current = null;
+                  setReorderDragIndex(null);
+                  setReorderTargetIndex(null);
+                  setIsDraggingReorder(false);
+                },
+              });
+              return (
+                <View key={item.id} style={[reorderStyles.row, {
+                  backgroundColor: isActive ? colors.gray100 : isTarget ? Colors.yellow + '18' : colors.offWhite,
+                  borderWidth: isTarget ? 1.5 : 0,
+                  borderColor: Colors.yellow,
+                  opacity: isActive ? 0.55 : 1,
+                }]}>
+                  <View {...panResponder.panHandlers} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="menu" size={20} color={colors.gray400} />
+                  </View>
+                  <Text style={{ fontSize: 20 }}>{item.emoji || '📝'}</Text>
+                  <Text style={[reorderStyles.name, { color: colors.black }]} numberOfLines={1}>{item.name}</Text>
+                  <TouchableOpacity onPress={() => { duplicateList(item); setReorderModalVisible(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                    <Ionicons name="copy-outline" size={16} color={colors.gray400} />
                   </TouchableOpacity>
                 </View>
-              </View>
-            ))}
+              );
+            })}
           </ScrollView>
         </SafeAreaView>
       </Modal>
@@ -1402,7 +1646,7 @@ export default function LijstenTab() {
           onPress={() => { setNewListName(''); setNewListModalVisible(true); }}
           activeOpacity={0.85}
         >
-          <LinearGradient colors={['#FCC10C', '#E5A800']} style={fabStyles.fabGrad}>
+          <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={fabStyles.fabGrad}>
             <Ionicons name="add" size={26} color={Colors.black} />
           </LinearGradient>
         </TouchableOpacity>
@@ -1472,57 +1716,58 @@ const rStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  banner: { paddingHorizontal: 28, paddingBottom: 32, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' },
-  bannerEyebrow: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.55)', marginBottom: 8 },
-  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 34, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 20 },
-  bannerStats: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  statTile: {
-    paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: '#FFFFFF0F', borderRadius: 16,
-    borderWidth: 1, borderColor: '#FFFFFF16', minWidth: 96,
-  },
-  statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
-  statNum: { fontFamily: 'Inter_700Bold', fontSize: 24, color: Colors.white, letterSpacing: -0.5 },
-  statLabel: { fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
 
+  // ── Clean warm header ──
+  header: { paddingHorizontal: 22, paddingBottom: 10 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
+  headerGreet: { fontFamily: 'Inter_400Regular', fontSize: 14.5, marginBottom: 3, letterSpacing: -0.1 },
+  headerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 27, textTransform: 'uppercase', letterSpacing: 0.4, lineHeight: 30 },
+
+  // ── Search bar ──
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: '#161616', borderRadius: Radius.md,
-    paddingHorizontal: 14, paddingVertical: 11,
-    borderWidth: 1, borderColor: '#2A2A2A',
+    borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 11,
+    borderWidth: 1,
   },
-  searchBarFocused: { borderColor: Colors.yellow + '60' },
-  searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, color: Colors.white },
+  searchBarFocused: {},
+  searchInput: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15 },
 
-  tabToggleWrap: { flexDirection: 'row', paddingHorizontal: 24, paddingTop: 20, paddingBottom: 8, gap: 24 },
-  tabTextBtn: { alignItems: 'center', paddingBottom: 8 },
-  tabTextLabel: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3 },
-  tabTextUnderline: { height: 3, width: '100%', borderRadius: 2, marginTop: 5 },
+  // ── Top tabs ──
+  tabToggleWrap: { flexDirection: 'row', paddingHorizontal: 22, paddingTop: 14, paddingBottom: 0, gap: 24 },
+  tabTextBtn: { alignItems: 'center', paddingBottom: 11 },
+  tabTextLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 16, letterSpacing: -0.2 },
+  tabTextUnderline: { height: 2.5, width: '100%', borderRadius: 3, position: 'absolute', bottom: 0 },
 
   skeletonList: { padding: 20 },
-  tileGrid: { padding: 20, paddingTop: 0, paddingBottom: TAB_BAR_CLEARANCE },
-  tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 16 },
-  tileWrap: { flex: 1, minWidth: '46%' },
-  tile: { flex: 1, borderRadius: 20, overflow: 'hidden', padding: 22, minHeight: 172, justifyContent: 'space-between', ...Shadow.card },
-  tileEmoji: { fontSize: 30, marginBottom: 16 },
+  tileGrid: { padding: 18, paddingTop: 4, paddingBottom: TAB_BAR_CLEARANCE },
+  sortSticky: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 14, paddingBottom: 10 },
+  tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 13, marginBottom: 13 },
+  tileWrap: { flex: 1, minWidth: '46%', maxWidth: '50%' },
+
+  // ── List tile card (white surface + tone icon) ──
+  tile: { flex: 1, borderRadius: Radius.lg, padding: 16, minHeight: 168, justifyContent: 'space-between', ...Shadow.card },
+  tileIconBox: { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  tileEmoji: { fontSize: 22 },
   tileBottom: {},
-  tileName: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.3, marginBottom: 7 },
+  tileName: { fontFamily: 'Inter_700Bold', fontSize: 17, letterSpacing: -0.3, marginBottom: 5 },
   tileCountRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   tileCount: { fontFamily: 'Inter_400Regular', fontSize: 13 },
   typeBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.pill },
   typeBadgeText: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.4 },
-  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(255,255,255,0.18)', borderBottomLeftRadius: 22, borderBottomRightRadius: 22, overflow: 'hidden' },
-  tileProgressFill: { height: 5, borderBottomLeftRadius: 22 },
+  tileProgressBg: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, borderBottomLeftRadius: Radius.lg - 1, borderBottomRightRadius: Radius.lg - 1, overflow: 'hidden' },
+  tileProgressFill: { height: 5 },
   retryBtn: { borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   retryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },
 
-  noteGrid: { padding: 20, paddingBottom: TAB_BAR_CLEARANCE },
-  noteRow: { gap: 14, marginBottom: 14 },
-  noteCard: { flex: 1, borderRadius: 20, padding: 18, minHeight: 140, ...Shadow.card },
-  noteCardTitle: { fontFamily: 'Inter_700Bold', fontSize: 15, marginBottom: 9, letterSpacing: -0.3 },
-  noteCardBody: { fontFamily: 'Inter_300Light', fontSize: 13, lineHeight: 20, flex: 1 },
-  noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 },
-  noteCardDate: { fontFamily: 'Inter_300Light', fontSize: 11 },
+  noteGrid: { padding: 18, paddingTop: 10, paddingBottom: TAB_BAR_CLEARANCE, gap: 12 },
+  noteRow: { gap: 12, marginBottom: 0 },
+  noteCard: { flex: 1, borderRadius: Radius.lg, padding: 17, minHeight: 130, ...Shadow.card },
+  noteCardTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15.5, marginBottom: 7, letterSpacing: -0.2, lineHeight: 21 },
+  noteCardBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 20, flex: 1 },
+  noteCardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+  noteCardTag: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: Radius.pill },
+  noteCardTagText: { fontFamily: 'Inter_600SemiBold', fontSize: 11.5 },
+  noteCardDate: { fontFamily: 'Inter_400Regular', fontSize: 12.5 },
 
   emptyScrollContent: { flexGrow: 1, paddingBottom: 60 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
@@ -1610,5 +1855,4 @@ const peekStyles = StyleSheet.create({
 const reorderStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg },
   name: { flex: 1, fontFamily: 'Inter_600SemiBold', fontSize: 15 },
-  arrows: { flexDirection: 'row', gap: 8, flexShrink: 0 },
 });

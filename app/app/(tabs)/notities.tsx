@@ -24,6 +24,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { Note } from '@/lib/types';
+import { getCache, setCache } from '@/lib/cache';
 import { Colors, Radius, Shadow } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 
@@ -197,10 +198,16 @@ export default function NotitiesTab() {
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     const { data } = await supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    if (data) setNotes(data);
+    if (data) { setNotes(data); setCache('cache_notes', data); }
     setLoading(false);
     setRefreshing(false);
   }, [user]);
+
+  useEffect(() => {
+    getCache<Note[]>('cache_notes').then(d => {
+      if (d) { setNotes(d); setLoading(false); }
+    });
+  }, []);
 
   useEffect(() => {
     fetchNotes();
@@ -302,7 +309,7 @@ export default function NotitiesTab() {
           {!search && (
             <Text style={[styles.emptyText, { color: colors.gray400 }]}>
               Stuur via WhatsApp:{'\n'}
-              <Text style={styles.exampleMsg}>"onthoud: altijd bellen voor je bij Jan langskomt"</Text>
+              <Text style={styles.exampleMsg}>"onthoud: altijd water drinken voor de lunch"</Text>
             </Text>
           )}
         </View>

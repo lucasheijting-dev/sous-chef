@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Platform, Animated } from 'react-native';
+import { View, StyleSheet, Platform, Animated, Dimensions } from 'react-native';
 
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,10 @@ import { useUser } from '@/context/UserContext';
 import { Colors } from '@/constants/Design';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
+
+const SCREEN_W = Dimensions.get('window').width;
+const TAB_SIDE_MARGIN = 56;
+const TAB_W = SCREEN_W - TAB_SIDE_MARGIN * 2;
 
 const ALL_TABS = [
   { name: 'index',        label: 'Lijsten', icon: 'layers',        iconOff: 'layers-outline'        },
@@ -31,13 +35,8 @@ function TabIcon({ name, focused }: { name: IoniconName; focused: boolean; label
 
   return (
     <View style={styles.iconCol}>
-      {Platform.OS !== 'android' && (
-        <Animated.View style={[styles.glowDot, { opacity: glowAnim }]} />
-      )}
       <Ionicons name={name} size={24} color={focused ? Colors.yellow : 'rgba(255,255,255,0.55)'} />
-      {Platform.OS === 'android' && (
-        <Animated.View style={[styles.androidDot, { opacity: glowAnim }]} />
-      )}
+      <Animated.View style={[styles.activeDot, { opacity: glowAnim }]} />
     </View>
   );
 }
@@ -98,10 +97,12 @@ const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
     bottom: Platform.OS === 'web' ? 16 : 28,
-    left: 56,
-    right: 56,
-    height: 58,
-    borderRadius: 29,
+    left: 0,
+    right: 0,
+    marginHorizontal: TAB_SIDE_MARGIN,
+    width: TAB_W,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: 'rgba(10,10,10,0.70)',
     borderTopWidth: 0,
     borderWidth: 0.5,
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   tabBarItem: {
-    height: 58,
+    height: 66,
     paddingTop: 0,
     paddingBottom: 0,
     paddingHorizontal: 0,
@@ -133,35 +134,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  glowDot: {
-    position: 'absolute',
-    top: -16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.yellow,
-    opacity: 0,
-    // blur effect via large shadow
-    shadowColor: Colors.yellow,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 16,
-  },
-  androidDot: {
+  activeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
     backgroundColor: Colors.yellow,
-    marginTop: 2,
-  },
-  tabLabel: {
-    fontFamily: 'Inter_400Regular',
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.50)',
-    letterSpacing: 0.2,
-  },
-  tabLabelActive: {
-    color: Colors.yellow,
-    fontFamily: 'Inter_600SemiBold',
+    marginTop: 3,
+    shadowColor: Colors.yellow,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
   },
 });

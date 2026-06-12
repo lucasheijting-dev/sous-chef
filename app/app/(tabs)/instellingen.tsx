@@ -21,7 +21,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
@@ -147,7 +146,7 @@ function SpringModal({ visible, children, ...rest }: React.ComponentProps<typeof
   );
 }
 
-function AnimatedStatChip({ emoji, value, label }: { emoji: string; value: number; label: string }) {
+function AnimatedStatChip({ emoji, value, label, onPress }: { emoji: string; value: number; label: string; onPress?: () => void }) {
   const [displayed, setDisplayed] = useState(0);
   const startedRef = useRef(false);
 
@@ -174,11 +173,7 @@ function AnimatedStatChip({ emoji, value, label }: { emoji: string; value: numbe
     return () => clearInterval(id);
   }, [value]);
 
-  return (
-    <View style={styles.statChip}>
-      <Text style={styles.statChipText}>{emoji} {displayed} {label}</Text>
-    </View>
-  );
+  return null; // replaced by statCard inline
 }
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
@@ -274,6 +269,7 @@ export default function InstellingenTab() {
   const [caldavConnected, setCaldavConnected] = useState(false);
   const [caldavCreds, setCaldavCreds] = useState<{ username: string; password: string } | null>(null);
   const [showCaldavCreds, setShowCaldavCreds] = useState(false);
+  const [calendarProvider, setCalendarProvider] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState<number | null>(null);
   const [listsCount, setListsCount] = useState<number | null>(null);
   const [eventsCount, setEventsCount] = useState<number | null>(null);
@@ -343,10 +339,16 @@ export default function InstellingenTab() {
     if (!user || user.id === 'dev') return;
     supabase
       .from('users')
-      .select('caldav_username')
+      .select('caldav_username, calendar_provider')
       .eq('id', user.id)
       .single()
-      .then(({ data }) => { if (data) setCaldavConnected(!!data.caldav_username); });
+      .then(({ data }) => {
+        if (data) {
+          setCaldavConnected(!!data.caldav_username);
+          const provider = data.calendar_provider ?? (data.caldav_username ? 'iphone' : null);
+          setCalendarProvider(provider);
+        }
+      });
     supabase
       .from('calendar_streams')
       .select('*')
@@ -580,6 +582,44 @@ export default function InstellingenTab() {
     }, 1500);
   }
 
+  function connectGoogle() {
+    if (!user || user.id === 'dev') return;
+    Linking.openURL(`${API_BASE}/auth/google?userId=${user.id}`);
+  }
+
+  function connectOutlook() {
+    if (!user || user.id === 'dev') return;
+    Linking.openURL(`${API_BASE}/auth/microsoft?userId=${user.id}`);
+  }
+
+  async function setNoCalendar() {
+    if (!user || user.id === 'dev') return;
+    try {
+      await fetch(`${API_BASE}/auth/calendar-provider`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, provider: 'none' }),
+      });
+      setCalendarProvider('none');
+      showToast('Agenda-koppeling uitgeschakeld');
+    } catch {
+      showToast('Er ging iets mis');
+    }
+  }
+
+  async function selectIPhoneCalendar() {
+    if (!user || user.id === 'dev') return;
+    try {
+      await fetch(`${API_BASE}/auth/calendar-provider`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, provider: 'iphone' }),
+      });
+      setCalendarProvider('iphone');
+    } catch {}
+    openCalendarProfile();
+  }
+
   function confirmLogout() {
     Alert.alert('Koppeling verwijderen?', 'Je kunt opnieuw koppelen met hetzelfde nummer.', [
       { text: 'Annuleer', style: 'cancel' },
@@ -679,88 +719,86 @@ export default function InstellingenTab() {
         onScroll={e => setScrollY(e.nativeEvent.contentOffset.y)}
         scrollEventThrottle={16}
       >
-        {/* ── Profile banner ─────────────────────────────────────────── */}
-        <View style={[styles.banner, { paddingTop: insets.top + 48 }]}>
-          <BlurView
-            intensity={Platform.OS === 'web' ? 60 : 80}
-            tint="dark"
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <View
-            style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]}
-            pointerEvents="none"
-          />
-          <View style={styles.avatarBox}>
-            <Image source={require('@/assets/images/logo.jpg')} style={styles.avatar} />
+        {/* ── Profile section (warm, clean) ─────────────────────────── */}
+        <View style={[styles.profileSection, { paddingTop: insets.top + 20 }]}>
+          {/* Yellow squircle avatar */}
+          <View style={styles.profileAvatar}>
+            <Image source={require('@/assets/images/logo.jpg')} style={styles.profileAvatarImg} />
           </View>
 
           {/* Inline name edit */}
           {editingName ? (
-            <View style={{ alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <View style={{ alignItems: 'center', gap: 8, marginTop: 10 }}>
               <TextInput
                 value={nameValue}
                 onChangeText={setNameValue}
-                style={styles.bannerNameInput}
+                style={[styles.profileNameInput, { color: colors.black, borderBottomColor: Colors.yellow }]}
                 autoFocus
                 selectionColor={Colors.yellow}
                 returnKeyType="done"
                 onSubmitEditing={saveBannerName}
                 onBlur={saveBannerName}
-                placeholderTextColor="rgba(255,255,255,0.4)"
+                placeholderTextColor={colors.gray400}
                 placeholder="Jouw naam"
               />
-              <TouchableOpacity onPress={saveBannerName} style={styles.bannerSaveBtn}>
-                <Text style={styles.bannerSaveBtnText}>Opslaan</Text>
+              <TouchableOpacity onPress={saveBannerName} style={[styles.profileSaveBtn, { backgroundColor: Colors.yellow }]}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: Colors.black }}>Opslaan</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
-              onPress={() => {
-                setNameValue(displayName ?? '');
-                setEditingName(true);
-              }}
+              onPress={() => { setNameValue(displayName ?? ''); setEditingName(true); }}
               activeOpacity={0.75}
-              style={styles.nameTouchable}
+              style={{ alignItems: 'center', marginTop: 12 }}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={styles.bannerName}>{displayName || 'Sous-Chef'}</Text>
-                <Ionicons name="pencil-outline" size={13} color="rgba(255,255,255,0.4)" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <Text style={[styles.profileName, { color: colors.black }]}>{displayName || 'Stel naam in'}</Text>
+                <Ionicons name="pencil-outline" size={17} color={colors.gray400} />
               </View>
-              {displayName ? <Text style={styles.bannerSubtitle}>Sous-Chef</Text> : null}
+              {!displayName && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 2 }}>Tik om naam in te stellen</Text>}
             </TouchableOpacity>
           )}
 
-          {/* Phone + copy button */}
+          {/* Phone + copy */}
           <TouchableOpacity
-            style={{ alignItems: 'center' }}
-            onPress={() => copyToClipboard('+31684965318')}
+            style={{ alignItems: 'center', marginTop: 8 }}
+            onPress={() => copyToClipboard(user?.whatsapp_number ? `+${user.whatsapp_number}` : '')}
             activeOpacity={0.7}
           >
-            <Text style={styles.bannerNumber}>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.gray400, letterSpacing: 0.2 }}>
               {user?.whatsapp_number ? formatPhone(user.whatsapp_number) : '—'}
             </Text>
-            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-              Tik om te kopiëren
-            </Text>
+            <View style={[styles.profileCopyBtn, { backgroundColor: colors.gray100 }]}>
+              <Ionicons name="copy-outline" size={12} color={colors.gray400} />
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.gray400 }}>Kopieer nummer</Text>
+            </View>
           </TouchableOpacity>
 
           {/* Lid sinds */}
           {lidSinds ? (
-            <Text style={styles.bannerMeta}>Lid sinds {lidSinds}</Text>
+            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginTop: 6 }}>Lid sinds {lidSinds}</Text>
           ) : null}
 
-          {/* Stats chips with count-up animation */}
+          {/* Stats cards */}
           {(messageCount !== null || listsCount !== null || eventsCount !== null) ? (
             <View style={styles.statsRow}>
               {messageCount !== null ? (
-                <AnimatedStatChip emoji="💬" value={messageCount} label="berichten" />
+                <TouchableOpacity style={[styles.statCard, { backgroundColor: colors.surface }]} activeOpacity={0.75}>
+                  <Text style={[styles.statNum, { color: colors.black }]}>💬 {messageCount}</Text>
+                  <Text style={[styles.statLabel, { color: colors.gray400 }]}>berichten</Text>
+                </TouchableOpacity>
               ) : null}
               {eventsCount !== null ? (
-                <AnimatedStatChip emoji="📅" value={eventsCount} label="afspraken" />
+                <TouchableOpacity style={[styles.statCard, { backgroundColor: colors.surface }]} onPress={() => router.push('/agenda' as any)} activeOpacity={0.75}>
+                  <Text style={[styles.statNum, { color: colors.black }]}>📅 {eventsCount}</Text>
+                  <Text style={[styles.statLabel, { color: colors.gray400 }]}>afspraken</Text>
+                </TouchableOpacity>
               ) : null}
               {listsCount !== null ? (
-                <AnimatedStatChip emoji="📋" value={listsCount} label="lijsten" />
+                <TouchableOpacity style={[styles.statCard, { backgroundColor: colors.surface }]} onPress={() => router.push('/' as any)} activeOpacity={0.75}>
+                  <Text style={[styles.statNum, { color: colors.black }]}>📋 {listsCount}</Text>
+                  <Text style={[styles.statLabel, { color: colors.gray400 }]}>lijsten</Text>
+                </TouchableOpacity>
               ) : null}
             </View>
           ) : null}
@@ -772,7 +810,7 @@ export default function InstellingenTab() {
           <SettingsRow
             icon="person-outline"
             label="Mijn profiel"
-            subtitle="Naam, leeftijd, werkgever, vrienden"
+            subtitle="Naam, leeftijd en persoonlijke context"
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setProfielModalVisible(true)}
           />
@@ -784,7 +822,7 @@ export default function InstellingenTab() {
           <SettingsRow
             icon="grid-outline"
             label="Modules"
-            subtitle="Agenda, habits, notities en bonnetjes"
+            subtitle="Agenda, Habits, Notities en Bonnetjes"
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setModulesModalVisible(true)}
           />
@@ -793,6 +831,7 @@ export default function InstellingenTab() {
             icon="notifications-outline"
             label="Meldingen"
             value={prefs?.habits_enabled ? reminderTime : geoAlertEnabled ? 'Aan' : 'Uit'}
+            subtitle={(!prefs?.habits_enabled && !geoAlertEnabled) ? 'Zet aan voor Habits-herinneringen' : undefined}
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setMeldingModalVisible(true)}
           />
@@ -801,6 +840,7 @@ export default function InstellingenTab() {
             icon="bulb-outline"
             label="Suggesties"
             value={SUGGESTIONS_FREQ_OPTIONS.find(o => o.value === suggestionsFreq)?.label}
+            subtitle="Proactieve tips en herinneringen van de bot"
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setSuggestiesModalVisible(true)}
           />
@@ -832,7 +872,7 @@ export default function InstellingenTab() {
           <SettingsRow
             icon="calendar-outline"
             label="Agenda & categorieën"
-            subtitle={caldavConnected ? 'iPhone Agenda: Verbonden' : 'Koppelen + categorie-instellingen'}
+            subtitle={calendarProvider === 'iphone' ? 'iPhone Agenda: Verbonden' : calendarProvider === 'google' ? 'Google Calendar: Verbonden' : calendarProvider === 'outlook' ? 'Outlook: Verbonden' : calendarProvider === 'none' ? 'Geen agenda-koppeling' : 'Koppelen + categorie-instellingen'}
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setAgendaModalVisible(true)}
           />
@@ -942,7 +982,7 @@ export default function InstellingenTab() {
             <View style={[styles.noteCard, { backgroundColor: colors.yellowLight ?? '#FFF9CC', borderColor: colors.yellow }]}>
               <Ionicons name="information-circle-outline" size={16} color={Colors.yellow} />
               <Text style={[styles.noteText, { color: colors.black }]}>
-                Maak habits aan via WhatsApp. Ze verschijnen dan hier in de app.
+                Maak Habits aan via WhatsApp. Ze verschijnen dan hier in de app.
               </Text>
             </View>
 
@@ -1510,20 +1550,21 @@ export default function InstellingenTab() {
             </View>
             <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Koppeling</Text>
             <View style={[styles.card, { backgroundColor: colors.white }]}>
-              <SettingsRow
-                icon="calendar-outline"
-                label="iPhone Agenda koppelen"
-                subtitle="Na installatie: Instellingen → Algemeen → VPN en apparaatbeheer"
-                right={
-                  caldavConnected ? (
-                    <View style={styles.connectedBadge}><Text style={styles.connectedBadgeText}>✓ Verbonden</Text></View>
-                  ) : (
-                    <View style={styles.disconnectedBadge}><Text style={styles.disconnectedBadgeText}>Niet gekoppeld</Text></View>
-                  )
-                }
-                onPress={openCalendarProfile}
-              />
-              {caldavCreds && (
+              {/* iPhone / iCloud */}
+              <TouchableOpacity style={styles.row} onPress={selectIPhoneCalendar} activeOpacity={0.7}>
+                <View style={[styles.rowIcon, { backgroundColor: calendarProvider === 'iphone' ? Colors.yellow + '33' : colors.gray100 }]}>
+                  <Ionicons name="phone-portrait-outline" size={18} color={calendarProvider === 'iphone' ? Colors.yellow : colors.black} />
+                </View>
+                <View style={styles.rowLabelWrap}>
+                  <Text style={[styles.rowLabel, { color: colors.black }]}>iPhone / iCloud</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.gray400 }]}>CalDAV · installeer profiel</Text>
+                </View>
+                {calendarProvider === 'iphone'
+                  ? <View style={styles.connectedBadge}><Text style={styles.connectedBadgeText}>✓ Actief</Text></View>
+                  : <Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+              </TouchableOpacity>
+              {/* CalDAV credentials (iPhone only) */}
+              {calendarProvider === 'iphone' && caldavCreds && (
                 <>
                   <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
                   <TouchableOpacity
@@ -1552,6 +1593,34 @@ export default function InstellingenTab() {
                   )}
                 </>
               )}
+              {/* Google Calendar */}
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <TouchableOpacity style={styles.row} onPress={connectGoogle} activeOpacity={0.7}>
+                <View style={[styles.rowIcon, { backgroundColor: calendarProvider === 'google' ? '#EA433533' : colors.gray100 }]}>
+                  <Ionicons name="logo-google" size={18} color={calendarProvider === 'google' ? '#EA4335' : colors.black} />
+                </View>
+                <View style={styles.rowLabelWrap}>
+                  <Text style={[styles.rowLabel, { color: colors.black }]}>Google Calendar</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.gray400 }]}>Verbinden via Google-account</Text>
+                </View>
+                {calendarProvider === 'google'
+                  ? <View style={styles.connectedBadge}><Text style={styles.connectedBadgeText}>✓ Actief</Text></View>
+                  : <Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+              </TouchableOpacity>
+              {/* No calendar */}
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <TouchableOpacity style={styles.row} onPress={setNoCalendar} activeOpacity={0.7}>
+                <View style={[styles.rowIcon, { backgroundColor: calendarProvider === 'none' ? colors.gray100 : colors.gray100 }]}>
+                  <Ionicons name="ban-outline" size={18} color={colors.gray400} />
+                </View>
+                <View style={styles.rowLabelWrap}>
+                  <Text style={[styles.rowLabel, { color: colors.black }]}>Geen agenda</Text>
+                  <Text style={[styles.rowSubtitle, { color: colors.gray400 }]}>Alleen in de app opslaan</Text>
+                </View>
+                {calendarProvider === 'none'
+                  ? <View style={styles.connectedBadge}><Text style={styles.connectedBadgeText}>✓ Actief</Text></View>
+                  : <Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+              </TouchableOpacity>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: 20, marginTop: 28, marginBottom: 8 }}>
               <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 0, marginBottom: 0, marginLeft: 0 }]}>Categorieën</Text>
@@ -1658,9 +1727,9 @@ export default function InstellingenTab() {
                 '"mijn mediteren streak?"',
               ]},
               { emoji: '📝', title: 'Notities', items: [
-                '"onthoud: altijd bellen voor bezoek aan Jan"',
+                '"onthoud: na 22u geen koffie meer"',
                 '"noteer: wifi wachtwoord is Appel123"',
-                '"wat heb ik over Jan opgeslagen?"',
+                '"wat heb ik genoteerd over koffie?"',
               ]},
               { emoji: '🧾', title: 'Bonnetjes', items: [
                 'Stuur een foto van een kassabon',
@@ -1876,55 +1945,37 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.offWhite },
   content: { paddingBottom: 120 },
 
-  // Banner
-  banner: {
+  // ── Profile section (warm, clean) ──
+  profileSection: {
     alignItems: 'center',
-    paddingTop: 28,
-    paddingBottom: 40,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-    overflow: 'hidden',
+    paddingBottom: 28,
   },
-  avatarBox: { marginBottom: 14 },
-  avatar: { width: 72, height: 72, borderRadius: 22 },
-  nameTouchable: { alignItems: 'center', gap: 4 },
-  bannerName: { fontFamily: 'TitanOne_400Regular', fontSize: 22, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
-  bannerNameInput: {
-    fontFamily: 'TitanOne_400Regular',
-    fontSize: 22,
-    color: Colors.white,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    borderBottomWidth: 1.5,
-    borderBottomColor: 'rgba(255,255,255,0.5)',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    minWidth: 160,
-  },
-  bannerSaveBtn: {
+  profileAvatar: {
+    width: 80, height: 80, borderRadius: 22,
     backgroundColor: Colors.yellow,
-    borderRadius: Radius.pill,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    overflow: 'hidden',
+    ...Shadow.yellow,
   },
-  bannerSaveBtnText: {
-    fontFamily: 'Inter_700Bold',
-    fontSize: 13,
-    color: Colors.black,
+  profileAvatarImg: { width: 80, height: 80, borderRadius: 22 },
+  profileName: { fontFamily: 'Inter_700Bold', fontSize: 22, letterSpacing: -0.5 },
+  profileNameInput: {
+    fontFamily: 'Inter_700Bold', fontSize: 22, letterSpacing: -0.5,
+    textAlign: 'center', borderBottomWidth: 1.5,
+    paddingHorizontal: 16, paddingVertical: 4, minWidth: 160,
   },
-  bannerSubtitle: { fontFamily: 'Inter_300Light', fontSize: 13, color: 'rgba(255,255,255,0.5)', marginBottom: 2 },
-  pencilIcon: { marginTop: 4 },
-  bannerNumber: { fontFamily: 'Inter_300Light', fontSize: 14, color: '#888', marginTop: 6 },
-  bannerMeta: { fontFamily: 'Inter_300Light', fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 4 },
-  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14, justifyContent: 'center' },
-  statChip: {
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderRadius: Radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+  profileSaveBtn: { borderRadius: Radius.pill, paddingHorizontal: 20, paddingVertical: 8 },
+  profileCopyBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, marginTop: 6,
   },
-  statChipText: { fontFamily: 'Inter_400Regular', fontSize: 12, color: 'rgba(255,255,255,0.65)' },
+  statsRow: { flexDirection: 'row', gap: 10, marginTop: 16, justifyContent: 'center' },
+  statCard: {
+    borderRadius: Radius.md, padding: 12, minWidth: 88,
+    alignItems: 'center', gap: 3,
+    ...Shadow.card,
+  },
+  statNum: { fontFamily: 'Inter_600SemiBold', fontSize: 15 },
+  statLabel: { fontFamily: 'Inter_400Regular', fontSize: 11 },
 
   // Section labels
   sectionLabel: {
@@ -1941,7 +1992,7 @@ const styles = StyleSheet.create({
   // Card
   card: {
     backgroundColor: Colors.white,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     marginHorizontal: 20,
     overflow: 'hidden',
     ...Shadow.card,

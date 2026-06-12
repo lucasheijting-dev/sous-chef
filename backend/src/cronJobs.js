@@ -280,27 +280,28 @@ cron.schedule('*/15 * * * *', async () => {
   }
 });
 
-// ── CalDAV Bi-directional Sync — every 5 minutes ─────────────────────────────
+// ── Calendar Bi-directional Sync — every 5 minutes ───────────────────────────
 
 cron.schedule('*/5 * * * *', async () => {
-  if (!caldav.isConfigured()) return;
-
   let users;
   try {
-    users = await db.getUsersWithCalDAV();
+    users = await db.getUsersWithCalendar();
   } catch (err) {
-    console.error('[CalDAV Sync] Failed to fetch users:', err.message);
+    console.error('[Calendar Sync] Failed to fetch users:', err.message);
     return;
   }
 
   for (const user of users) {
+    const provider = user.calendar_provider ?? (user.caldav_username ? 'iphone' : null);
+    if (!provider || provider === 'none') continue;
+
     try {
       const { imported, deleted, updated } = await syncUserCalendar(user);
       if (imported > 0 || deleted > 0) {
-        console.log(`[CalDAV Sync] user ${user.id}: +${imported} imported, -${deleted} deleted, ~${updated} checked`);
+        console.log(`[Calendar Sync] user ${user.id} (${provider}): +${imported} imported, -${deleted} deleted, ~${updated} checked`);
       }
     } catch (err) {
-      console.error(`[CalDAV Sync] Failed for user ${user.id}:`, err.message);
+      console.error(`[Calendar Sync] Failed for user ${user.id}:`, err.message);
     }
   }
 });
@@ -316,7 +317,7 @@ cron.schedule('*/13 * * * *', async () => {
   } catch {}
 });
 
-// ── Calendar sync health check — every day at 07:30 ──────────────────────────
+// ── CalDAV health check — every day at 07:30 ─────────────────────────────────
 
 cron.schedule('30 7 * * *', async () => {
   if (!caldav.isConfigured()) return;

@@ -265,6 +265,60 @@ async function getUsersWithCalDAV() {
   return data ?? [];
 }
 
+async function getCalendarProvider(userId) {
+  const { data } = await supabase
+    .from('users')
+    .select('calendar_provider, caldav_username, caldav_password, google_access_token, google_refresh_token, google_token_expiry, ms_access_token, ms_refresh_token, ms_token_expiry')
+    .eq('id', userId)
+    .single();
+  if (!data) return null;
+  const provider = data.calendar_provider ?? (data.caldav_username ? 'iphone' : null);
+  return { ...data, calendar_provider: provider };
+}
+
+async function setCalendarProvider(userId, provider) {
+  await supabase.from('users').update({ calendar_provider: provider }).eq('id', userId);
+}
+
+async function storeGoogleTokens(userId, accessToken, refreshToken, expiresAt) {
+  await supabase.from('users').update({
+    google_access_token:  accessToken,
+    google_refresh_token: refreshToken,
+    google_token_expiry:  expiresAt,
+  }).eq('id', userId);
+}
+
+async function updateGoogleTokens(userId, accessToken, expiresAt) {
+  await supabase.from('users').update({
+    google_access_token: accessToken,
+    google_token_expiry: expiresAt,
+  }).eq('id', userId);
+}
+
+async function storeMicrosoftTokens(userId, accessToken, refreshToken, expiresAt) {
+  await supabase.from('users').update({
+    ms_access_token:  accessToken,
+    ms_refresh_token: refreshToken,
+    ms_token_expiry:  expiresAt,
+  }).eq('id', userId);
+}
+
+async function updateMicrosoftTokens(userId, accessToken, refreshToken, expiresAt) {
+  await supabase.from('users').update({
+    ms_access_token:  accessToken,
+    ms_refresh_token: refreshToken,
+    ms_token_expiry:  expiresAt,
+  }).eq('id', userId);
+}
+
+async function getUsersWithCalendar() {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number, calendar_provider, caldav_username, caldav_password, google_access_token, google_refresh_token, google_token_expiry, ms_access_token, ms_refresh_token, ms_token_expiry')
+    .or('caldav_username.not.is.null,google_refresh_token.not.is.null,ms_refresh_token.not.is.null');
+  return data ?? [];
+}
+
 async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore, caldavUid, calendarStream }) {
   const { data, error } = await supabase
     .from('events')
@@ -984,6 +1038,13 @@ module.exports = {
   canSendGeoAlert,
   markGeoAlertSent,
   getUsersWithCalDAV,
+  getUsersWithCalendar,
+  getCalendarProvider,
+  setCalendarProvider,
+  storeGoogleTokens,
+  updateGoogleTokens,
+  storeMicrosoftTokens,
+  updateMicrosoftTokens,
   getCalDAVUidsByUser,
   getEventsWithCalDAVUid,
   deleteEventsByIds,

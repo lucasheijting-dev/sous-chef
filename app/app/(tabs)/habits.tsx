@@ -13,10 +13,10 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
@@ -28,8 +28,16 @@ import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { SkeletonHabitCard } from '@/components/SkeletonCard';
 import { Toast, useToast } from '@/components/Toast';
 import Confetti from '@/components/Confetti';
+import { getCache, setCache } from '@/lib/cache';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5  && h < 12) return 'Goedemorgen';
+  if (h >= 12 && h < 18) return 'Goedemiddag';
+  return 'Goedenavond';
+}
 
 function haptic(style: 'light' | 'medium' | 'success' = 'light') {
   if (Platform.OS === 'web') return;
@@ -39,12 +47,12 @@ function haptic(style: 'light' | 'medium' | 'success' = 'light') {
 }
 
 const LEVELS = [
-  { key: 'mini',  emoji: '🥉', label: 'Brons',  activeBg: '#78350F', activeFg: '#FEF3C7', pts: 1 },
-  { key: 'good',  emoji: '🥈', label: 'Zilver', activeBg: '#1F2937', activeFg: '#F9FAFB', pts: 2 },
-  { key: 'elite', emoji: '🥇', label: 'Goud',   activeBg: Colors.yellow, activeFg: Colors.black, pts: 3 },
+  { key: 'mini',  emoji: '🥉', label: 'Brons',  medalBg: '#BD7E4E', borderActive: '#BD7E4E', pts: 1 },
+  { key: 'good',  emoji: '🥈', label: 'Zilver', medalBg: '#A9AFB7', borderActive: '#A9AFB7', pts: 2 },
+  { key: 'elite', emoji: '🥇', label: 'Goud',   medalBg: Colors.yellow, borderActive: Colors.yellow, pts: 3 },
 ] as const;
 
-const STRIP_DAYS = new Date().getDate(); // covers all days this month up to today
+const STRIP_DAYS = Math.max(7, new Date().getDate()); // at least 7 so week-lookback never underflows
 const today = new Date().toISOString().split('T')[0];
 
 const MONTH_START = (() => {
@@ -95,7 +103,9 @@ function computeStreak(habitId: string, logs: HabitLog[], endDate: string): numb
 }
 
 function computeWeekScore(logs: HabitLog[]): number {
-  const weekStart = strip[STRIP_DAYS - 7].date;
+  const d = new Date();
+  d.setDate(d.getDate() - 6);
+  const weekStart = d.toISOString().split('T')[0];
   return logs
     .filter(l => l.date >= weekStart && l.date <= today)
     .reduce((s, l) => s + (LEVELS.find(lv => lv.key === l.level)?.pts ?? 0), 0);
@@ -246,48 +256,6 @@ function LoggedPill({ log }: { log: HabitLog | undefined }) {
       </LinearGradient>
       {timeStr && <Text style={{ fontFamily: 'Inter_300Light', fontSize: 10, color: Colors.gray400 }}>{timeStr}</Text>}
     </Animated.View>
-  );
-}
-
-// ── Level Button ───────────────────────────────────────────────────────────────
-
-function LevelButton({
-  emoji, label, isActive, activeBg, activeFg, onPress, isLoading,
-}: {
-  emoji: string; label: string; isActive: boolean;
-  activeBg: string; activeFg: string; onPress: () => void; isLoading: boolean;
-}) {
-  const { colors } = useTheme();
-  const scale = useRef(new Animated.Value(1)).current;
-
-  function handlePress() {
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.85, duration: 80, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 220, friction: 8 }),
-    ]).start();
-    onPress();
-  }
-
-  return (
-    <TouchableOpacity onPress={handlePress} disabled={isLoading} activeOpacity={1} style={s.levelBtnTouch}>
-      <Animated.View
-        style={[
-          s.levelBtn,
-          { borderColor: colors.gray200, backgroundColor: colors.offWhite },
-          isActive && { backgroundColor: activeBg, borderColor: activeBg },
-          isActive && activeBg === Colors.yellow && { shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 6 },
-          { transform: [{ scale }] },
-        ]}
-      >
-        <Text style={s.levelEmoji}>{emoji}</Text>
-        <Text style={[s.levelLabel, { color: colors.gray600 }, isActive && { color: activeFg }]}>{label}</Text>
-        {isActive && (
-          <View style={s.levelCheck}>
-            <Ionicons name="checkmark-circle" size={14} color={activeFg} />
-          </View>
-        )}
-      </Animated.View>
-    </TouchableOpacity>
   );
 }
 
@@ -455,8 +423,15 @@ function HabitsLite() {
     ]);
     if (h) setHabits(h);
     if (l) setLogs(l);
+    if (h && l) setCache('cache_habits_lite', { habits: h, logs: l });
     setLoading(false);
   }, [user]);
+
+  useEffect(() => {
+    getCache<{ habits: Habit[]; logs: HabitLog[] }>('cache_habits_lite').then(d => {
+      if (d) { setHabits(d.habits); setLogs(d.logs); setLoading(false); }
+    });
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -480,11 +455,9 @@ function HabitsLite() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
-      <View style={[s.banner, { paddingTop: insets.top + 40 }]}>
-        <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.75)' }]} pointerEvents="none" />
-        <Text style={s.bannerTitle}>Habits</Text>
-        <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, marginTop: 4 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
+      <View style={{ paddingTop: insets.top + 14, paddingHorizontal: 22, paddingBottom: 10 }}>
+        <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14.5, color: colors.gray400, marginBottom: 3 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
+        <Text style={{ fontFamily: 'TitanOne_400Regular', fontSize: 27, color: colors.black, textTransform: 'uppercase', letterSpacing: 0.4 }}>Habits</Text>
       </View>
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }}>
         {loading ? (
@@ -540,113 +513,69 @@ function HabitsLite() {
 // ── Habit Card ─────────────────────────────────────────────────────────────────
 
 function HabitCard({
-  habit, log, streak, logs, selectedDay, loadingKey, onLog,
+  habit, log, streak, selectedDay, loadingKey, onCycle,
 }: {
-  habit: Habit;
-  log: HabitLog | undefined;
-  streak: number;
-  logs: HabitLog[];
-  selectedDay: string;
-  loadingKey: string | null;
-  onLog: (habit: Habit, level: 'mini' | 'good' | 'elite') => void;
+  habit: Habit; log: HabitLog | undefined; streak: number;
+  selectedDay: string; loadingKey: string | null;
+  onCycle: (habit: Habit, log: HabitLog | undefined) => void;
 }) {
-  const { colors } = useTheme();
-  const cardScale = useRef(new Animated.Value(1)).current;
-  const burstScale = useRef(new Animated.Value(1)).current;
+  const { colors, isDark } = useTheme();
+  const scale = useRef(new Animated.Value(1)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
-  const prevLogLevel = useRef<string | undefined>(undefined);
+  const prevLevel = useRef<string | undefined>(undefined);
+  const level = log?.level;
+  const isLoading = loadingKey === `${habit.id}-${selectedDay}-cycle`;
 
   useEffect(() => {
-    if (log?.level && log.level !== prevLogLevel.current) {
+    if (level && level !== prevLevel.current) {
       Animated.sequence([
-        Animated.spring(burstScale, { toValue: 1.08, useNativeDriver: true, tension: 300, friction: 10 }),
-        Animated.spring(burstScale, { toValue: 1,    useNativeDriver: true, tension: 300, friction: 10 }),
-      ]).start();
-      Animated.sequence([
-        Animated.timing(flashOpacity, { toValue: 1, duration: 80,  useNativeDriver: true }),
+        Animated.timing(flashOpacity, { toValue: 0.6, duration: 80, useNativeDriver: true }),
         Animated.timing(flashOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
       ]).start();
     }
-    prevLogLevel.current = log?.level;
-  }, [log?.level]);
+    prevLevel.current = level;
+  }, [level]);
 
-  const isElite = log?.level === 'elite';
-  const accentColor = log?.level === 'elite' ? Colors.yellow
-    : log?.level === 'good'  ? '#6B7280'
-    : log?.level === 'mini'  ? '#92400E'
-    : colors.gray200;
+  const medalBg: Record<string, string> = {
+    mini: '#BD7E4E', good: isDark ? '#B6BCC4' : '#A9AFB7', elite: Colors.yellow,
+  };
+  const medalFg: Record<string, string> = { mini: '#fff', good: '#fff', elite: Colors.black };
+  const isFilled = !!level;
+
+  const goalText = level === 'elite' ? habit.elite_goal : level === 'good' ? habit.good_goal : level === 'mini' ? habit.mini_goal : null;
+  const levelLabel = LEVELS.find(l => l.key === level)?.label;
+  const subText = level
+    ? `${levelLabel} gelogd${goalText ? ` · ${goalText}` : ''}`
+    : streak > 0 ? `${streak} ${streak === 1 ? 'dag' : 'dagen'} op rij`
+    : 'Nog niet gelogd';
+
+  function handlePress() {
+    Animated.sequence([
+      Animated.spring(scale, { toValue: 0.92, useNativeDriver: true, speed: 80 }),
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 220, friction: 8 }),
+    ]).start();
+    onCycle(habit, log);
+  }
 
   return (
-    <Pressable
-      onPressIn={() => Animated.spring(cardScale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
-      onPressOut={() => Animated.spring(cardScale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
-    >
-      <Animated.View
-        style={[
-          s.habitCard,
-          { backgroundColor: colors.white },
-          isElite && { shadowColor: '#FCC10C', shadowOpacity: 0.25, shadowRadius: 16, shadowOffset: { width: 0, height: 4 }, elevation: 8 },
-          { transform: [{ scale: cardScale }, { scale: burstScale }] },
-        ]}
-      >
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { borderRadius: Radius.xl, backgroundColor: Colors.yellow, opacity: flashOpacity }]}
-        />
-        <View style={[s.accentBar, { backgroundColor: accentColor }]} />
-
-        <View style={s.habitInner}>
-          <View style={s.habitHeader}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginRight: 10 }}>
-                <Text style={[s.habitName, { color: colors.black }]}>{habit.name}</Text>
-                <View style={[s.streakChip, { backgroundColor: colors.gray100 }]}>
-                  <Text style={[s.streakChipText, { color: colors.gray600 }]}>
-                    🔥 {streak > 0 ? streak : '—'}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <CompletionRing level={log?.level} />
-                {streak > 0 && (
-                  <Text style={[s.streakBadge, { color: colors.gray400 }]}>
-                    {streak} {streak === 1 ? 'dag' : 'dagen'} op rij
-                  </Text>
-                )}
-              </View>
-              <SparkLine habitId={habit.id} logs={logs} />
-            </View>
-            <LoggedPill log={log} />
-          </View>
-
-          <View style={[s.cardDivider, { backgroundColor: colors.gray100 }]} />
-
-          <View style={s.levelRow}>
-            {LEVELS.map(lvl => {
-              const btnKey = `${habit.id}-${selectedDay}-${lvl.key}`;
-              return (
-                <LevelButton
-                  key={lvl.key}
-                  emoji={lvl.emoji}
-                  label={lvl.label}
-                  isActive={log?.level === lvl.key}
-                  activeBg={lvl.activeBg}
-                  activeFg={lvl.activeFg}
-                  onPress={() => onLog(habit, lvl.key)}
-                  isLoading={loadingKey === btnKey}
-                />
-              );
-            })}
-          </View>
-
-          <View style={s.goalsRow}>
-            <GoalChip emoji="🥉" text={habit.mini_goal} colors={colors} />
-            <GoalChip emoji="🥈" text={habit.good_goal} colors={colors} />
-            <GoalChip emoji="🥇" text={habit.elite_goal} colors={colors} />
-          </View>
-        </View>
+    <TouchableOpacity onPress={handlePress} disabled={isLoading} activeOpacity={0.88}
+      style={[s.habitCard, { backgroundColor: colors.surface }]}>
+      <Animated.View pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: Colors.yellow, opacity: flashOpacity }]} />
+      <View style={{ flex: 1, paddingRight: 12 }}>
+        <Text style={[s.habitName, { color: colors.black }]}>{habit.name}</Text>
+        <Text style={[s.habitSub, { color: colors.gray400 }]}>{subText}</Text>
+      </View>
+      <Animated.View style={[s.medal, {
+        backgroundColor: isFilled ? medalBg[level!] : 'transparent',
+        borderColor: isFilled ? medalBg[level!] : colors.hairline,
+        borderStyle: isFilled ? 'solid' : 'dashed',
+      }, { transform: [{ scale }] }]}>
+        {isLoading
+          ? <ActivityIndicator size="small" color={isFilled ? medalFg[level!] : colors.gray400} />
+          : <Ionicons name={isFilled ? 'medal' : 'add'} size={22} color={isFilled ? medalFg[level!] : colors.gray400} />}
       </Animated.View>
-    </Pressable>
+    </TouchableOpacity>
   );
 }
 
@@ -691,9 +620,17 @@ export default function HabitsTab() {
     if (habitData) setHabits(habitData);
     if (logData) setLogs(logData);
     if (monthLogData) setMonthLogs(monthLogData);
+    if (habitData && logData && monthLogData)
+      setCache('cache_habits_full', { habits: habitData, logs: logData, monthLogs: monthLogData });
     setLoading(false);
     setRefreshing(false);
   }, [user]);
+
+  useEffect(() => {
+    getCache<{ habits: Habit[]; logs: HabitLog[]; monthLogs: HabitLog[] }>('cache_habits_full').then(d => {
+      if (d) { setHabits(d.habits); setLogs(d.logs); setMonthLogs(d.monthLogs); setLoading(false); }
+    });
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -752,6 +689,36 @@ export default function HabitsTab() {
         setTimeout(() => setConfettiActive(false), 3000);
       }
     }
+  }
+
+  async function cycleHabit(habit: Habit, currentLog: HabitLog | undefined) {
+    if (!user) return;
+    const CYCLE: Array<'mini' | 'good' | 'elite'> = ['mini', 'good', 'elite'];
+    const key = `${habit.id}-${selectedDay}-cycle`;
+    setLoadingKey(key);
+    if (!currentLog) {
+      haptic('medium');
+      await supabase.from('habit_logs').upsert(
+        { habit_id: habit.id, user_id: user.id, date: selectedDay, level: 'mini', logged_at: new Date().toISOString() },
+        { onConflict: 'habit_id,date' }
+      );
+      showToast(`🥉 ${habit.name} — Brons!`, 'success');
+    } else {
+      const idx = CYCLE.indexOf(currentLog.level as any);
+      if (idx === CYCLE.length - 1) {
+        haptic('light');
+        await supabase.from('habit_logs').delete().eq('id', currentLog.id);
+        showToast(`${habit.name} ongedaan`, 'info');
+      } else {
+        const next = CYCLE[idx + 1];
+        haptic('success');
+        await supabase.from('habit_logs').update({ level: next, logged_at: new Date().toISOString() }).eq('id', currentLog.id);
+        const lvl = LEVELS.find(l => l.key === next)!;
+        showToast(`${lvl.emoji} ${habit.name} — ${lvl.label}!`, 'success');
+      }
+    }
+    setLoadingKey(null);
+    await fetchData();
   }
 
   async function saveQuickAddHabit() {
@@ -818,10 +785,9 @@ export default function HabitsTab() {
   if (loading) {
     return (
       <View style={[s.root, { backgroundColor: colors.offWhite }]}>
-        <View style={[s.banner, { paddingTop: insets.top + 44 }]}>
-          <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
-          <Text style={s.bannerTitle}>Habits</Text>
+        <View style={[s.header, { paddingTop: insets.top + 14 }]}>
+          <Text style={[s.headerGreet, { color: colors.gray400 }]}>{getGreeting()}{settings.user_name ? `, ${settings.user_name}` : ''}</Text>
+          <Text style={[s.headerTitle, { color: colors.black }]}>Habits</Text>
         </View>
         <View style={s.skeletonList}>
           {[0, 1, 2].map(i => <SkeletonHabitCard key={i} />)}
@@ -836,52 +802,64 @@ export default function HabitsTab() {
         style={[s.container, { backgroundColor: colors.offWhite }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor={Colors.yellow} />}
       >
-        {/* ── Banner ── */}
-        <View style={[s.banner, { paddingTop: insets.top + 44 }]}>
-          <BlurView intensity={Platform.OS === 'web' ? 60 : 80} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,10,0.72)' }]} pointerEvents="none" />
-
-          <View style={s.bannerTop}>
-            <Text style={s.bannerTitle}>{allDoneToday ? '🏆 Habits' : 'Habits'}</Text>
-          </View>
-          <View style={s.bannerStats}>
-            <View style={s.statTile}>
-              <AnimatedCounter value={habits.length} style={s.statNum} />
-              <Text style={s.statLabel}>{habits.length === 1 ? 'habit' : 'habits'}</Text>
-            </View>
-            {weekScore > 0 && (
-              <View style={[s.statTile, s.statTileAccent]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={[s.statNum, { color: Colors.black }]}>⭐</Text>
-                  <AnimatedCounter value={weekScore} style={[s.statNum, { color: Colors.black }]} />
-                </View>
-                <Text style={[s.statLabel, { color: 'rgba(0,0,0,0.55)' }]}>punten deze week</Text>
-              </View>
-            )}
-            {bannerSubtitle && weekScore === 0 && (
-              <View style={s.statTile}>
-                <Text style={[s.statLabel, { color: Colors.yellow, fontSize: 13 }]}>{bannerSubtitle}</Text>
+        {/* ── Clean warm header ── */}
+        <View style={[s.header, { paddingTop: insets.top + 14 }]}>
+          <Text style={[s.headerGreet, { color: colors.gray400 }]}>
+            {getGreeting()}{settings.user_name ? `, ${settings.user_name}` : ''}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+            <Text style={[s.headerTitle, { color: colors.black }]}>Habits</Text>
+            {allDoneToday && (
+              <View style={[s.streakBadgeHeader, { backgroundColor: Colors.yellow + '22' }]}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellowText }}>🔥 Alles klaar!</Text>
               </View>
             )}
           </View>
+        </View>
 
-          {habits.length > 0 && (
-            <View style={s.progressBarWrap}>
-              <View style={[s.progressBarTrack, { backgroundColor: 'rgba(255,255,255,0.12)' }]}>
-                <View style={[s.progressBarFill, { width: `${Math.round(completionPct * 100)}%` as any }]} />
-              </View>
-              <Text style={s.progressPct}>{Math.round(completionPct * 100)}%</Text>
+        {/* ── Summary cards ── */}
+        {habits.length > 0 && (
+          <View style={s.summaryRow}>
+            <View style={[s.sumCard, { backgroundColor: colors.surface }]}>
+              <AnimatedCounter value={habits.length} style={[s.sumBig, { color: colors.black }]} />
+              <Text style={[s.sumSmall, { color: colors.gray400 }]}>{habits.length === 1 ? 'habit' : 'habits'}</Text>
             </View>
-          )}
+            <View style={[s.sumCard, s.sumCardWide, { backgroundColor: colors.surface }]}>
+              {weekScore > 0 ? (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text style={[s.sumBig, { color: Colors.yellow }]}>⭐</Text>
+                    <AnimatedCounter value={weekScore} style={[s.sumBig, { color: colors.black }]} />
+                  </View>
+                  <Text style={[s.sumSmall, { color: colors.gray400 }]}>punten deze week</Text>
+                </>
+              ) : (
+                <Text style={[s.sumMotiv, { color: Colors.yellowText }]}>{bannerSubtitle || 'Begin je dag sterk'}</Text>
+              )}
+            </View>
+          </View>
+        )}
 
+        {/* ── Overall progress ── */}
+        {habits.length > 0 && (
+          <View style={s.progressRow}>
+            <View style={[s.progressTrack, { backgroundColor: colors.gray100 }]}>
+              <View style={[s.progressFill, { width: `${Math.round(completionPct * 100)}%` as any, backgroundColor: Colors.yellow }]} />
+            </View>
+            <Text style={[s.progressPct, { color: colors.gray400 }]}>{Math.round(completionPct * 100)}%</Text>
+          </View>
+        )}
+
+        {/* ── Day strip (sc-weekstrip) ── */}
+        {habits.length > 0 && (
           <FlatList
             ref={stripRef}
             data={strip}
             keyExtractor={d => d.date}
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ marginTop: 16 }}
-            contentContainerStyle={{ gap: 4 }}
+            style={{ marginTop: 10 }}
+            contentContainerStyle={{ paddingHorizontal: 18, gap: 6 }}
             renderItem={({ item: day }) => {
               const isSelected = day.date === selectedDay;
               const isToday = day.date === today;
@@ -890,30 +868,29 @@ export default function HabitsTab() {
               return (
                 <TouchableOpacity
                   style={[
-                    s.dayPill,
-                    isSelected && s.dayPillSelected,
+                    s.weekDay,
+                    isToday && !isSelected && { backgroundColor: Colors.yellow },
+                    isSelected && !isToday && { backgroundColor: colors.gray100 },
                     isFuture && { opacity: 0.4 },
                   ]}
                   onPress={() => { if (!isFuture) selectDay(day.date); }}
                   activeOpacity={isFuture ? 1 : 0.75}
                   hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
                 >
-                  <Text style={[s.dayLabel, isSelected && s.dayLabelActive]}>
-                    {isToday && !isSelected ? 'Vand.' : day.day}
+                  <Text style={[s.weekDayDow, { color: isToday && !isSelected ? 'rgba(0,0,0,0.55)' : colors.gray400 }]}>
+                    {day.day.slice(0, 2)}
                   </Text>
-                  <View style={[s.dayNumBox, isToday && !isSelected && s.dayNumToday]}>
-                    <Text style={[s.dayNum, isSelected && s.dayNumActive, isToday && !isSelected && { color: Colors.yellow }]}>
-                      {day.num}
-                    </Text>
-                  </View>
-                  {completion === 'all'     && <View style={[s.completionDot, isSelected ? s.completionDotSelected : s.completionDotAll]} />}
-                  {completion === 'partial' && <View style={[s.completionDot, isSelected ? s.completionDotSelected : s.completionDotPartial]} />}
-                  {!completion              && <View style={s.completionPlaceholder} />}
+                  <Text style={[s.weekDayNum, { color: isToday && !isSelected ? Colors.black : colors.black }]}>
+                    {day.num}
+                  </Text>
+                  {completion === 'all'     && <View style={[s.weekDot, { backgroundColor: isToday && !isSelected ? 'rgba(0,0,0,0.45)' : Colors.yellow }]} />}
+                  {completion === 'partial' && <View style={[s.weekDot, { backgroundColor: colors.gray200 }]} />}
+                  {!completion              && <View style={s.weekDotEmpty} />}
                 </TouchableOpacity>
               );
             }}
           />
-        </View>
+        )}
 
         {isPastDay && (
           <View style={[s.pastNotice, { backgroundColor: colors.gray100 }]}>
@@ -967,10 +944,9 @@ export default function HabitsTab() {
                 habit={habit}
                 log={log}
                 streak={streak}
-                logs={logs}
                 selectedDay={selectedDay}
                 loadingKey={loadingKey}
-                onLog={logHabit}
+                onCycle={cycleHabit}
               />
             ))}
 
@@ -1019,7 +995,7 @@ export default function HabitsTab() {
         onPress={() => setQuickAddVisible(true)}
         activeOpacity={0.85}
       >
-        <LinearGradient colors={['#FCC10C', '#E5A800']} style={mStyles.fabGrad}>
+        <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={mStyles.fabGrad}>
           <Ionicons name="add" size={26} color={Colors.black} />
         </LinearGradient>
       </TouchableOpacity>
@@ -1082,79 +1058,67 @@ const s = StyleSheet.create({
   root: { flex: 1 },
   container: { flex: 1 },
 
-  banner: { paddingHorizontal: 24, paddingBottom: 28, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, overflow: 'hidden' },
-  bannerTop: { marginBottom: 14 },
-  bannerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 30, color: Colors.white, letterSpacing: 1, textTransform: 'uppercase' },
-  bannerStats: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  statTile: { paddingHorizontal: 20, paddingVertical: 14, backgroundColor: '#FFFFFF0F', borderRadius: 16, borderWidth: 1, borderColor: '#FFFFFF16', minWidth: 96 },
-  statTileAccent: { backgroundColor: Colors.yellow, borderColor: 'transparent' },
-  statNum: { fontFamily: 'Inter_700Bold', fontSize: 21, color: Colors.white, letterSpacing: -0.5 },
-  statLabel: { fontFamily: 'Inter_300Light', fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+  // ── Clean header ──
+  header: { paddingHorizontal: 22, paddingBottom: 10 },
+  headerGreet: { fontFamily: 'Inter_400Regular', fontSize: 14.5, marginBottom: 3, letterSpacing: -0.1 },
+  headerTitle: { fontFamily: 'TitanOne_400Regular', fontSize: 27, textTransform: 'uppercase', letterSpacing: 0.4, lineHeight: 30 },
+  streakBadgeHeader: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: Radius.pill, marginBottom: 2 },
 
-  progressBarWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 },
-  progressBarTrack: { flex: 1, height: 4, borderRadius: 2, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: Colors.yellow, borderRadius: 2 },
-  progressPct: { fontFamily: 'Inter_700Bold', fontSize: 11, color: 'rgba(255,255,255,0.5)', minWidth: 30, textAlign: 'right' },
+  // ── Summary cards ──
+  summaryRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 18, marginTop: 8, marginBottom: 4 },
+  sumCard: { borderRadius: Radius.lg, padding: 16, ...Shadow.card },
+  sumCardWide: { flex: 1 },
+  sumBig: { fontFamily: 'Inter_700Bold', fontSize: 28, letterSpacing: -0.5, lineHeight: 32 },
+  sumSmall: { fontFamily: 'Inter_400Regular', fontSize: 13, marginTop: 4 },
+  sumMotiv: { fontFamily: 'Inter_600SemiBold', fontSize: 16, lineHeight: 22 },
 
-  dayPill: { alignItems: 'center', paddingVertical: 10, paddingHorizontal: 6, borderRadius: Radius.md, width: 46 },
-  dayPillSelected: { backgroundColor: Colors.yellow },
-  dayLabel: { fontFamily: 'Inter_300Light', fontSize: 8, color: 'rgba(255,255,255,0.5)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.3 },
-  dayLabelActive: { color: Colors.black },
-  dayNumBox: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  dayNumToday: { borderWidth: 1.5, borderColor: Colors.yellow },
-  dayNum: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: 'rgba(255,255,255,0.6)' },
-  dayNumActive: { color: Colors.black },
-  completionDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4 },
-  completionDotAll:      { backgroundColor: Colors.yellow },
-  completionDotPartial:  { backgroundColor: 'rgba(255,255,255,0.4)' },
-  completionDotSelected: { backgroundColor: Colors.black },
-  completionPlaceholder: { height: 10, marginTop: 4 },
+  // ── Progress bar ──
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 18, marginTop: 12 },
+  progressTrack: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3 },
+  progressPct: { fontFamily: 'Inter_700Bold', fontSize: 12, minWidth: 32, textAlign: 'right' },
 
-  pastNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 20, marginTop: 10, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  // ── Day strip (sc-weekstrip) ──
+  weekDay: { flex: 1, minWidth: 44, alignItems: 'center', paddingVertical: 9, paddingHorizontal: 5, borderRadius: 15 },
+  weekDayDow: { fontFamily: 'Inter_700Bold', fontSize: 10, letterSpacing: 0.03, textTransform: 'uppercase' },
+  weekDayNum: { fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 4 },
+  weekDot: { width: 5, height: 5, borderRadius: 3, marginTop: 5 },
+  weekDotEmpty: { height: 10, marginTop: 5 },
+
+  // ── Past notice ──
+  pastNotice: { flexDirection: 'row', alignItems: 'center', gap: 6, marginHorizontal: 18, marginTop: 10, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   pastNoticeText: { fontFamily: 'Inter_400Regular', fontSize: 12 },
 
   sectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 10, letterSpacing: 0.8, marginBottom: 8 },
 
-  habitsList: { padding: 20, gap: 16, paddingBottom: TAB_BAR_CLEARANCE },
-  habitCard: { borderRadius: Radius.xl, overflow: 'hidden', flexDirection: 'row', ...Shadow.card },
-  habitInner: { flex: 1, padding: 18 },
+  // ── Habit card (sc-hcard) ──
+  habitsList: { padding: 18, gap: 14, paddingBottom: TAB_BAR_CLEARANCE },
+  habitCard: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', padding: 16 },
+  habitHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  habitName: { fontFamily: 'Inter_700Bold', fontSize: 16, letterSpacing: -0.2, marginBottom: 2 },
+  habitSub: { fontFamily: 'Inter_400Regular', fontSize: 13 },
+  medal: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
 
-  accentBar: { width: 4 },
+  streakChip: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0 },
+  streakChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
 
-  habitHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
-  habitName: { fontFamily: 'Inter_700Bold', fontSize: 17, marginRight: 8, marginBottom: 0, flexShrink: 1 },
-
-  streakChip: { borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 3, flexShrink: 0 },
-  streakChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
-
-  streakBadge: { fontFamily: 'Inter_400Regular', fontSize: 12 },
-
-  cardDivider: { height: 1, marginBottom: 12 },
-
-  levelRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  levelBtnTouch: { flex: 1 },
-  levelBtn: {
-    alignItems: 'center', paddingVertical: 14, borderRadius: Radius.md,
-    borderWidth: 1.5, minHeight: 68, justifyContent: 'center', position: 'relative',
-  },
-  levelEmoji: { fontSize: 22, marginBottom: 4 },
-  levelLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
-  levelCheck: { position: 'absolute', top: 5, right: 5 },
-
-  loggedPill: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
-  loggedPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.gray600 },
-
-  goalsRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  // ── Goal chips ──
   goalChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   goalChipEmoji: { fontSize: 11 },
   goalChipText: { fontFamily: 'Inter_300Light', fontSize: 11 },
 
-  allDoneCard: { borderRadius: Radius.xl, overflow: 'hidden', marginBottom: 4 },
+  // ── Logged pill ──
+  loggedPill: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
+  loggedPillText: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.gray600 },
+
+  // ── All done card ──
+  allDoneCard: { borderRadius: Radius.lg, overflow: 'hidden', marginBottom: 4 },
   allDoneGradient: { padding: 20, alignItems: 'center' },
   allDoneEmoji: { fontSize: 40, marginBottom: 8 },
   allDoneTitle: { fontFamily: 'Inter_700Bold', fontSize: 22, color: Colors.black, letterSpacing: -0.5 },
   allDoneSub: { fontFamily: 'Inter_400Regular', fontSize: 14, color: 'rgba(0,0,0,0.6)', marginTop: 4 },
 
+  // ── Empty state ──
   emptyContainer: { padding: 32, alignItems: 'center', marginTop: 12 },
   emptyIcon: { width: 72, height: 72, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginBottom: 8 },

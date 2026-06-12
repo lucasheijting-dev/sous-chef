@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Alert, Linking } from 'react-native';
 import {
   Inter_300Light,
   Inter_400Regular,
@@ -33,6 +34,7 @@ function AppStack() {
         headerTitleStyle: { fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black },
         headerShadowVisible: false,
         headerBackTitle: '',
+        headerTintColor: colors.black,
         contentStyle: { backgroundColor: colors.offWhite },
       }}
     >
@@ -40,7 +42,7 @@ function AppStack() {
       <Stack.Screen name="setup" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="whatsapp-activate" options={{ headerShown: false }} />
-      <Stack.Screen name="list/[id]" options={{ headerBackTitle: 'Terug' }} />
+      <Stack.Screen name="list/[id]" options={{}} />
     </Stack>
   );
 }
@@ -90,6 +92,12 @@ async function checkForOTAUpdate() {
   }
 }
 
+const CALENDAR_PROVIDER_NAMES: Record<string, string> = {
+  google:  'Google Calendar',
+  outlook: 'Microsoft Outlook',
+  iphone:  'iPhone Agenda',
+};
+
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     Inter_300Light,
@@ -100,6 +108,22 @@ export default function RootLayout() {
   });
 
   useEffect(() => { checkForOTAUpdate(); }, []);
+
+  useEffect(() => {
+    function handleDeepLink({ url }: { url: string }) {
+      if (!url.includes('calendar-connected')) return;
+      const params = new URLSearchParams(url.split('?')[1] ?? '');
+      if (params.get('error')) {
+        Alert.alert('Koppeling mislukt', 'De agenda-koppeling is niet gelukt. Probeer het opnieuw.');
+      } else {
+        const provider = params.get('provider') ?? '';
+        const name = CALENDAR_PROVIDER_NAMES[provider] ?? 'Agenda';
+        Alert.alert('Gekoppeld!', `${name} is succesvol gekoppeld. Je afspraken worden gesynchroniseerd.`);
+      }
+    }
+    const sub = Linking.addEventListener('url', handleDeepLink);
+    return () => sub.remove();
+  }, []);
   useEffect(() => { if (error) throw error; }, [error]);
   useEffect(() => {
     if (loaded) { SplashScreen.hideAsync(); return; }

@@ -4,11 +4,65 @@ const { parseIntent }          = require('./claudeParser');
 const { sendMessage, sendTyping } = require('./whatsapp');
 const db                  = require('./supabase');
 const caldav              = require('./caldav');
+const googleCalendar      = require('./googleCalendar');
+const outlookCalendar     = require('./outlookCalendar');
 const session             = require('./sessionMemory');
 const undo                = require('./undoManager');
 const confirm             = require('./pendingConfirmations');
 const timeDefaults        = require('./timeDefaults');
 const onboarding          = require('./onboarding');
+
+// ── Calendar helpers ───────────────────────────────────────────────────────────
+
+async function _calCreate(userId, calProvider, calInfo, caldavCreds, stream, params) {
+  if (calProvider === 'google' && calInfo?.google_refresh_token) {
+    return googleCalendar.createEvent({ id: userId, ...calInfo }, db, params);
+  }
+  if (calProvider === 'outlook' && calInfo?.ms_refresh_token) {
+    return outlookCalendar.createEvent({ id: userId, ...calInfo }, db, params);
+  }
+  if (caldavCreds) {
+    return caldav.createEvent(caldavCreds.username, caldavCreds.password, stream, {
+      title: params.title, date: params.date, time: params.time ?? null,
+      recurrence: params.recurrence ?? null, recurrenceUntil: params.recurrenceUntil ?? null,
+      reminderDaysBefore: params.reminderDaysBefore ?? null,
+      reminderMinutesBefore: params.reminderMinutesBefore ?? 30,
+      durationMinutes: params.durationMinutes ?? null,
+      attendees: params.attendees ?? null,
+      location: params.location ?? null,
+    });
+  }
+  return null;
+}
+
+async function _calDelete(userId, calProvider, calInfo, caldavCreds, stream, caldavUid) {
+  if (!caldavUid) return;
+  if (calProvider === 'google' && calInfo?.google_refresh_token) {
+    await googleCalendar.deleteEvent({ id: userId, ...calInfo }, db, caldavUid).catch(() => {});
+  } else if (calProvider === 'outlook' && calInfo?.ms_refresh_token) {
+    await outlookCalendar.deleteEvent({ id: userId, ...calInfo }, db, caldavUid).catch(() => {});
+  } else if (caldavCreds) {
+    await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, stream ?? 'personal', caldavUid).catch(() => {});
+  }
+}
+
+async function _calUpdate(userId, calProvider, calInfo, caldavCreds, stream, caldavUid, params) {
+  if (!caldavUid) return null;
+  if (calProvider === 'google' && calInfo?.google_refresh_token) {
+    return googleCalendar.updateEvent({ id: userId, ...calInfo }, db, caldavUid, params);
+  }
+  if (calProvider === 'outlook' && calInfo?.ms_refresh_token) {
+    return outlookCalendar.updateEvent({ id: userId, ...calInfo }, db, caldavUid, params);
+  }
+  if (caldavCreds) {
+    await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, stream ?? 'personal', caldavUid).catch(() => {});
+    return caldav.createEvent(caldavCreds.username, caldavCreds.password, stream ?? 'personal', {
+      title: params.title, date: params.date, time: params.time ?? null,
+      recurrence: params.recurrence ?? null, reminderMinutesBefore: params.reminderMinutesBefore ?? null,
+    });
+  }
+  return null;
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -215,16 +269,10 @@ async function executePendingAction(pending, userId) {
         return `✅ Alle items op *${pending.listName}* afgevinkt!`;
       }
       case 'event_delete': {
-        if (caldav.isConfigured() && pending.caldavUid) {
-          const creds = await db.getCalDAVCredentials(userId);
-          if (creds) {
-            try {
-              await caldav.deleteEvent(creds.username, creds.password, pending.calendarStream ?? 'personal', pending.caldavUid);
-            } catch (err) {
-              console.error('CalDAV delete failed (continuing):', err.message);
-            }
-          }
-        }
+        const _ci = await db.getCalendarProvider(userId).catch(() => null);
+        const _cp = _ci?.calendar_provider;
+        const _cc = _cp === 'iphone' || !_cp ? await db.getCalDAVCredentials(userId).catch(() => null) : null;
+        await _calDelete(userId, _cp, _ci, _cc, pending.calendarStream, pending.caldavUid);
         await db.deleteEventById(userId, pending.eventId);
         return `🗑️ *${pending.eventTitle}* verwijderd uit je agenda.`;
       }
@@ -296,11 +344,11 @@ async function handleUndo(userId) {
       case 'add_event': {
         const { eventId, caldavUid, calendarStream, title } = last.data;
         await db.deleteEventById(userId, eventId);
-        if (caldavUid && caldav.isConfigured()) {
-          const caldavCreds = await db.getCalDAVCredentials(userId).catch(() => null);
-          if (caldavCreds) {
-            await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, calendarStream ?? 'personal', caldavUid).catch(() => {});
-          }
+        if (caldavUid) {
+          const _ci = await db.getCalendarProvider(userId).catch(() => null);
+          const _cp = _ci?.calendar_provider;
+          const _cc = _cp === 'iphone' || !_cp ? await db.getCalDAVCredentials(userId).catch(() => null) : null;
+          await _calDelete(userId, _cp, _ci, _cc, calendarStream, caldavUid);
         }
         undo.pop(userId);
         return `↩️ Ongedaan: afspraak *${title}* verwijderd.`;
@@ -594,21 +642,32 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
             location:                intent.event_location ?? null,
           }];
 
-      // Ensure CalDAV user is provisioned (lazy)
+      // Determine calendar provider + credentials
+      const calInfo   = await db.getCalendarProvider(userId).catch(() => null);
+      const calProvider = calInfo?.calendar_provider ?? (calInfo?.caldav_username ? 'iphone' : null);
+
       let caldavCreds = null;
       let isNewCalDAVUser = false;
-      if (caldav.isConfigured()) {
-        caldavCreds = await db.getCalDAVCredentials(userId);
-        if (!caldavCreds) {
-          try {
-            const { username, password } = caldav.generateCredentials(userId);
-            await caldav.provisionUser(username, password);
-            await db.storeCalDAVCredentials(userId, username, password);
-            caldavCreds = { username, password };
-            isNewCalDAVUser = true;
-          } catch (err) {
-            console.error('CalDAV provisioning failed:', err.message);
-            return '⚠️ Er is een technisch probleem met je agenda. Probeer het later nog eens of neem contact op met Lucas.';
+
+      if (calProvider === 'none') {
+        // User explicitly opted out — no calendar sync
+      } else if (calProvider === 'google' || calProvider === 'outlook') {
+        // External OAuth provider — tokens already stored, nothing to provision
+      } else {
+        // iPhone / CalDAV (including null = not set yet, backward compat)
+        if (caldav.isConfigured()) {
+          caldavCreds = await db.getCalDAVCredentials(userId);
+          if (!caldavCreds) {
+            try {
+              const { username, password } = caldav.generateCredentials(userId);
+              await caldav.provisionUser(username, password);
+              await db.storeCalDAVCredentials(userId, username, password);
+              caldavCreds = { username, password };
+              isNewCalDAVUser = true;
+            } catch (err) {
+              console.error('CalDAV provisioning failed:', err.message);
+              return '⚠️ Er is een technisch probleem met je agenda. Probeer het later nog eens of neem contact op met Lucas.';
+            }
           }
         }
       }
@@ -644,16 +703,16 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         }
 
         let caldavUid = null;
-        if (caldavCreds) {
-          try {
-            caldavUid = await caldav.createEvent(
-              caldavCreds.username,
-              caldavCreds.password,
-              stream,
-              { title: evTitle, date: ev.date, time: ev.time ?? null, recurrence: ev.recurrence ?? null, recurrenceUntil, reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes, durationMinutes, attendees, location },
-            );
-          } catch (err) {
-            console.error('CalDAV event creation failed, queuing retry:', err.message);
+        try {
+          caldavUid = await _calCreate(userId, calProvider, calInfo, caldavCreds, stream, {
+            title: evTitle, date: ev.date, time: ev.time ?? null,
+            recurrence: ev.recurrence ?? null, recurrenceUntil,
+            reminderDaysBefore: reminderDays, reminderMinutesBefore: reminderMinutes,
+            durationMinutes, attendees, location,
+          });
+        } catch (err) {
+          console.error('Calendar event creation failed, queuing retry:', err.message);
+          if (calProvider === 'iphone' || !calProvider) {
             await db.enqueueCalDAVOperation(userId, 'create_event', {
               stream, title: evTitle, date: ev.date, time: ev.time ?? null,
               recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays,
@@ -734,22 +793,24 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
       const mins = intent.reminder_minutes_before ?? 30;
 
-      // Update CalDAV: delete old + recreate with reminder
-      const caldavCreds2 = caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null;
-      if (caldavCreds2 && event.caldavUid) {
+      // Update calendar: delete old + recreate with reminder (or update in-place for Google/Outlook)
+      const _ci2 = await db.getCalendarProvider(userId).catch(() => null);
+      const _cp2 = _ci2?.calendar_provider;
+      const caldavCreds2 = _cp2 === 'iphone' || !_cp2 ? (caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null) : null;
+      if (event.caldavUid) {
         try {
-          await caldav.deleteEvent(caldavCreds2.username, caldavCreds2.password, event.calendarStream ?? 'personal', event.caldavUid);
-          const newUid = await caldav.createEvent(
-            caldavCreds2.username, caldavCreds2.password, event.calendarStream ?? 'personal',
-            { title: event.title, date: event.date, time: event.time ?? null, recurrence: null, reminderMinutesBefore: mins },
-          );
-          await db.updateEventCalDAVUid(event.id, newUid);
-          session.setLastEvent(userId, { ...event, caldavUid: newUid });
+          const newUid = await _calUpdate(userId, _cp2, _ci2, caldavCreds2, event.calendarStream, event.caldavUid, {
+            title: event.title, date: event.date, time: event.time ?? null,
+            recurrence: event.recurrence ?? null, reminderMinutesBefore: mins,
+          });
+          if (newUid && newUid !== event.caldavUid) {
+            await db.updateEventCalDAVUid(event.id, newUid);
+          }
+          session.setLastEvent(userId, { ...event, caldavUid: newUid ?? event.caldavUid });
         } catch (err) {
-          console.error('CalDAV reminder update failed:', err.message);
+          console.error('Calendar reminder update failed:', err.message);
         }
       }
-
       const timeStr = event.date ? ` vóór *${event.title}* op ${fmtDate(event.date)}` : ` vóór *${event.title}*`;
       return `⏰ Ik stuur je ${mins} minuten van tevoren een reminder${timeStr} via de agenda.`;
     }
@@ -790,19 +851,22 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
       await db.updateEvent(userId, event.id, { date: newDate, time: newTime });
 
-      // Sync to CalDAV: delete old event + recreate with new date/time
-      const caldavCreds = caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null;
-      if (caldavCreds && event.caldavUid) {
+      // Sync to calendar provider
+      if (event.caldavUid) {
         try {
-          await caldav.deleteEvent(caldavCreds.username, caldavCreds.password, event.calendarStream ?? 'personal', event.caldavUid);
-          const newUid = await caldav.createEvent(
-            caldavCreds.username, caldavCreds.password, event.calendarStream ?? 'personal',
-            { title: event.title, date: newDate, time: newTime ?? null, recurrence: event.recurrence ?? null, reminderMinutesBefore: null },
-          );
-          await db.updateEventCalDAVUid(event.id, newUid);
-          session.setLastEvent(userId, { ...event, caldavUid: newUid, date: newDate, time: newTime });
+          const _ci3 = await db.getCalendarProvider(userId).catch(() => null);
+          const _cp3 = _ci3?.calendar_provider;
+          const _cc3 = _cp3 === 'iphone' || !_cp3 ? (caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null) : null;
+          const newUid = await _calUpdate(userId, _cp3, _ci3, _cc3, event.calendarStream, event.caldavUid, {
+            title: event.title, date: newDate, time: newTime ?? null,
+            recurrence: event.recurrence ?? null, reminderMinutesBefore: null,
+          });
+          if (newUid && newUid !== event.caldavUid) {
+            await db.updateEventCalDAVUid(event.id, newUid);
+          }
+          session.setLastEvent(userId, { ...event, caldavUid: newUid ?? event.caldavUid, date: newDate, time: newTime });
         } catch (err) {
-          console.error('CalDAV reschedule failed:', err.message);
+          console.error('Calendar reschedule failed:', err.message);
         }
       }
 
@@ -1337,12 +1401,12 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         const dateStr = `${year}-${String(bMonth).padStart(2, '0')}-${String(bDay).padStart(2, '0')}`;
         const evTitle = `Verjaardag ${intent.birthday_person}`;
         let caldavUid = null;
-        const caldavCreds = caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null;
-        if (caldavCreds) {
-          caldavUid = await caldav.createEvent(caldavCreds.username, caldavCreds.password, 'birthdays', {
-            title: evTitle, date: dateStr, time: null, recurrence: 'yearly', reminderDaysBefore: 7,
-          }).catch(() => null);
-        }
+        const _biCi = await db.getCalendarProvider(userId).catch(() => null);
+        const _biCp = _biCi?.calendar_provider;
+        const _biCc = _biCp === 'iphone' || !_biCp ? (caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null) : null;
+        caldavUid = await _calCreate(userId, _biCp, _biCi, _biCc, 'birthdays', {
+          title: evTitle, date: dateStr, time: null, recurrence: 'yearly', reminderDaysBefore: 7,
+        }).catch(() => null);
         await db.createEvent(userId, { title: evTitle, date: dateStr, recurrence: 'yearly', reminderDaysBefore: 7, caldavUid, calendarStream: 'birthdays' });
         return `✅ Onthouden — en verjaardag *${intent.birthday_person}* (${intent.birthday_date}) jaarlijks in je agenda gezet! 🎂`;
       }
