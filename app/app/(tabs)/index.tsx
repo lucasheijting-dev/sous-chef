@@ -15,7 +15,6 @@ import {
   Modal,
   KeyboardAvoidingView,
   ScrollView,
-  SafeAreaView,
   Linking,
   Image,
   Alert,
@@ -24,7 +23,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -220,7 +219,7 @@ function AnimatedCard({
           </View>
 
           <View style={styles.tileBottom}>
-            <Text style={[styles.tileName, { color: colors.black }]} numberOfLines={2}>{item.name}</Text>
+            <Text style={[styles.tileName, { color: colors.black }]}>{item.name}</Text>
             <View style={styles.tileCountRow}>
               {totalCount > 0 ? (
                 allDone ? (
@@ -739,7 +738,9 @@ export default function LijstenTab() {
   function deleteList(listId: string, listName: string) {
     const snapshot = lists;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setLists(prev => prev.filter(l => l.id !== listId));
+    const filtered = lists.filter(l => l.id !== listId);
+    setLists(filtered);
+    setCache('cache_lists', filtered);
     setDeleteSheet(null);
     setPendingListDelete({ listId, listName, items: snapshot });
     setListUndoVisible(true);
@@ -766,6 +767,7 @@ export default function LijstenTab() {
     if (!pendingListDelete) return;
     if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
     setLists(pendingListDelete.items);
+    setCache('cache_lists', pendingListDelete.items);
     setPendingListDelete(null);
     Animated.parallel([
       Animated.timing(undoOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
@@ -1745,7 +1747,7 @@ const styles = StyleSheet.create({
   tileWrap: { flex: 1, minWidth: '46%', maxWidth: '50%' },
 
   // ── List tile card (white surface + tone icon) ──
-  tile: { flex: 1, borderRadius: Radius.lg, padding: 16, minHeight: 168, justifyContent: 'space-between', ...Shadow.card },
+  tile: { flex: 1, borderRadius: Radius.lg, padding: 16, minHeight: 168, justifyContent: 'space-between' },
   tileIconBox: { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   tileEmoji: { fontSize: 22 },
   tileBottom: {},
