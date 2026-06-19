@@ -2,6 +2,8 @@
 
 const express = require('express');
 const { handleMessage } = require('./messageHandler');
+const { handleRecipeMessage } = require('./recipeHandler');
+const { extractUrl } = require('./recipeScraper');
 
 const router = express.Router();
 
@@ -52,6 +54,15 @@ router.post('/', async (req, res) => {
     if (!text) return;
 
     console.log(`[Webhook] Message from ${from}: ${text}`);
+
+    // If message contains a URL, try to handle as recipe import first
+    if (extractUrl(text)) {
+      const { getOrCreateUserFull } = require('./supabase');
+      const user = await getOrCreateUserFull(from);
+      const handled = await handleRecipeMessage({ from, text, userId: user.id });
+      if (handled) return;
+    }
+
     await handleMessage({ from, text });
   } catch (err) {
     console.error('Webhook error:', err);

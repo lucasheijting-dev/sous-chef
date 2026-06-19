@@ -963,6 +963,24 @@ async function verifyOTP(phone, code) {
   return { ok: true };
 }
 
+// ── Recipes ────────────────────────────────────────────────────────────────────
+
+async function saveRecipe(userId, { title, sourceUrl, imageUrl, ingredientCount }) {
+  const { data, error } = await supabase
+    .from('recipes')
+    .insert({ user_id: userId, title, source_url: sourceUrl, image_url: imageUrl ?? null, ingredient_count: ingredientCount ?? null })
+    .select('id')
+    .single();
+  if (error) throw new Error(`Failed to save recipe: ${error.message}`);
+  return data;
+}
+
+async function addListItemSource(listItemId, recipeId, originalText) {
+  await supabase
+    .from('list_item_sources')
+    .upsert({ list_item_id: listItemId, recipe_id: recipeId, original_text: originalText ?? null }, { onConflict: 'list_item_id,recipe_id' });
+}
+
 module.exports = {
   getOrCreateUserFull,
   markOnboardingComplete,
@@ -1066,6 +1084,8 @@ module.exports = {
   updateReceiptCategory,
   deleteReceiptCategory,
   assignReceiptCategory,
+  saveRecipe,
+  addListItemSource,
 };
 
 // ── Receipts ────────────────────────────────────────────────────────────────────
