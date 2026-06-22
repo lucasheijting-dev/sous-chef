@@ -2,7 +2,8 @@
 
 const express = require('express');
 const crypto  = require('crypto');
-const { getCalDAVCredentials } = require('./supabase');
+const { getCalDAVCredentials, storeCalDAVCredentials } = require('./supabase');
+const caldav  = require('./caldav');
 
 const router = express.Router();
 
@@ -73,8 +74,23 @@ router.get('/', async (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
-  const creds = await getCalDAVCredentials(userId);
-  if (!creds) return res.status(404).json({ error: 'No CalDAV account found' });
+  let creds = await getCalDAVCredentials(userId);
+
+  if (!creds) {
+    if (!caldav.isConfigured()) {
+      return res.status(503).json({ error: 'CalDAV not configured' });
+    }
+    try {
+      const { username, password } = caldav.generateCredentials(userId);
+      await caldav.provisionUser(username, password);
+      await storeCalDAVCredentials(userId, username, password);
+      creds = { username, password };
+      console.log(`[CalendarProfile] Provisioned CalDAV for user ${userId}`);
+    } catch (err) {
+      console.error('[CalendarProfile] Provisioning failed:', err.message);
+      return res.status(500).json({ error: 'Agenda aanmaken mislukt. Probeer het opnieuw.' });
+    }
+  }
 
   const xml = buildMobileConfig(userId, creds.username, creds.password);
   res.setHeader('Content-Type', 'application/x-apple-aspen-config; charset=utf-8');
