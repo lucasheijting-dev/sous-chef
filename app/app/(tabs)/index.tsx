@@ -554,6 +554,7 @@ export default function LijstenTab() {
   const [pendingListDelete, setPendingListDelete] = useState<{ listId: string; listName: string; items: typeof lists } | null>(null);
   const [listUndoVisible, setListUndoVisible] = useState(false);
   const listUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDeleteIdRef = useRef<string | null>(null);
   const [swipeHintDone, setSwipeHintDone] = useState(true);
   const [peekTarget, setPeekTarget] = useState<{ list: (typeof lists)[0]; x: number; y: number } | null>(null);
   const [peekItems, setPeekItems] = useState<{ id: string; text: string; checked: boolean }[]>([]);
@@ -596,7 +597,7 @@ export default function LijstenTab() {
           const totalCount = items.length;
           const openCount = items.filter((li: any) => !li.checked).length;
           return { ...l, item_count: totalCount, open_count: openCount };
-        });
+        }).filter((l: any) => l.id !== pendingDeleteIdRef.current);
         setLists(processed);
         setCache('cache_lists', processed);
         setFetchError(false);
@@ -743,6 +744,7 @@ export default function LijstenTab() {
     setCache('cache_lists', filtered);
     setDeleteSheet(null);
     setPendingListDelete({ listId, listName, items: snapshot });
+    pendingDeleteIdRef.current = listId;
     setListUndoVisible(true);
     undoSlide.setValue(60);
     undoOpacity.setValue(0);
@@ -760,6 +762,7 @@ export default function LijstenTab() {
         setPendingListDelete(null);
       });
       await supabase.from('lists').delete().eq('id', listId);
+      pendingDeleteIdRef.current = null;
     }, 4000);
   }
 
@@ -769,6 +772,7 @@ export default function LijstenTab() {
     setLists(pendingListDelete.items);
     setCache('cache_lists', pendingListDelete.items);
     setPendingListDelete(null);
+    pendingDeleteIdRef.current = null;
     Animated.parallel([
       Animated.timing(undoOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
       Animated.timing(undoSlide, { toValue: 60, duration: 180, useNativeDriver: true }),

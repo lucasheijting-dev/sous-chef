@@ -48,7 +48,7 @@ type MergedEvent = {
 };
 type Section  = { dateKey: string; label: string; isToday: boolean; isPast: boolean; data: MergedEvent[] };
 type FlatItem = { type: 'header'; section: Section } | { type: 'item'; item: MergedEvent; section: Section; isLast: boolean };
-type ViewMode   = 'list' | 'calendar';
+type ViewMode   = 'list' | 'week' | 'calendar';
 type TimePeriod = 'today' | 'tomorrow' | 'thisweek' | 'nextweek';
 
 const TODAY              = new Date().toISOString().split('T')[0];
@@ -347,13 +347,14 @@ function AgendaLite() {
   const [dragY, setDragY]                     = useState(0);
   const dragTimeRef                           = useRef<string | null>(null);
 
-  const [viewMode, setViewMode]           = useState<'list' | 'calendar'>('list');
+  const [viewMode, setViewMode]           = useState<'list' | 'week' | 'calendar'>('list');
+  const [weekOffset, setWeekOffset]       = useState(0);
   const [selectedDate, setSelectedDate]   = useState(TODAY);
   const dayDetailScrollRef                = useRef<ScrollView>(null);
 
   useEffect(() => {
     AsyncStorage.getItem('agenda_view_mode').then(v => {
-      if (v === 'list' || v === 'calendar') setViewMode(v);
+      if (v === 'list' || v === 'week' || v === 'calendar') setViewMode(v);
     });
   }, []);
   const [dayDetailMode, setDayDetailMode] = useState(false);
@@ -740,22 +741,18 @@ function AgendaLite() {
             </Text>
             <Text style={[s.headerTitle, { color: colors.black }]}>Agenda</Text>
           </View>
-          {/* Week / Maand segmented control */}
+          {/* Lijst / Week / Maand segmented control */}
           <View style={[s.segControl, { backgroundColor: colors.gray100 }]}>
-            <TouchableOpacity
-              onPress={() => { setViewMode('list'); setDayDetailMode(false); AsyncStorage.setItem('agenda_view_mode', 'list'); }}
-              style={[s.segBtn, viewMode === 'list' && { backgroundColor: colors.surface, ...Shadow.card }]}
-              activeOpacity={0.75}
-            >
-              <Text style={[s.segBtnText, { color: viewMode === 'list' ? colors.black : colors.gray400 }]}>Lijst</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { setViewMode('calendar'); setDayDetailMode(false); AsyncStorage.setItem('agenda_view_mode', 'calendar'); }}
-              style={[s.segBtn, viewMode === 'calendar' && { backgroundColor: colors.surface, ...Shadow.card }]}
-              activeOpacity={0.75}
-            >
-              <Text style={[s.segBtnText, { color: viewMode === 'calendar' ? colors.black : colors.gray400 }]}>Maand</Text>
-            </TouchableOpacity>
+            {([['list', 'Lijst'], ['week', 'Week'], ['calendar', 'Maand']] as const).map(([mode, label]) => (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => { setViewMode(mode); setDayDetailMode(false); AsyncStorage.setItem('agenda_view_mode', mode); }}
+                style={[s.segBtn, viewMode === mode && { backgroundColor: colors.surface, ...Shadow.card }]}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.segBtnText, { color: viewMode === mode ? colors.black : colors.gray400 }]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       </View>
@@ -929,6 +926,126 @@ function AgendaLite() {
       </TouchableOpacity>
 
       </> /* end list view */}
+
+      {/* ── Week view ────────────────────────────────────────────────── */}
+      {viewMode === 'week' && (() => {
+        const now = new Date(); now.setHours(0, 0, 0, 0);
+        const monday = new Date(now);
+        monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
+
+        const weekDays = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date(monday); d.setDate(monday.getDate() + i);
+          const key = toKey(d);
+          return {
+            key, num: d.getDate(),
+            dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i],
+            isToday: key === TODAY, isWeekend: i >= 5,
+          };
+        });
+
+        const weekStart = weekDays[0].key;
+        const weekEnd   = weekDays[6].key;
+        const weekLabel = (() => {
+          const s = new Date(weekStart + 'T00:00:00');
+          const e = new Date(weekEnd + 'T00:00:00');
+          const sm = s.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+          const em = e.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+          return `${sm} – ${em}`;
+        })();
+
+        const weekEvents = allEvents.filter(e => e.date && e.date >= weekStart && e.date <= weekEnd);
+
+        const weekSwipe = PanResponder.create({
+          onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+          onPanResponderRelease: (_, g) => {
+            if (Math.abs(g.dx) < 50) return;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setWeekOffset(prev => g.dx < 0 ? prev + 1 : prev - 1);
+          },
+        });
+
+        return (
+          <View style={{ flex: 1, backgroundColor: colors.offWhite }} {...weekSwipe.panHandlers}>
+            {/* Week nav header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+              <TouchableOpacity onPress={() => setWeekOffset(p => p - 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                <Ionicons name="chevron-back" size={22} color={colors.black} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setWeekOffset(0)} activeOpacity={0.8}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: weekOffset === 0 ? Colors.yellow : colors.black }}>{weekLabel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setWeekOffset(p => p + 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                <Ionicons name="chevron-forward" size={22} color={colors.black} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Day columns header */}
+            <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+              {weekDays.map(d => (
+                <TouchableOpacity
+                  key={d.key}
+                  style={{ flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: d.isWeekend ? colors.offWhite : 'transparent' }}
+                  onPress={() => { setSelectedDate(d.key); setDayDetailMode(true); setViewMode('calendar'); AsyncStorage.setItem('agenda_view_mode', 'calendar'); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : d.isWeekend ? colors.gray200 : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: d.isToday ? Colors.yellow : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.black : d.isWeekend ? colors.gray400 : colors.black }}>{d.num}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Event rows */}
+            <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE, flexGrow: 1 }}>
+              {weekEvents.length === 0 ? (
+                <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
+                  <Text style={{ fontSize: 32 }}>🌤️</Text>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Rustige week</Text>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken gepland</Text>
+                </View>
+              ) : weekDays.map(d => {
+                const dayEvts = weekEvents.filter(e => e.date === d.key).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+                if (dayEvts.length === 0) return null;
+                return (
+                  <View key={d.key} style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, paddingVertical: 10, paddingHorizontal: 0 }}>
+                    {/* Day label column */}
+                    <View style={{ width: 48, alignItems: 'center', paddingTop: 2 }}>
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.yellow : colors.black }}>{d.num}</Text>
+                    </View>
+                    {/* Events */}
+                    <View style={{ flex: 1, gap: 6, paddingRight: 14 }}>
+                      {dayEvts.map(e => {
+                        const color = getEventColor(e, streams);
+                        return (
+                          <TouchableOpacity
+                            key={e.id}
+                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+                            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
+                            activeOpacity={0.75}
+                          >
+                            {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: color, width: 34 }}>{e.time.slice(0, 5)}</Text>}
+                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, flex: 1 }} numberOfLines={1}>{e.title}</Text>
+                            {e.source === 'sous-chef' && <Text style={{ fontSize: 11 }}>👨‍🍳</Text>}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* FAB */}
+            <TouchableOpacity onPress={() => openQuickAdd()} style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }} activeOpacity={0.85}>
+              <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="add" size={26} color={Colors.black} />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        );
+      })()}
 
       {/* ── Calendar: month grid ─────────────────────────────────────── */}
       {viewMode === 'calendar' && !dayDetailMode && (
