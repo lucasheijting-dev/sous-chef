@@ -16,7 +16,6 @@ import {
   PanResponder,
   Animated,
   Modal,
-  SafeAreaView,
   LayoutAnimation,
   Dimensions,
   TextInput as TextInputRN,
@@ -24,7 +23,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Calendar from 'expo-calendar';
@@ -320,10 +319,13 @@ function AgendaLite() {
   const breatheAnim                       = useRef(new Animated.Value(1)).current;
   const scrollYAnim                       = useRef(new Animated.Value(0)).current;
 
+  const [showStreamFilter, setShowStreamFilter] = useState(false);
+
   const [quickAddVisible, setQuickAddVisible] = useState(false);
   const [quickAddTitle, setQuickAddTitle]     = useState('');
   const [quickAddDate, setQuickAddDate]       = useState<Date>(new Date());
   const [quickAddTime, setQuickAddTime]       = useState<Date | null>(null);
+  const [quickAddStream, setQuickAddStream]   = useState<string | null>(null);
   const [quickAddSaving, setQuickAddSaving]   = useState(false);
   const [showDatePicker, setShowDatePicker]   = useState(false);
   const [showTimePicker, setShowTimePicker]   = useState(false);
@@ -332,9 +334,13 @@ function AgendaLite() {
   const [editTitle, setEditTitle]             = useState('');
   const [editDate, setEditDate]               = useState<Date>(new Date());
   const [editTime, setEditTime]               = useState<Date | null>(null);
+  const [editStream, setEditStream]           = useState<string | null>(null);
   const [editShowDatePicker, setEditShowDatePicker] = useState(false);
   const [editShowTimePicker, setEditShowTimePicker] = useState(false);
   const [editSaving, setEditSaving]           = useState(false);
+
+  const [detailStream, setDetailStream]       = useState<string | null>(null);
+  const [detailSaving, setDetailSaving]       = useState(false);
 
   // drag state for timeline
   const [dragEvent, setDragEvent]             = useState<MergedEvent | null>(null);
@@ -640,6 +646,20 @@ function AgendaLite() {
     })
   ).current;
 
+  function openDetailEvent(e: MergedEvent) {
+    setSelectedEvent(e);
+    setDetailStream(e.calendar_stream ?? null);
+  }
+
+  async function saveDetailStream(newStream: string | null) {
+    if (!selectedEvent || selectedEvent.source !== 'sous-chef') return;
+    setDetailSaving(true);
+    await supabase.from('events').update({ calendar_stream: newStream }).eq('id', selectedEvent.id);
+    setAllEvents(prev => prev.map(e => e.id === selectedEvent.id ? { ...e, calendar_stream: newStream } : e));
+    setDetailStream(newStream);
+    setDetailSaving(false);
+  }
+
   async function deleteEvent(event: MergedEvent) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     if (event.source === 'sous-chef') {
@@ -656,6 +676,7 @@ function AgendaLite() {
     setQuickAddTitle('');
     setQuickAddDate(d);
     setQuickAddTime(null);
+    setQuickAddStream(null);
     setShowDatePicker(false);
     setShowTimePicker(false);
     setQuickAddVisible(true);
@@ -670,8 +691,9 @@ function AgendaLite() {
       : null;
     const { data } = await supabase.from('events').insert({
       user_id: user.id, title: quickAddTitle.trim(), date: dateStr, time: timeStr,
+      calendar_stream: quickAddStream ?? null,
     }).select().single();
-    if (data) setAllEvents(prev => [...prev, { ...data, source: 'sous-chef' as const }]);
+    if (data) setAllEvents(prev => [...prev, { ...data, source: 'sous-chef' as const, calendar_stream: quickAddStream }]);
     setQuickAddVisible(false);
     setQuickAddSaving(false);
   }
@@ -680,6 +702,7 @@ function AgendaLite() {
     setEditEvent(e);
     setEditTitle(e.title);
     setEditDate(e.date ? new Date(e.date + 'T12:00:00') : new Date());
+    setEditStream(e.calendar_stream ?? null);
     if (e.time) {
       const [h, m] = e.time.split(':').map(Number);
       const t = new Date(); t.setHours(h, m, 0, 0);
@@ -699,9 +722,9 @@ function AgendaLite() {
       ? `${String(editTime.getHours()).padStart(2,'0')}:${String(editTime.getMinutes()).padStart(2,'0')}`
       : null;
     if (editEvent.source === 'sous-chef') {
-      await supabase.from('events').update({ title: editTitle.trim(), date: dateStr, time: timeStr }).eq('id', editEvent.id);
+      await supabase.from('events').update({ title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream }).eq('id', editEvent.id);
     }
-    setAllEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, title: editTitle.trim(), date: dateStr, time: timeStr } : e));
+    setAllEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream } : e));
     setEditEvent(null);
     setEditSaving(false);
   }
@@ -741,8 +764,8 @@ function AgendaLite() {
       {viewMode === 'list' && <>
 
       {/* ── Period chips ── */}
-      <View style={{ flexGrow: 0, flexShrink: 0, paddingTop: 14, paddingBottom: 6 }}>
-        <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}>
+      <View style={{ flexGrow: 0, flexShrink: 0, paddingTop: 14, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
+        <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }} style={{ flex: 1 }}>
           {PERIOD_LABELS.map(([p, label]) => {
             const count = periodCounts[p];
             const active = timePeriod === p;
@@ -761,15 +784,19 @@ function AgendaLite() {
             );
           })}
         </ScrollView>
+        <TouchableOpacity
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowStreamFilter(v => !v); if (showStreamFilter) setStreamFilter(null); }}
+          style={{ marginRight: 14, width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: (showStreamFilter || streamFilter) ? Colors.yellow + '33' : colors.gray100 }}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="options-outline" size={17} color={(showStreamFilter || streamFilter) ? Colors.yellow : colors.gray400} />
+        </TouchableOpacity>
       </View>
 
-      {/* ── Calendar stream chips ── */}
-      {(() => {
+      {/* ── Period chips + filter toggle ── */}
+      {showStreamFilter && (() => {
         const userKeys = new Set(streams.map(s => s.claude_key));
-        const mergedStreams = [
-          ...DEFAULT_STREAMS.filter(d => !userKeys.has(d.claude_key)),
-          ...streams,
-        ];
+        const mergedStreams = [...streams, ...DEFAULT_STREAMS.filter(d => !userKeys.has(d.claude_key))];
         return (
           <View style={{ flexGrow: 0, flexShrink: 0, paddingBottom: 10 }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}>
@@ -833,7 +860,7 @@ function AgendaLite() {
           const evColor = getEventColor(e, streams);
           const cardContent = (
             <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedEvent(e); }}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
               style={({ pressed }) => [
                 { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: Radius.lg, padding: 16, marginBottom: 12, gap: 14, overflow: 'hidden', opacity: eventPast ? 0.45 : 1, transform: [{ scale: pressed ? 0.975 : 1 }] },
                 Shadow.card,
@@ -860,7 +887,7 @@ function AgendaLite() {
                 )}
                 {e.source === 'sous-chef' && (
                   <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: Colors.yellow + '33', justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 10 }}>🤖</Text>
+                    <Text style={{ fontSize: 11 }}>👨‍🍳</Text>
                   </View>
                 )}
                 {stream && (
@@ -1105,7 +1132,11 @@ function AgendaLite() {
                 <Ionicons name="close" size={18} color={colors.black} />
               </TouchableOpacity>
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>Afspraak</Text>
-              <View style={{ width: 34 }} />
+              {selectedEvent.source === 'sous-chef' ? (
+                <TouchableOpacity onPress={() => { setSelectedEvent(null); openEditEvent(selectedEvent); }} style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' }}>
+                  <Ionicons name="pencil-outline" size={16} color={colors.black} />
+                </TouchableOpacity>
+              ) : <View style={{ width: 34 }} />}
             </View>
             <ScrollView contentContainerStyle={{ padding: 28, gap: 16 }}>
               <Text style={{ fontFamily: 'TitanOne_400Regular', fontSize: 28, color: colors.black, letterSpacing: 0.5 }}>{selectedEvent.title}</Text>
@@ -1127,16 +1158,37 @@ function AgendaLite() {
                   <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400 }}>iPhone-agenda</Text>
                 </View>
               )}
-              {(() => {
-                const stream = streams.find(st => st.claude_key === selectedEvent.calendar_stream);
-                if (!stream) return null;
-                return (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: stream.color }} />
-                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: stream.color }}>{stream.emoji} {stream.name}</Text>
-                  </View>
-                );
-              })()}
+              {selectedEvent.source === 'sous-chef' && streams.length > 0 && (
+                <View style={{ gap: 10 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Categorie</Text>
+                  {detailSaving ? (
+                    <ActivityIndicator size="small" color={Colors.yellow} />
+                  ) : (
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => saveDetailStream(null)}
+                        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: detailStream === null ? colors.black : colors.gray100 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: detailStream === null ? colors.offWhite : colors.gray400 }}>Geen</Text>
+                      </TouchableOpacity>
+                      {streams.map(st => {
+                        const active = detailStream === st.claude_key;
+                        return (
+                          <TouchableOpacity
+                            key={st.id}
+                            onPress={() => saveDetailStream(active ? null : st.claude_key)}
+                            style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: active ? st.color + '22' : colors.gray100, borderWidth: active ? 1.5 : 0, borderColor: st.color }}
+                            activeOpacity={0.75}
+                          >
+                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: active ? st.color : colors.gray400 }}>{st.emoji} {st.name}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  )}
+                </View>
+              )}
             </ScrollView>
           </SafeAreaView>
         )}
@@ -1222,6 +1274,34 @@ function AgendaLite() {
                 <DateTimePicker value={quickAddTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
                   onChange={(_, t) => { if (t) { setQuickAddTime(t); setShowTimePicker(false); } }} />
               )}
+              {/* Stream/category picker */}
+              {streams.length > 0 && (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Categorie</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => setQuickAddStream(null)}
+                      style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: quickAddStream === null ? colors.black : colors.gray100 }}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: quickAddStream === null ? colors.offWhite : colors.gray400 }}>Geen</Text>
+                    </TouchableOpacity>
+                    {streams.map(st => {
+                      const active = quickAddStream === st.claude_key;
+                      return (
+                        <TouchableOpacity
+                          key={st.id}
+                          onPress={() => setQuickAddStream(active ? null : st.claude_key)}
+                          style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: active ? st.color + '22' : colors.gray100, borderWidth: active ? 1.5 : 0, borderColor: st.color }}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: active ? st.color : colors.gray400 }}>{st.emoji} {st.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
               <TouchableOpacity onPress={saveQuickEvent} disabled={!quickAddTitle.trim() || quickAddSaving}
                 style={{ backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center', opacity: quickAddTitle.trim() ? 1 : 0.4 }}>
                 {quickAddSaving
@@ -1290,6 +1370,33 @@ function AgendaLite() {
               {editShowTimePicker && editEvent?.source !== 'phone' && (
                 <DateTimePicker value={editTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
                   onChange={(_, t) => { if (t) { setEditTime(t); setEditShowTimePicker(false); } }} />
+              )}
+              {editEvent?.source === 'sous-chef' && streams.length > 0 && (
+                <View style={{ gap: 8 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Categorie</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => setEditStream(null)}
+                      style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, backgroundColor: editStream === null ? colors.black : colors.gray100 }}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: editStream === null ? colors.offWhite : colors.gray400 }}>Geen</Text>
+                    </TouchableOpacity>
+                    {streams.map(st => {
+                      const active = editStream === st.claude_key;
+                      return (
+                        <TouchableOpacity
+                          key={st.id}
+                          onPress={() => setEditStream(active ? null : st.claude_key)}
+                          style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: Radius.pill, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: active ? st.color + '22' : colors.gray100, borderWidth: active ? 1.5 : 0, borderColor: st.color }}
+                          activeOpacity={0.75}
+                        >
+                          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: active ? st.color : colors.gray400 }}>{st.emoji} {st.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
               )}
               {editEvent?.source === 'sous-chef' && (
                 <TouchableOpacity onPress={saveEditEvent} disabled={!editTitle.trim() || editSaving}

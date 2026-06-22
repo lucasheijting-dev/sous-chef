@@ -13,13 +13,12 @@ import {
   Image,
   Linking,
   Modal,
-  SafeAreaView,
   Animated,
   Pressable,
   Easing,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -180,6 +179,7 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: React.ComponentProp
   { mode: 'system', label: 'Systeem', icon: 'phone-portrait-outline' },
   { mode: 'light',  label: 'Licht',   icon: 'sunny-outline' },
   { mode: 'dark',   label: 'Donker',  icon: 'moon-outline' },
+  { mode: 'pink',   label: 'Roze',    icon: 'rose-outline' },
 ];
 
 const HABITS_EXAMPLES = [
@@ -418,13 +418,10 @@ export default function InstellingenTab() {
   async function toggleHabits(value: boolean) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (!user || user.id === 'dev') return;
-    if (value && !settings.habits_onboarding_done) {
-      setHabitsModalVisible(true);
-      return;
-    }
     setSaving(true);
     await supabase.from('user_prefs').upsert({ user_id: user.id, habits_enabled: value }, { onConflict: 'user_id' });
     await refreshPrefs();
+    if (value) await updateSettings({ habits_onboarding_done: true });
     setSaving(false);
   }
 
@@ -1018,7 +1015,24 @@ export default function InstellingenTab() {
             <View style={{ width: 72 }} />
           </View>
           <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-            <View style={[styles.card, { backgroundColor: colors.white, marginTop: 20 }]}>
+
+            {/* ── Standaard features ── */}
+            <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 20 }]}>Standaard</Text>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
+              <SettingsRow
+                icon="layers-outline"
+                label="Lijsten"
+                subtitle="To-do lijsten en boodschappen via WhatsApp."
+                right={
+                  <Switch
+                    value={settings.lists_enabled !== false}
+                    onValueChange={v => updateSetting('lists_enabled', v)}
+                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                  />
+                }
+              />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
               <View style={styles.moduleRow}>
                 <View style={[styles.rowIcon, { backgroundColor: colors.gray100 }]}>
                   <Ionicons name="calendar-outline" size={18} color={colors.black} />
@@ -1030,8 +1044,40 @@ export default function InstellingenTab() {
               </View>
               <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
               <SettingsRow
+                icon="document-text-outline"
+                label="Notities"
+                subtitle="WhatsApp-notities worden altijd opgeslagen."
+                right={
+                  <Switch
+                    value={settings.notes_enabled}
+                    onValueChange={toggleNotes}
+                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                  />
+                }
+              />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="receipt-outline"
+                label="Bonnetjes"
+                subtitle="Scan kassabonnen via WhatsApp. Claude leest ze automatisch."
+                right={
+                  <Switch
+                    value={settings.receipts_enabled}
+                    onValueChange={v => updateSetting('receipts_enabled', v)}
+                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                  />
+                }
+              />
+            </View>
+
+            {/* ── Focus ── */}
+            <Text style={[styles.sectionLabel, { color: colors.gray400, marginTop: 20 }]}>Focus</Text>
+            <View style={[styles.card, { backgroundColor: colors.white }]}>
+              <SettingsRow
                 icon="trophy-outline"
-                label="Habits tab"
+                label="Habits"
                 subtitle="Dagelijkse gewoontes bijhouden met streaks."
                 right={
                   saving ? (
@@ -1079,27 +1125,13 @@ export default function InstellingenTab() {
               )}
               <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
               <SettingsRow
-                icon="document-text-outline"
-                label="Notities tab"
-                subtitle="WhatsApp-notities worden altijd opgeslagen."
+                icon="timer-outline"
+                label="Timer"
+                subtitle="Focus-sessies bijhouden met categorieën en reflectie."
                 right={
                   <Switch
-                    value={settings.notes_enabled}
-                    onValueChange={toggleNotes}
-                    trackColor={{ false: Colors.gray200, true: Colors.yellow }}
-                    thumbColor={Colors.white}
-                  />
-                }
-              />
-              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-              <SettingsRow
-                icon="receipt-outline"
-                label="Bonnetjes tab"
-                subtitle="Scan kassabonnen via WhatsApp. Claude leest ze automatisch."
-                right={
-                  <Switch
-                    value={settings.receipts_enabled}
-                    onValueChange={v => updateSetting('receipts_enabled', v)}
+                    value={settings.timer_enabled}
+                    onValueChange={v => updateSetting('timer_enabled', v)}
                     trackColor={{ false: Colors.gray200, true: Colors.yellow }}
                     thumbColor={Colors.white}
                   />

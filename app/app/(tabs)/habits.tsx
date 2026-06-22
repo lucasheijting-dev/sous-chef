@@ -579,13 +579,106 @@ function HabitCard({
   );
 }
 
+// ── Week Grid ──────────────────────────────────────────────────────────────────
+
+function WeekGrid({
+  habits, logs, loadingKey, selectedDay,
+  onCycle,
+}: {
+  habits: Habit[];
+  logs: HabitLog[];
+  loadingKey: string | null;
+  selectedDay: string;
+  onCycle: (habit: Habit, log: HabitLog | undefined, date: string) => void;
+}) {
+  const { colors } = useTheme();
+
+  const weekDays = useMemo(() => {
+    const d = new Date(selectedDay + 'T00:00:00');
+    const dow = (d.getDay() + 6) % 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - dow);
+    return Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(monday);
+      day.setDate(monday.getDate() + i);
+      const dateStr = day.toISOString().split('T')[0];
+      return {
+        date: dateStr,
+        dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i],
+        num: day.getDate(),
+        isToday: dateStr === today,
+        isFuture: dateStr > today,
+      };
+    });
+  }, [selectedDay]);
+
+  const medalBg: Record<string, string> = { mini: '#BD7E4E', good: '#A9AFB7', elite: Colors.yellow };
+  const medalFg: Record<string, string> = { mini: '#fff', good: '#fff', elite: Colors.black };
+
+  return (
+    <View style={{ paddingHorizontal: 18, paddingBottom: 4 }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', marginBottom: 10 }}>
+        <View style={{ width: 96 }} />
+        {weekDays.map(d => (
+          <View key={d.date} style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 9, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: d.isToday ? Colors.yellow : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: d.isToday ? Colors.black : d.isFuture ? colors.gray200 : colors.black }}>{d.num}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
+      {/* Habit rows */}
+      {habits.map(habit => (
+        <View key={habit.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+          <Text numberOfLines={2} style={{ width: 96, fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, paddingRight: 8 }}>{habit.name}</Text>
+          {weekDays.map(d => {
+            const log = logs.find(l => l.habit_id === habit.id && l.date === d.date);
+            const isLoading = loadingKey === `${habit.id}-${d.date}-cycle`;
+            return (
+              <TouchableOpacity
+                key={d.date}
+                style={{ flex: 1, alignItems: 'center' }}
+                onPress={() => !d.isFuture && onCycle(habit, log, d.date)}
+                disabled={d.isFuture || isLoading}
+                activeOpacity={0.7}
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color={Colors.yellow} style={{ width: 28, height: 28 }} />
+                ) : (
+                  <View style={{
+                    width: 28, height: 28, borderRadius: 14,
+                    backgroundColor: log ? medalBg[log.level] : d.isFuture ? 'transparent' : colors.gray100,
+                    borderWidth: !log && !d.isFuture ? 1 : 0,
+                    borderColor: colors.gray200,
+                    justifyContent: 'center', alignItems: 'center',
+                  }}>
+                    {log && <Text style={{ fontSize: 13, color: medalFg[log.level] }}>{LEVELS.find(l => l.key === log.level)?.emoji}</Text>}
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export default function HabitsTab() {
   const { settings } = useModuleSettings();
   if (settings.habits_mode === 'lite') return <HabitsLite />;
+  return <HabitsMain />;
+}
+
+function HabitsMain() {
   const { user } = useUser();
   const { colors } = useTheme();
+  const { settings } = useModuleSettings();
   const insets = useSafeAreaInsets();
   const stripRef = useRef<FlatList>(null);
 
@@ -607,6 +700,8 @@ export default function HabitsTab() {
   const [quickAddGood, setQuickAddGood] = useState('');
   const [quickAddElite, setQuickAddElite] = useState('');
   const [quickAddSaving, setQuickAddSaving] = useState(false);
+
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -691,15 +786,16 @@ export default function HabitsTab() {
     }
   }
 
-  async function cycleHabit(habit: Habit, currentLog: HabitLog | undefined) {
+  async function cycleHabit(habit: Habit, currentLog: HabitLog | undefined, dateOverride?: string) {
     if (!user) return;
+    const date = dateOverride ?? selectedDay;
     const CYCLE: Array<'mini' | 'good' | 'elite'> = ['mini', 'good', 'elite'];
-    const key = `${habit.id}-${selectedDay}-cycle`;
+    const key = `${habit.id}-${date}-cycle`;
     setLoadingKey(key);
     if (!currentLog) {
       haptic('medium');
       await supabase.from('habit_logs').upsert(
-        { habit_id: habit.id, user_id: user.id, date: selectedDay, level: 'mini', logged_at: new Date().toISOString() },
+        { habit_id: habit.id, user_id: user.id, date, level: 'mini', logged_at: new Date().toISOString() },
         { onConflict: 'habit_id,date' }
       );
       showToast(`🥉 ${habit.name} — Brons!`, 'success');
@@ -809,11 +905,29 @@ export default function HabitsTab() {
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
             <Text style={[s.headerTitle, { color: colors.black }]}>Habits</Text>
-            {allDoneToday && (
-              <View style={[s.streakBadgeHeader, { backgroundColor: Colors.yellow + '22' }]}>
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellowText }}>🔥 Alles klaar!</Text>
-              </View>
-            )}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+              {allDoneToday && (
+                <View style={[s.streakBadgeHeader, { backgroundColor: Colors.yellow + '22' }]}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellowText }}>🔥 Alles klaar!</Text>
+                </View>
+              )}
+              {habits.length > 0 && (
+                <View style={{ flexDirection: 'row', backgroundColor: colors.gray100, borderRadius: 10, padding: 2 }}>
+                  {(['day', 'week'] as const).map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => { haptic('light'); setViewMode(m); }}
+                      style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: viewMode === m ? colors.surface : 'transparent' }}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: viewMode === m ? colors.black : colors.gray400 }}>
+                        {m === 'day' ? 'Dag' : 'Week'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -908,24 +1022,24 @@ export default function HabitsTab() {
             </View>
             <Text style={[s.emptyTitle, { color: colors.black }]}>Begin met habits</Text>
             <Text style={[s.emptyText, { color: colors.gray400 }]}>
-              Stuur een WhatsApp-bericht om je eerste habit aan te maken:
+              Voeg een habit toe via de + knop of via WhatsApp.
             </Text>
             <View style={[s.emptyStep, { backgroundColor: colors.white }]}>
-              <Text style={s.emptyStepNum}>1</Text>
+              <Text style={s.emptyStepNum}>+</Text>
               <Text style={[s.emptyStepText, { color: colors.black }]}>
-                "voeg habit toe: mediteren"
+                Tik op de gele + knop rechtsonder
               </Text>
             </View>
             <View style={[s.emptyStep, { backgroundColor: colors.white }]}>
-              <Text style={s.emptyStepNum}>2</Text>
+              <Text style={s.emptyStepNum}>💬</Text>
               <Text style={[s.emptyStepText, { color: colors.black }]}>
-                "mini=5min, goed=15min, elite=30min"
+                Of stuur "voeg habit toe: mediteren" via WhatsApp
               </Text>
             </View>
             <View style={[s.emptyStep, { backgroundColor: colors.white }]}>
-              <Text style={s.emptyStepNum}>3</Text>
+              <Text style={s.emptyStepNum}>🔥</Text>
               <Text style={[s.emptyStepText, { color: colors.black }]}>
-                Log dagelijks en bouw je streak op 🔥
+                Log dagelijks en bouw je streak op
               </Text>
             </View>
           </View>
@@ -933,12 +1047,14 @@ export default function HabitsTab() {
           <Animated.View style={[s.habitsList, { opacity: fadeAnim }]}>
 
             <Text style={[s.sectionLabel, { color: colors.gray400 }]}>
-              {dayLabel(selectedDay).toUpperCase()} · {habits.length} HABITS
+              {viewMode === 'week'
+                ? `WEEK · ${habits.length} HABITS`
+                : `${dayLabel(selectedDay).toUpperCase()} · ${habits.length} HABITS`}
             </Text>
 
-            {allDoneSelected && <AllDoneCard day={selectedDay} />}
+            {viewMode === 'day' && allDoneSelected && <AllDoneCard day={selectedDay} />}
 
-            {habitData.map(({ habit, log, streak }) => (
+            {viewMode === 'day' ? habitData.map(({ habit, log, streak }) => (
               <HabitCard
                 key={habit.id}
                 habit={habit}
@@ -948,13 +1064,22 @@ export default function HabitsTab() {
                 loadingKey={loadingKey}
                 onCycle={cycleHabit}
               />
-            ))}
+            )) : (
+              <WeekGrid
+                habits={habits}
+                logs={logs}
+                loadingKey={loadingKey}
+                selectedDay={selectedDay}
+                onCycle={cycleHabit}
+              />
+            )}
 
             <MonthOverview
               habits={habits}
               monthLogs={monthLogs}
               onDayPress={(d) => {
                 selectDay(d);
+                setViewMode('day');
                 const idx = strip.findIndex(s => s.date === d);
                 if (idx >= 0) stripRef.current?.scrollToIndex({ index: idx, animated: true });
               }}
@@ -1004,7 +1129,7 @@ export default function HabitsTab() {
       <Modal visible={quickAddVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setQuickAddVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
           <View style={[{ flex: 1, backgroundColor: colors.white }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.gray100 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: insets.top + 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.gray100 }}>
               <TouchableOpacity onPress={() => setQuickAddVisible(false)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: colors.gray100 }}>
                 <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.gray400 }}>Annuleer</Text>
               </TouchableOpacity>
