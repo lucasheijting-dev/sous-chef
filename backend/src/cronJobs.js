@@ -306,6 +306,30 @@ cron.schedule('*/5 * * * *', async () => {
   }
 });
 
+// ── Auto-delete old lists — every day at 03:30 ───────────────────────────────
+
+cron.schedule('30 3 * * *', async () => {
+  console.log('[AutoDelete] Running auto-delete for opted-in users...');
+  try {
+    const users = await db.getUsersWithAutoDelete();
+    let total = 0;
+    for (const { user_id } of users) {
+      try {
+        const deleted = await db.deleteOldListsForUser(user_id, 30);
+        if (deleted.length > 0) {
+          console.log(`[AutoDelete] user ${user_id}: deleted ${deleted.length} list(s): ${deleted.map(l => l.name).join(', ')}`);
+          total += deleted.length;
+        }
+      } catch (err) {
+        console.error(`[AutoDelete] Error for user ${user_id}:`, err.message);
+      }
+    }
+    console.log(`[AutoDelete] Done — ${total} list(s) deleted across ${users.length} user(s).`);
+  } catch (err) {
+    console.error('[AutoDelete] Fatal:', err);
+  }
+});
+
 // ── Render Keepalive — every 13 minutes ──────────────────────────────────────
 // Prevents Render free tier from spinning down (15 min inactivity threshold)
 

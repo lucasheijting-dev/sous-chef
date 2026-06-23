@@ -12,37 +12,32 @@ const STEPS = [
     key: 'name',
     ask: `👋 *Welkom bij Sous-Chef!*
 
-Ik ben je persoonlijke WhatsApp-assistent voor lijsten, agenda, notities en habits.
+Ik ben je persoonlijke assistent op WhatsApp. Je kunt mij alles sturen — afspraken, boodschappen, notities, reminders — en ik regel het voor je.
 
-Laten we snel even instellen. *Hoe heet je?*`,
-  },
-  {
-    key: 'habits',
-    ask: (name) => `Fijn, *${name}*! 🍳
-
-*Welke habits wil je bijhouden?* Denk aan sporten, mediteren, lezen, etc.
-
-Stuur ze als kommalijst, bijv.: _"sporten, mediteren, lezen"_
-Of typ *overslaan* als je dit later wilt doen.`,
+Laten we beginnen. *Hoe heet je?*`,
   },
   {
     key: 'lists',
-    ask: `Super! Nu de lijsten.
+    ask: (name) => `Leuk je te ontmoeten, *${name}*! 🍳
 
-*Welke lijsten wil je aanmaken?* Bijv.: _"boodschappen, werk, film kijken"_
-Of typ *overslaan*.`,
+*Wil je meteen een paar lijsten aanmaken?* Denk aan boodschappen, werk, films, etc.
+
+Stuur ze kommagescheiden, bijv.: _"boodschappen, werk, films"_
+Of typ *overslaan* om dit later te doen.`,
   },
   {
     key: 'done',
-    ask: (name) => `Klaar! Je bent ingesteld, *${name}*. 🎉
+    ask: (name) => `Je bent helemaal klaar, *${name}*! 🎉
 
-*Dit kan ik voor je doen:*
-📅 Afspraken plannen — _"tandarts vrijdag 14u"_
-📋 Lijsten bijhouden — _"melk op de boodschappenlijst"_
-🏅 Habits loggen — _"30 min gesport"_
-📝 Notities opslaan — _"onthoud: Jan bellen voor bezoek"_
+Hier is wat je mij kunt sturen:
 
-Stuur gewoon een berichtje — ik snap je vanzelf! 🍳`,
+📅 *Agenda* — _"tandarts vrijdag 14u"_ of _"wat staat er morgen?"_
+📋 *Lijsten* — _"melk op de boodschappen"_ of _"maak een werklijst"_
+📝 *Notities* — _"onthoud: wifi wachtwoord is Appel123"_
+🧾 *Bonnetjes* — stuur een foto van een kassabon
+🏋️ *Habits* — _"voeg habit toe: sporten"_ of _"ik heb 30 min gesport"_
+
+Stuur gewoon een berichtje in je eigen woorden — ik snap je vanzelf. Tot zo! 🍳`,
   },
 ];
 
@@ -75,28 +70,8 @@ async function handleOnboardingMessage({ from, text, userId }) {
     return true;
   }
 
-  // Step 2: received habits
+  // Step 2: received lists (or skip)
   if (step === 2) {
-    if (lc !== 'overslaan') {
-      const habitNames = text.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
-      for (const name of habitNames.slice(0, 6)) {
-        try {
-          await db.createHabit(userId, {
-            name,
-            mini_goal: `Kort ${name}`,
-            good_goal: `${name} gedaan`,
-            elite_goal: `Lang ${name}`,
-          });
-        } catch {}
-      }
-    }
-    setStep(userId, 3);
-    await sendMessage(from, STEPS[2].ask);
-    return true;
-  }
-
-  // Step 3: received lists
-  if (step === 3) {
     if (lc !== 'overslaan') {
       const listNames = text.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
       const EMOJI_MAP = {
@@ -112,7 +87,7 @@ async function handleOnboardingMessage({ from, text, userId }) {
     const name = getName(userId);
     state.delete(userId);
     await db.markOnboardingComplete(userId);
-    await sendMessage(from, STEPS[3].ask(name));
+    await sendMessage(from, STEPS[2].ask(name));
     return true;
   }
 

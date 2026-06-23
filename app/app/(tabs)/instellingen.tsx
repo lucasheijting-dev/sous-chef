@@ -246,6 +246,9 @@ export default function InstellingenTab() {
   const [geoAlertEnabled, setGeoAlertEnabled] = useState(false);
   const [geoAlertLoading, setGeoAlertLoading] = useState(false);
 
+  // Lijsten
+  const [listsAutoDelete, setListsAutoDelete] = useState(false);
+
   // Morning screen list settings
   const [morningModalVisible, setMorningModalVisible] = useState(false);
   const [allLists, setAllLists] = useState<any[]>([]);
@@ -301,7 +304,7 @@ export default function InstellingenTab() {
         .eq('user_id', user.id),
       supabase
         .from('user_prefs')
-        .select('profile_birth_year, profile_employer, profile_friends, profile_extra')
+        .select('profile_birth_year, profile_employer, profile_friends, profile_extra, lists_auto_delete')
         .eq('user_id', user.id)
         .single(),
     ]);
@@ -317,6 +320,7 @@ export default function InstellingenTab() {
     if (listsResult.count !== null) setListsCount(listsResult.count);
     if (eventsResult.count !== null) setEventsCount(eventsResult.count);
     if (prefsRow.data) {
+      setListsAutoDelete(!!prefsRow.data.lists_auto_delete);
       setProfileBirthYear(String(prefsRow.data.profile_birth_year ?? ''));
       setProfileEmployer(prefsRow.data.profile_employer ?? '');
       setProfileFriends(prefsRow.data.profile_friends ?? '');
@@ -860,6 +864,29 @@ export default function InstellingenTab() {
             subtitle="Welke lijsten zie je elke ochtend"
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={openMorningModal}
+          />
+        </View>
+
+        {/* ── Lijsten ────────────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Lijsten</Text>
+        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          <SettingsRow
+            icon="trash-outline"
+            label="Auto-verwijderen"
+            subtitle="Lijsten ouder dan 30 dagen worden automatisch verwijderd"
+            right={
+              <Switch
+                value={listsAutoDelete}
+                onValueChange={async (v) => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setListsAutoDelete(v);
+                  if (!user || user.id === 'dev') return;
+                  await supabase.from('user_prefs').upsert({ user_id: user.id, lists_auto_delete: v }, { onConflict: 'user_id' });
+                }}
+                trackColor={{ false: colors.gray100, true: Colors.yellow }}
+                thumbColor={Colors.black}
+              />
+            }
           />
         </View>
 

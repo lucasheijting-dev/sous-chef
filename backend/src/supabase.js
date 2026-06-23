@@ -981,6 +981,28 @@ async function addListItemSource(listItemId, recipeId, originalText) {
     .upsert({ list_item_id: listItemId, recipe_id: recipeId, original_text: originalText ?? null }, { onConflict: 'list_item_id,recipe_id' });
 }
 
+async function getUsersWithAutoDelete() {
+  const { data } = await supabase
+    .from('user_prefs')
+    .select('user_id')
+    .eq('lists_auto_delete', true);
+  return data ?? [];
+}
+
+async function deleteOldListsForUser(userId, days = 30) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString();
+  const { data, error } = await supabase
+    .from('lists')
+    .delete()
+    .eq('user_id', userId)
+    .lt('last_activity_at', cutoffStr)
+    .select('id, name');
+  if (error) throw error;
+  return data ?? [];
+}
+
 module.exports = {
   getOrCreateUserFull,
   markOnboardingComplete,
@@ -1086,6 +1108,8 @@ module.exports = {
   assignReceiptCategory,
   saveRecipe,
   addListItemSource,
+  getUsersWithAutoDelete,
+  deleteOldListsForUser,
 };
 
 // ── Receipts ────────────────────────────────────────────────────────────────────

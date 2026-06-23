@@ -349,6 +349,7 @@ function AgendaLite() {
 
   const [viewMode, setViewMode]           = useState<'list' | 'week' | 'calendar'>('list');
   const [weekOffset, setWeekOffset]       = useState(0);
+  const [weekFocusDay, setWeekFocusDay]   = useState<string | null>(null);
   const [selectedDate, setSelectedDate]   = useState(TODAY);
   const dayDetailScrollRef                = useRef<ScrollView>(null);
 
@@ -954,12 +955,14 @@ function AgendaLite() {
         })();
 
         const weekEvents = allEvents.filter(e => e.date && e.date >= weekStart && e.date <= weekEnd);
+        const focusEvts  = weekFocusDay ? weekEvents.filter(e => e.date === weekFocusDay).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? '')) : [];
 
         const weekSwipe = PanResponder.create({
           onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
           onPanResponderRelease: (_, g) => {
             if (Math.abs(g.dx) < 50) return;
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setWeekFocusDay(null);
             setWeekOffset(prev => g.dx < 0 ? prev + 1 : prev - 1);
           },
         });
@@ -968,77 +971,110 @@ function AgendaLite() {
           <View style={{ flex: 1, backgroundColor: colors.offWhite }} {...weekSwipe.panHandlers}>
             {/* Week nav header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
-              <TouchableOpacity onPress={() => setWeekOffset(p => p - 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => { setWeekOffset(p => p - 1); setWeekFocusDay(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
                 <Ionicons name="chevron-back" size={22} color={colors.black} />
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setWeekOffset(0)} activeOpacity={0.8}>
+              <TouchableOpacity onPress={() => { setWeekOffset(0); setWeekFocusDay(null); }} activeOpacity={0.8}>
                 <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: weekOffset === 0 ? Colors.yellow : colors.black }}>{weekLabel}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setWeekOffset(p => p + 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => { setWeekOffset(p => p + 1); setWeekFocusDay(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
                 <Ionicons name="chevron-forward" size={22} color={colors.black} />
               </TouchableOpacity>
             </View>
 
             {/* Day columns header */}
             <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
-              {weekDays.map(d => (
-                <TouchableOpacity
-                  key={d.key}
-                  style={{ flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: d.isWeekend ? colors.offWhite : 'transparent' }}
-                  onPress={() => { setSelectedDate(d.key); setDayDetailMode(true); setViewMode('calendar'); AsyncStorage.setItem('agenda_view_mode', 'calendar'); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : d.isWeekend ? colors.gray200 : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
-                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: d.isToday ? Colors.yellow : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.black : d.isWeekend ? colors.gray400 : colors.black }}>{d.num}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Event rows */}
-            <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE, flexGrow: 1 }}>
-              {weekEvents.length === 0 ? (
-                <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
-                  <Text style={{ fontSize: 32 }}>🌤️</Text>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Rustige week</Text>
-                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken gepland</Text>
-                </View>
-              ) : weekDays.map(d => {
-                const dayEvts = weekEvents.filter(e => e.date === d.key).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
-                if (dayEvts.length === 0) return null;
+              {weekDays.map(d => {
+                const isFocus   = weekFocusDay === d.key;
+                const hasEvents = weekEvents.some(e => e.date === d.key);
                 return (
-                  <View key={d.key} style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, paddingVertical: 10, paddingHorizontal: 0 }}>
-                    {/* Day label column */}
-                    <View style={{ width: 48, alignItems: 'center', paddingTop: 2 }}>
-                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.yellow : colors.black }}>{d.num}</Text>
+                  <TouchableOpacity
+                    key={d.key}
+                    style={{ flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: isFocus ? Colors.yellow + '18' : d.isWeekend ? colors.offWhite : 'transparent' }}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWeekFocusDay(isFocus ? null : d.key); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : d.isWeekend ? colors.gray200 : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+                    <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: d.isToday ? Colors.yellow : isFocus ? Colors.yellow + '33' : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.black : d.isWeekend ? colors.gray400 : colors.black }}>{d.num}</Text>
                     </View>
-                    {/* Events */}
-                    <View style={{ flex: 1, gap: 6, paddingRight: 14 }}>
-                      {dayEvts.map(e => {
-                        const color = getEventColor(e, streams);
-                        return (
-                          <TouchableOpacity
-                            key={e.id}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
-                            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
-                            activeOpacity={0.75}
-                          >
-                            {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: color, width: 34 }}>{e.time.slice(0, 5)}</Text>}
-                            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, flex: 1 }} numberOfLines={1}>{e.title}</Text>
-                            {e.source === 'sous-chef' && <Text style={{ fontSize: 11 }}>👨‍🍳</Text>}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
+                    {hasEvents && <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: isFocus ? Colors.yellow : colors.gray200, marginTop: 3 }} />}
+                  </TouchableOpacity>
                 );
               })}
+            </View>
+
+            {/* Event area: focused day or full week */}
+            <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE, flexGrow: 1 }}>
+              {weekFocusDay ? (
+                /* ── Focused day detail ── */
+                focusEvts.length === 0 ? (
+                  <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
+                    <Text style={{ fontSize: 32 }}>☀️</Text>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Vrije dag</Text>
+                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken</Text>
+                  </View>
+                ) : (
+                  <View style={{ paddingTop: 12, paddingHorizontal: 16, gap: 8 }}>
+                    {focusEvts.map(e => {
+                      const color = getEventColor(e, streams);
+                      return (
+                        <TouchableOpacity
+                          key={e.id}
+                          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+                          style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}
+                          activeOpacity={0.75}
+                        >
+                          {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: color, width: 38 }}>{e.time.slice(0, 5)}</Text>}
+                          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.black, flex: 1 }}>{e.title}</Text>
+                          {e.source === 'sous-chef' && <Text style={{ fontSize: 13 }}>👨‍🍳</Text>}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )
+              ) : (
+                /* ── Full week overview ── */
+                weekEvents.length === 0 ? (
+                  <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
+                    <Text style={{ fontSize: 32 }}>🌤️</Text>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Rustige week</Text>
+                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken gepland</Text>
+                  </View>
+                ) : weekDays.map(d => {
+                  const dayEvts = weekEvents.filter(e => e.date === d.key).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+                  if (dayEvts.length === 0) return null;
+                  return (
+                    <View key={d.key} style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, paddingVertical: 10 }}>
+                      <View style={{ width: 48, alignItems: 'center', paddingTop: 2 }}>
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.yellow : colors.black }}>{d.num}</Text>
+                      </View>
+                      <View style={{ flex: 1, gap: 6, paddingRight: 14 }}>
+                        {dayEvts.map(e => {
+                          const color = getEventColor(e, streams);
+                          return (
+                            <TouchableOpacity
+                              key={e.id}
+                              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+                              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
+                              activeOpacity={0.75}
+                            >
+                              {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: color, width: 34 }}>{e.time.slice(0, 5)}</Text>}
+                              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, flex: 1 }} numberOfLines={1}>{e.title}</Text>
+                              {e.source === 'sous-chef' && <Text style={{ fontSize: 11 }}>👨‍🍳</Text>}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })
+              )}
             </ScrollView>
 
             {/* FAB */}
-            <TouchableOpacity onPress={() => openQuickAdd()} style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }} activeOpacity={0.85}>
+            <TouchableOpacity onPress={() => openQuickAdd(weekFocusDay ?? undefined)} style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }} activeOpacity={0.85}>
               <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="add" size={26} color={Colors.black} />
               </LinearGradient>
