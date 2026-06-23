@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import { Alert, Linking } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Inter_300Light,
   Inter_400Regular,
@@ -125,6 +127,18 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
   useEffect(() => { if (error) throw error; }, [error]);
+
+  // Handle notification tap → navigate to relevant screen
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data as Record<string, any>;
+      if (data?.type === 'deep_work_reminder') {
+        const duration = data.duration ?? 90;
+        AsyncStorage.setItem('deep_work_prefill_minutes', String(duration)).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
   useEffect(() => {
     if (loaded) { SplashScreen.hideAsync(); return; }
     // Fallback: hide splash after 5s even if fonts are still loading (Android/slow networks)

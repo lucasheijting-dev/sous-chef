@@ -319,7 +319,7 @@ async function getUsersWithCalendar() {
   return data ?? [];
 }
 
-async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore, caldavUid, calendarStream }) {
+async function createEvent(userId, { title, date, time, recurrence, reminderDaysBefore, caldavUid, calendarStream, duration_minutes, is_deep_work }) {
   const { data, error } = await supabase
     .from('events')
     .insert({
@@ -331,6 +331,8 @@ async function createEvent(userId, { title, date, time, recurrence, reminderDays
       reminder_days_before: reminderDaysBefore ?? null,
       caldav_uid: caldavUid ?? null,
       calendar_stream: calendarStream ?? 'personal',
+      ...(duration_minutes != null ? { duration_minutes } : {}),
+      ...(is_deep_work ? { is_deep_work: true } : {}),
     })
     .select('id')
     .single();
@@ -417,7 +419,7 @@ async function getEventsDueForPushReminder() {
 
   const { data } = await supabase
     .from('events')
-    .select('id, user_id, title, date, time, users(push_token)')
+    .select('id, user_id, title, date, time, is_deep_work, duration_minutes, users(push_token)')
     .eq('date', today)
     .is('push_reminder_sent_at', null)
     .not('time', 'is', null)

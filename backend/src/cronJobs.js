@@ -178,10 +178,15 @@ cron.schedule('*/5 * * * *', async () => {
     for (const e of events) {
       if (!e.push_token) continue;
       const timeStr = e.time ? ` om ${e.time}` : '';
+      const isDeepWork = !!e.is_deep_work;
       await sendPush(e.push_token, {
-        title: `📅 Zo te beginnen: ${e.title}`,
-        body: `Begint${timeStr} — over ongeveer 30 minuten`,
-        data: { type: 'event_reminder', screen: 'agenda' },
+        title: isDeepWork ? `🧠 Deep work blok begint zo` : `📅 Zo te beginnen: ${e.title}`,
+        body: isDeepWork
+          ? `Begint${timeStr} — tik om de timer te starten`
+          : `Begint${timeStr} — over ongeveer 30 minuten`,
+        data: isDeepWork
+          ? { type: 'deep_work_reminder', duration: e.duration_minutes ?? 90, screen: 'timer' }
+          : { type: 'event_reminder', screen: 'agenda' },
       }).catch(() => {});
       await db.markEventPushReminderSent(e.id);
       console.log(`[PushReminder] Sent for "${e.title}"`);

@@ -86,6 +86,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **profile_query** — gebruiker vraagt wat je over hem/haar weet (bijv. "wat weet je over mij?", "welke info heb je van me?")
 - **smart_summary** — gebruiker vraagt een overzicht van alles (bijv. "wat moet ik niet vergeten?", "geef me een overzicht", "wat staat er allemaal open?")
 - **find_free_slots** — gebruiker vraagt wanneer hij/zij tijd heeft op een dag (bijv. "wanneer heb ik tijd vrijdag?", "heb ik ruimte voor een afspraak morgen?", "wanneer ben ik vrij deze week?"); vul slot_date in als YYYY-MM-DD
+- **schedule_deep_work** — gebruiker wil meerdere aaneengesloten focus- of deep-work-blokken inplannen (bijv. "plan 3 deep work blokken van 90 minuten deze week", "blokkeer 4 focusblokken van 2 uur", "plan morgenochtend een werkblok van 2 uur"); vul in: block_count (aantal, standaard 1), block_duration_minutes (duur per blok in minuten, standaard 90), preferred_time ('morning' voor voormiddag/ochtend, 'afternoon' voor middag, 'any' als niet gespecificeerd), week_offset (0 = deze week, 1 = volgende week, -1 = vorige week; standaard 0)
 - **list_categorize** — boodschappenlijst gesorteerd op categorie tonen (bijv. "toon mijn boodschappenlijst gesorteerd", "geef me een overzicht per categorie", "orden mijn boodschappen"); vul list_id in
 - **setting_change** — instelling wijzigen
 - **greeting** — begroeting zonder actie

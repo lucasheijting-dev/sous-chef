@@ -280,6 +280,44 @@ async function executePendingAction(pending, userId) {
         await db.deleteNote(pending.noteId);
         return `🗑️ Notitie *${pending.noteTitle}* verwijderd.`;
       }
+      case 'deep_work': {
+        const ci   = await db.getCalendarProvider(userId).catch(() => null);
+        const cp   = ci?.calendar_provider;
+        const cc   = cp === 'iphone' || !cp ? await db.getCalDAVCredentials(userId).catch(() => null) : null;
+        const created = [];
+        for (const slot of (pending.slots ?? [])) {
+          const eventRow = await db.createEvent(userId, {
+            title: '🧠 Deep work',
+            date: slot.date,
+            time: slot.time,
+            recurrence: null,
+            reminderDaysBefore: null,
+            caldavUid: null,
+            calendarStream: 'work',
+            duration_minutes: slot.durationMins,
+            is_deep_work: true,
+          });
+          const uid = await _calCreate(userId, cp, ci, cc, 'work', {
+            title: '🧠 Deep work',
+            date: slot.date,
+            time: slot.time,
+            durationMinutes: slot.durationMins,
+          }).catch(() => null);
+          if (uid && eventRow?.id) await db.updateEventCalDAVUid(eventRow.id, uid).catch(() => {});
+          created.push(slot);
+        }
+        const lines = created.map(s => {
+          const d = new Date(s.date + 'T00:00:00');
+          const day = d.toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' });
+          const [h, m] = s.time.split(':').map(Number);
+          const endH = h + Math.floor((m + s.durationMins) / 60);
+          const endM = (m + s.durationMins) % 60;
+          const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+          return `• ${day} ${s.time}–${endTime}`;
+        });
+        return `✅ *${created.length} deep work blok${created.length === 1 ? '' : 'ken'} ingepland!*\n\n${lines.join('\n')}\n\n_Je krijgt 30 minuten van tevoren een melding. 🧠_`;
+      }
+
       case 'birthday_gift': {
         const birthdayDate = pending.birthdayDate;
         const [y, m, d] = birthdayDate.split('-').map(Number);
@@ -1041,6 +1079,79 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
       if (slots.length === 0) return `📅 Geen vrije slots op ${fmtDate(slotDate)} (09:00–20:00). Je agenda zit vol!`;
       return `📅 *Vrije slots op ${fmtDate(slotDate)}:*\n\n${slots.map(s => `• ${s}`).join('\n')}`;
+    }
+
+    // ── Schedule deep work blocks ─────────────────────────────────────────────
+
+    case 'schedule_deep_work': {
+      const blockCount    = Math.min(intent.block_count ?? 1, 7);
+      const durationMins  = intent.block_duration_minutes ?? 90;
+      const prefTime      = intent.preferred_time ?? 'any'; // 'morning' | 'afternoon' | 'any'
+      const weekOff       = intent.week_offset ?? 0;
+
+      const timeToMins = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+      const minsToTime = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+      const winStart = prefTime === 'afternoon' ? 800  : 540;  // 13:20 or 09:00 (in mins)
+      const winEnd   = prefTime === 'morning'   ? 720  : (prefTime === 'afternoon' ? 1080 : 1080); // 12:00 or 18:00
+
+      // Build date range: this/next week Mon–Sun (skip past days)
+      const todayStr = new Date().toISOString().split('T')[0];
+      const now = new Date(); now.setHours(0, 0, 0, 0);
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOff * 7);
+
+      const weekDates = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(monday); d.setDate(monday.getDate() + i);
+        return d.toISOString().split('T')[0];
+      }).filter(d => d >= todayStr);
+
+      const foundSlots = [];
+      for (const date of weekDates) {
+        if (foundSlots.length >= blockCount) break;
+        const dayEvents = await db.getEventsForDate(userId, date);
+        const timed = dayEvents.filter(e => e.time).sort((a, b) => a.time.localeCompare(b.time));
+        let prev = winStart;
+
+        for (const e of timed) {
+          const eStart = timeToMins(e.time);
+          const gap = Math.min(eStart, winEnd) - prev;
+          if (gap >= durationMins) {
+            foundSlots.push({ date, time: minsToTime(prev), durationMins });
+            if (foundSlots.length >= blockCount) break;
+          }
+          prev = Math.max(prev, eStart + (e.duration_minutes ?? 60));
+        }
+
+        if (foundSlots.length < blockCount) {
+          const remaining = winEnd - prev;
+          if (remaining >= durationMins) {
+            foundSlots.push({ date, time: minsToTime(prev), durationMins });
+          }
+        }
+      }
+
+      if (foundSlots.length === 0) {
+        return `📅 Ik kon geen vrije blokken van ${durationMins} minuten vinden ${weekOff === 0 ? 'deze week' : 'volgende week'}. Je agenda zit vol in die periode!`;
+      }
+      if (foundSlots.length < blockCount) {
+        // Found fewer than requested — still offer what we have
+      }
+
+      const lines = foundSlots.map((s, i) => {
+        const d = new Date(s.date + 'T00:00:00');
+        const day = d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'short' });
+        const endMins = timeToMins(s.time) + s.durationMins;
+        const endTime = minsToTime(endMins);
+        return `${i + 1}. ${day} — ${s.time}–${endTime}`;
+      });
+
+      const prefix = foundSlots.length < blockCount
+        ? `Ik vond maar ${foundSlots.length} vrij${foundSlots.length === 1 ? '' : 'e'} blok${foundSlots.length === 1 ? '' : 'ken'} (je vroeg er ${blockCount}):`
+        : `Hier zijn ${foundSlots.length} deep work blok${foundSlots.length === 1 ? '' : 'ken'} die ik voor je kan inplannen:`;
+
+      confirm.set(userId, { type: 'deep_work', slots: foundSlots });
+      return `🧠 ${prefix}\n\n${lines.join('\n')}\n\nTyp *ja* om ze in te plannen.`;
     }
 
     // ── List categorize ───────────────────────────────────────────────────────
