@@ -266,6 +266,12 @@ export default function ListDetailScreen() {
   const [geoToggling, setGeoToggling] = useState(false);
   const [geoPermModal, setGeoPermModal] = useState(false);
 
+  const [members, setMembers] = useState<{ user_id: string; role: string; users: { display_name?: string; whatsapp_number: string } | null }[]>([]);
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [invitePhone, setInvitePhone] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
   const [recipeModalVisible, setRecipeModalVisible] = useState(false);
   const [recipeUrl, setRecipeUrl] = useState('');
   const [recipeImporting, setRecipeImporting] = useState(false);
@@ -312,6 +318,15 @@ export default function ListDetailScreen() {
     });
   }, [id]);
 
+  async function fetchMembers() {
+    if (!user || user.id === 'dev') return;
+    const { data } = await supabase
+      .from('list_members')
+      .select('user_id, role, users(display_name, whatsapp_number)')
+      .eq('list_id', id);
+    setMembers((data as any) ?? []);
+  }
+
   const fetchItems = useCallback(async () => {
     const { data } = await supabase
       .from('list_items')
@@ -342,6 +357,7 @@ export default function ListDetailScreen() {
 
   useEffect(() => {
     fetchItems();
+    fetchMembers();
     const channel = supabase.channel(`list-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items', filter: `list_id=eq.${id}` }, fetchItems)
       .subscribe();
@@ -448,6 +464,31 @@ export default function ListDetailScreen() {
         },
       ],
     );
+  }
+
+  async function sendInvite() {
+    if (!invitePhone.trim() || !user) return;
+    setInviting(true);
+    setInviteError('');
+    try {
+      const res = await fetch(`${API_BASE}/sharing/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'list', resource_id: id, phone: invitePhone.trim(), user_id: user.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setInviteError(json.error ?? 'Er ging iets mis.');
+      } else {
+        setInviteModalVisible(false);
+        showToast('Uitnodiging verstuurd via WhatsApp 👨‍🍳', 'success');
+        fetchMembers();
+      }
+    } catch {
+      setInviteError('Geen verbinding. Probeer het opnieuw.');
+    } finally {
+      setInviting(false);
+    }
   }
 
   async function importRecipeFromApp() {
@@ -690,7 +731,27 @@ export default function ListDetailScreen() {
           </View>
         )}
 
-        {/* Batch delete button */}
+        {/* Members row */}
+        {(members.length > 0 || true) && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>
+            {members.map(m => {
+              const name = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
+              const initials = name.slice(0, 2).toUpperCase();
+              return (
+                <View key={m.user_id} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: Colors.black }}>{initials}</Text>
+                </View>
+              );
+            })}
+            <TouchableOpacity
+              onPress={() => { setInvitePhone(''); setInviteError(''); setInviteModalVisible(true); }}
+              style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="person-add-outline" size={14} color={colors.gray400} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {loading ? (
           <View style={styles.skeletonList}>
@@ -963,6 +1024,32 @@ export default function ListDetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </Modal>
+
+        <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setInviteModalVisible(false)}>
+            <Pressable style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
+              <TextInput
+                value={invitePhone}
+                onChangeText={t => { setInvitePhone(t); setInviteError(''); }}
+                placeholder="+31 6 12345678"
+                keyboardType="phone-pad"
+                style={{ borderWidth: 1, borderColor: inviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
+                autoFocus
+              />
+              {!!inviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{inviteError}</Text>}
+              <TouchableOpacity
+                onPress={sendInvite}
+                disabled={inviting || !invitePhone.trim()}
+                style={{ backgroundColor: inviting || !invitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+                activeOpacity={0.85}
+              >
+                {inviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
         </Modal>
       </View>
       </KeyboardAvoidingView>

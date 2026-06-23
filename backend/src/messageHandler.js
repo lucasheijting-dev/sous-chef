@@ -162,6 +162,27 @@ async function handleMessage({ from, text }) {
     confirm.clear(userId);
   }
 
+  // Share invite check (JA / NEE for pending WhatsApp invites stored in DB)
+  if (confirm.isConfirm(lc) || confirm.isCancel(lc)) {
+    const invites = await db.getPendingShareInvites(userId).catch(() => []);
+    if (invites.length > 0) {
+      const invite = invites[0]; // most recent pending invite
+      if (confirm.isConfirm(lc)) {
+        await db.acceptShareInvite(invite.id);
+        const resourceName = invite.list?.name
+          ? `${invite.list.emoji ?? '📋'} ${invite.list.name}`
+          : invite.note?.title ?? 'de notitie';
+        const inviterName = invite.inviter?.display_name ?? invite.inviter?.whatsapp_number ?? 'Iemand';
+        await sendMessage(from, `✅ Welkom! Je hebt nu toegang tot *${resourceName}* van ${inviterName}. Open Sous-Chef om de lijst te bekijken.`);
+      } else {
+        await db.declineShareInvite(invite.id);
+        await sendMessage(from, '↩️ Uitnodiging geweigerd.');
+      }
+      await db.incrementMessageCount(userId);
+      return;
+    }
+  }
+
   // Undo shortcut
   if (UNDO_TRIGGERS.some(t => lc.includes(t))) {
     const reply = await handleUndo(userId);

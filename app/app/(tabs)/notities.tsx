@@ -14,6 +14,7 @@ import {
   Platform,
   Share,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
@@ -25,6 +26,8 @@ import { Note } from '@/lib/types';
 import { getCache, setCache } from '@/lib/cache';
 import { Colors, Radius, Shadow } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
 const todayStr = new Date().toISOString().split('T')[0];
 const yesterdayStr = (() => {
@@ -90,6 +93,7 @@ function NoteCard({
   onDelete,
   isDeleting,
   onLongPress,
+  isShared,
 }: {
   item: Note;
   index: number;
@@ -97,6 +101,7 @@ function NoteCard({
   onDelete: () => void;
   isDeleting?: boolean;
   onLongPress?: () => void;
+  isShared?: boolean;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -125,6 +130,11 @@ function NoteCard({
         onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
       >
         <Animated.View style={[styles.card, { backgroundColor: style.bg, transform: [{ scale }] }]}>
+          {isShared && (
+            <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 6, zIndex: 1 }}>
+              <Text style={{ fontSize: 11 }}>👥</Text>
+            </View>
+          )}
           <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
             {item.title || item.body.slice(0, 40)}
           </Text>
@@ -189,11 +199,21 @@ export default function NotitiesTab() {
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sharedNoteIds, setSharedNoteIds] = useState<Set<string>>(new Set());
+  const [noteInviteVisible, setNoteInviteVisible] = useState(false);
+  const [noteInviteTarget, setNoteInviteTarget] = useState<Note | null>(null);
+  const [noteInvitePhone, setNoteInvitePhone] = useState('');
+  const [noteInviteError, setNoteInviteError] = useState('');
+  const [noteInviting, setNoteInviting] = useState(false);
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
-    const { data } = await supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    if (data) { setNotes(data); setCache('cache_notes', data); }
+    const [notesRes, sharedNoteRes] = await Promise.all([
+      supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('note_members').select('note_id').eq('user_id', user.id),
+    ]);
+    if (notesRes.data) { setNotes(notesRes.data); setCache('cache_notes', notesRes.data); }
+    setSharedNoteIds(new Set((sharedNoteRes.data ?? []).map((r: any) => r.note_id)));
     setLoading(false);
     setRefreshing(false);
   }, [user]);
@@ -212,6 +232,30 @@ export default function NotitiesTab() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, fetchNotes]);
+
+  async function sendNoteInvite() {
+    if (!noteInvitePhone.trim() || !noteInviteTarget || !user) return;
+    setNoteInviting(true);
+    setNoteInviteError('');
+    try {
+      const res = await fetch(`${API_BASE}/sharing/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'note', resource_id: noteInviteTarget.id, phone: noteInvitePhone.trim(), user_id: user.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setNoteInviteError(json.error ?? 'Er ging iets mis.');
+      } else {
+        setNoteInviteVisible(false);
+        setNoteInviteTarget(null);
+      }
+    } catch {
+      setNoteInviteError('Geen verbinding. Probeer het opnieuw.');
+    } finally {
+      setNoteInviting(false);
+    }
+  }
 
   function handleDelete(note: Note) {
     setDeletingId(null);
@@ -331,6 +375,7 @@ export default function NotitiesTab() {
               onDelete={() => handleDelete(item)}
               isDeleting={deletingId === item.id}
               onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
+              isShared={sharedNoteIds.has(item.id)}
             />
           )}
         />
@@ -338,6 +383,32 @@ export default function NotitiesTab() {
       )}
 
       <UndoSnackbar visible={snackbarVisible} onUndo={handleUndo} />
+
+      <Modal visible={noteInviteVisible} transparent animationType="slide" onRequestClose={() => setNoteInviteVisible(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setNoteInviteVisible(false)}>
+          <Pressable style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
+            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
+            <TextInput
+              value={noteInvitePhone}
+              onChangeText={t => { setNoteInvitePhone(t); setNoteInviteError(''); }}
+              placeholder="+31 6 12345678"
+              keyboardType="phone-pad"
+              style={{ borderWidth: 1, borderColor: noteInviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
+              autoFocus
+            />
+            {!!noteInviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{noteInviteError}</Text>}
+            <TouchableOpacity
+              onPress={sendNoteInvite}
+              disabled={noteInviting || !noteInvitePhone.trim()}
+              style={{ backgroundColor: noteInviting || !noteInvitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+              activeOpacity={0.85}
+            >
+              {noteInviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSelected(null); setEditMode(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -391,6 +462,16 @@ export default function NotitiesTab() {
                 <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selected?.body}</Text>
               )}
             </ScrollView>
+            {!editMode && selected && (
+              <TouchableOpacity
+                onPress={() => { setNoteInviteTarget(selected); setNoteInvitePhone(''); setNoteInviteError(''); setNoteInviteVisible(true); }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, padding: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray100 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="person-add-outline" size={15} color={colors.gray400} />
+                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400 }}>Chefje toevoegen</Text>
+              </TouchableOpacity>
+            )}
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>

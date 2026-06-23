@@ -132,7 +132,7 @@ function AnimatedCard({
   isDeleting,
   onDeletePress,
 }: {
-  item: List & { item_count: number; open_count: number };
+  item: List & { item_count: number; open_count: number; is_shared?: boolean };
   index: number;
   onPress: () => void;
   onLongPress?: () => void;
@@ -188,6 +188,11 @@ function AnimatedCard({
         <View style={[styles.tileIconBox, { backgroundColor: tone.bg }]}>
           <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
         </View>
+        {item.is_shared && (
+          <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 6 }}>
+            <Text style={{ fontSize: 11 }}>👥</Text>
+          </View>
+        )}
 
         <View style={styles.tileBottom}>
           <Text style={[styles.tileName, { color: colors.black }]}>{item.name}</Text>
@@ -497,7 +502,7 @@ export default function LijstenTab() {
       if (tab === 'receipts') receiptsScrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     }, 50);
   }
-  const [lists, setLists] = useState<(List & { item_count: number; open_count: number })[]>([]);
+  const [lists, setLists] = useState<(List & { item_count: number; open_count: number; is_shared?: boolean })[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [receiptCats, setReceiptCats] = useState<ReceiptCategory[]>([]);
@@ -548,20 +553,40 @@ export default function LijstenTab() {
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     try {
-      const listsRes = await supabase
-        .from('lists')
-        .select('id, name, emoji, sort_order, list_type, list_items(checked)')
-        .eq('user_id', user.id)
-        .order('sort_order', { ascending: true });
+      const [listsRes, sharedRes] = await Promise.all([
+        supabase
+          .from('lists')
+          .select('id, name, emoji, sort_order, list_type, list_items(checked)')
+          .eq('user_id', user.id)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('list_members')
+          .select('list_id, lists(id, name, emoji, sort_order, list_type, list_items(checked))')
+          .eq('user_id', user.id),
+      ]);
       if (listsRes.data) {
-        const processed = listsRes.data.map((l: any) => {
+        const ownedProcessed = listsRes.data.map((l: any) => {
           const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
           const totalCount = items.length;
           const openCount = items.filter((li: any) => !li.checked).length;
-          return { ...l, item_count: totalCount, open_count: openCount };
-        }).filter((l: any) => l.id !== pendingDeleteIdRef.current);
-        setLists(processed);
-        setCache('cache_lists', processed);
+          return { ...l, item_count: totalCount, open_count: openCount, is_shared: false };
+        });
+        const sharedProcessed = (sharedRes.data ?? [])
+          .filter((r: any) => r.lists)
+          .map((r: any) => {
+            const l = r.lists as any;
+            const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
+            const totalCount = items.length;
+            const openCount = items.filter((li: any) => !li.checked).length;
+            return { ...l, item_count: totalCount, open_count: openCount, is_shared: true };
+          });
+        const ownedIds = new Set(ownedProcessed.map((l: any) => l.id));
+        const mergedAll = [
+          ...ownedProcessed,
+          ...sharedProcessed.filter((l: any) => !ownedIds.has(l.id)),
+        ].filter((l: any) => l.id !== pendingDeleteIdRef.current);
+        setLists(mergedAll);
+        setCache('cache_lists', mergedAll);
         setFetchError(false);
       } else {
         setFetchError(true);

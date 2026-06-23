@@ -983,6 +983,96 @@ async function addListItemSource(listItemId, recipeId, originalText) {
     .upsert({ list_item_id: listItemId, recipe_id: recipeId, original_text: originalText ?? null }, { onConflict: 'list_item_id,recipe_id' });
 }
 
+// ── Sharing ─────────────────────────────────────────────────────────────────────
+
+async function getListMembers(listId) {
+  const { data } = await supabase
+    .from('list_members')
+    .select('id, user_id, role, created_at, users(id, whatsapp_number, display_name)')
+    .eq('list_id', listId);
+  return data ?? [];
+}
+
+async function getNoteMembers(noteId) {
+  const { data } = await supabase
+    .from('note_members')
+    .select('id, user_id, role, created_at, users(id, whatsapp_number, display_name)')
+    .eq('note_id', noteId);
+  return data ?? [];
+}
+
+async function addListMember(listId, userId, invitedBy, role = 'member') {
+  const { data, error } = await supabase
+    .from('list_members')
+    .upsert({ list_id: listId, user_id: userId, invited_by: invitedBy, role }, { onConflict: 'list_id,user_id' })
+    .select('id').single();
+  if (error) throw error;
+  return data;
+}
+
+async function addNoteMember(noteId, userId, invitedBy, role = 'member') {
+  const { data, error } = await supabase
+    .from('note_members')
+    .upsert({ note_id: noteId, user_id: userId, invited_by: invitedBy, role }, { onConflict: 'note_id,user_id' })
+    .select('id').single();
+  if (error) throw error;
+  return data;
+}
+
+async function removeListMember(listId, userId) {
+  await supabase.from('list_members').delete().eq('list_id', listId).eq('user_id', userId);
+}
+
+async function removeNoteMember(noteId, userId) {
+  await supabase.from('note_members').delete().eq('note_id', noteId).eq('user_id', userId);
+}
+
+async function createShareInvite(type, resourceId, invitedUserId, invitedBy) {
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('share_invites')
+    .upsert({ type, resource_id: resourceId, invited_user_id: invitedUserId, invited_by: invitedBy, expires_at: expiresAt }, { onConflict: 'type,resource_id,invited_user_id' })
+    .select('id').single();
+  if (error) throw error;
+  return data;
+}
+
+async function getPendingShareInvites(userId) {
+  const now = new Date().toISOString();
+  const { data } = await supabase
+    .from('share_invites')
+    .select(`
+      id, type, resource_id, invited_by,
+      inviter:users!share_invites_invited_by_fkey(id, display_name, whatsapp_number),
+      list:lists!share_invites_resource_id_fkey(id, name, emoji),
+      note:notes!share_invites_resource_id_fkey(id, title)
+    `)
+    .eq('invited_user_id', userId)
+    .gt('expires_at', now)
+    .is('accepted_at', null);
+  return data ?? [];
+}
+
+async function acceptShareInvite(inviteId) {
+  const { data } = await supabase
+    .from('share_invites')
+    .update({ accepted_at: new Date().toISOString() })
+    .eq('id', inviteId)
+    .select('type, resource_id, invited_user_id, invited_by')
+    .single();
+  if (!data) return null;
+  if (data.type === 'list') {
+    await addListMember(data.resource_id, data.invited_user_id, data.invited_by);
+  } else if (data.type === 'note') {
+    await addNoteMember(data.resource_id, data.invited_user_id, data.invited_by);
+  }
+  return data;
+}
+
+async function declineShareInvite(inviteId) {
+  await supabase.from('share_invites').delete().eq('id', inviteId);
+}
+
 async function getUsersWithAutoDelete() {
   const { data } = await supabase
     .from('user_prefs')
@@ -1112,6 +1202,16 @@ module.exports = {
   addListItemSource,
   getUsersWithAutoDelete,
   deleteOldListsForUser,
+  getListMembers,
+  getNoteMembers,
+  addListMember,
+  addNoteMember,
+  removeListMember,
+  removeNoteMember,
+  createShareInvite,
+  getPendingShareInvites,
+  acceptShareInvite,
+  declineShareInvite,
 };
 
 // ── Receipts ────────────────────────────────────────────────────────────────────
