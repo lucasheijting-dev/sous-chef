@@ -856,7 +856,8 @@ function AgendaLite() {
           const evColor = getEventColor(e, streams);
           const cardContent = (
             <Pressable
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+              onPress={() => { if (deletingId) { setDeletingId(null); return; } Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+              onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }}
               style={({ pressed }) => [
                 { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: Radius.lg, padding: 16, marginBottom: 12, gap: 14, overflow: 'hidden', opacity: eventPast ? 0.45 : 1, transform: [{ scale: pressed ? 0.975 : 1 }] },
                 Shadow.card,
@@ -897,9 +898,7 @@ function AgendaLite() {
 
           return (
             <View key={e.id} style={{ position: 'relative' }}>
-              <Pressable onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }} onPress={() => { if (deletingId) { setDeletingId(null); return; } }}>
-                {cardContent}
-              </Pressable>
+              {cardContent}
               {deletingId === e.id && (
                 <TouchableOpacity
                   style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 12, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
@@ -1258,8 +1257,9 @@ function AgendaLite() {
 
                 return (
                   <Animated.View key={e.id} {...panResponder.panHandlers}
-                    style={{ position: 'absolute', left: 58, right: 8, top: displayTop, height: 56, backgroundColor: color + (isDragging ? '30' : '18'), borderRadius: 13, borderLeftWidth: 3, borderLeftColor: color, padding: 8, zIndex: isDragging ? 10 : 1, shadowColor: color, shadowOpacity: isDragging ? 0.25 : 0, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: isDragging ? 6 : 0 }}>
-                    <TouchableOpacity onPress={() => { if (deletingId) { setDeletingId(null); return; } if (!isDragging) openEditEvent(e); }} onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }} activeOpacity={0.85} style={{ flex: 1 }}>
+                    style={{ position: 'absolute', left: 58, right: 8, top: displayTop, height: 56, borderRadius: 13, zIndex: isDragging ? 10 : 1, shadowColor: color, shadowOpacity: isDragging ? 0.25 : 0, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: isDragging ? 6 : 0 }}>
+                    <TouchableOpacity onPress={() => { if (deletingId) { setDeletingId(null); return; } if (!isDragging) openEditEvent(e); }} onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }} activeOpacity={0.85}
+                      style={{ flex: 1, backgroundColor: color + (isDragging ? '30' : '18'), borderRadius: 13, borderLeftWidth: 3, borderLeftColor: color, padding: 8 }}>
                       <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: color }} numberOfLines={1}>{e.title}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                         <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: color, opacity: 0.75 }}>{isDragging ? dragTimeLabel : e.time}</Text>
@@ -1271,6 +1271,16 @@ function AgendaLite() {
                         )}
                       </View>
                     </TouchableOpacity>
+                    {deletingId === e.id && (
+                      <TouchableOpacity
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: 13, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+                        onPress={() => deleteEvent(e)}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#fff" />
+                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+                      </TouchableOpacity>
+                    )}
                   </Animated.View>
                 );
               })}
