@@ -27,7 +27,6 @@ import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Calendar from 'expo-calendar';
-import { Swipeable } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { CalEvent } from '@/lib/types';
@@ -313,7 +312,7 @@ function AgendaLite() {
   const [timePeriod, setTimePeriod]       = useState<TimePeriod>('today');
   const [streamFilter, setStreamFilter]   = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<MergedEvent | null>(null);
-  const [deleteTarget, setDeleteTarget]   = useState<MergedEvent | null>(null);
+  const [deletingId, setDeletingId]       = useState<string | null>(null);
   const liteScrollRef                     = useRef<ScrollView>(null);
   const chipScrollRef                     = useRef<ScrollView>(null);
   const breatheAnim                       = useRef(new Animated.Value(1)).current;
@@ -663,14 +662,13 @@ function AgendaLite() {
   }
 
   async function deleteEvent(event: MergedEvent) {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    setAllEvents(prev => prev.filter(e => e.id !== event.id));
+    setDeletingId(null);
     if (event.source === 'sous-chef') {
-      await supabase.from('events').delete().eq('id', event.id);
+      await supabase.from('events').delete().eq('id', event.id).eq('user_id', user!.id);
     } else if (event.source === 'phone' && Platform.OS !== 'web') {
       try { await Calendar.deleteEventAsync(event.id.replace('phone-', '')); } catch (_) {}
     }
-    setAllEvents(prev => prev.filter(e => e.id !== event.id));
-    setDeleteTarget(null);
   }
 
   function openQuickAdd(prefillDate?: string) {
@@ -898,19 +896,21 @@ function AgendaLite() {
           );
 
           return (
-            <Swipeable
-              key={e.id}
-              renderRightActions={() => (
-                <View style={{ width: 72, justifyContent: 'center', alignItems: 'center', marginBottom: 10 }}>
-                  <View style={{ backgroundColor: '#E74C3C', borderRadius: Radius.lg, width: 56, height: '100%', justifyContent: 'center', alignItems: 'center' }}>
-                    <Ionicons name="trash-outline" size={20} color="#fff" />
-                  </View>
-                </View>
+            <View key={e.id} style={{ position: 'relative' }}>
+              <Pressable onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }} onPress={() => { if (deletingId) { setDeletingId(null); return; } }}>
+                {cardContent}
+              </Pressable>
+              {deletingId === e.id && (
+                <TouchableOpacity
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 12, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+                  onPress={() => deleteEvent(e)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#fff" />
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+                </TouchableOpacity>
               )}
-              onSwipeableOpen={() => setDeleteTarget(e)}
-            >
-              {cardContent}
-            </Swipeable>
+            </View>
           );
         })}
       </Animated.ScrollView>
@@ -1173,16 +1173,28 @@ function AgendaLite() {
               {selectedDayEvents.filter(e => !e.time).map(e => {
                 const color = getEventColor(e, streams);
                 return (
-                  <TouchableOpacity key={e.id} onPress={() => openEditEvent(e)} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.8}
-                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '18', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, padding: 10, marginBottom: 4 }}>
-                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: color, flex: 1 }}>{e.title}</Text>
-                    {e.recurrence && <Text style={{ fontSize: 11, color: color, opacity: 0.6, marginRight: 6 }}>↺</Text>}
-                    {e.source === 'phone' && (
-                      <View style={{ backgroundColor: color + '22', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 9, color: color }}>iPhone</Text>
-                      </View>
+                  <View key={e.id} style={{ position: 'relative', marginBottom: 4 }}>
+                    <TouchableOpacity onPress={() => { if (deletingId) { setDeletingId(null); return; } openEditEvent(e); }} onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }} activeOpacity={0.8}
+                      style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '18', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, padding: 10 }}>
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: color, flex: 1 }}>{e.title}</Text>
+                      {e.recurrence && <Text style={{ fontSize: 11, color: color, opacity: 0.6, marginRight: 6 }}>↺</Text>}
+                      {e.source === 'phone' && (
+                        <View style={{ backgroundColor: color + '22', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+                          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 9, color: color }}>iPhone</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                    {deletingId === e.id && (
+                      <TouchableOpacity
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: 10, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+                        onPress={() => deleteEvent(e)}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#fff" />
+                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+                      </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
@@ -1247,7 +1259,7 @@ function AgendaLite() {
                 return (
                   <Animated.View key={e.id} {...panResponder.panHandlers}
                     style={{ position: 'absolute', left: 58, right: 8, top: displayTop, height: 56, backgroundColor: color + (isDragging ? '30' : '18'), borderRadius: 13, borderLeftWidth: 3, borderLeftColor: color, padding: 8, zIndex: isDragging ? 10 : 1, shadowColor: color, shadowOpacity: isDragging ? 0.25 : 0, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: isDragging ? 6 : 0 }}>
-                    <TouchableOpacity onPress={() => !isDragging && openEditEvent(e)} onLongPress={() => setDeleteTarget(e)} activeOpacity={0.85} style={{ flex: 1 }}>
+                    <TouchableOpacity onPress={() => { if (deletingId) { setDeletingId(null); return; } if (!isDragging) openEditEvent(e); }} onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }} activeOpacity={0.85} style={{ flex: 1 }}>
                       <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: color }} numberOfLines={1}>{e.title}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                         <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 11, color: color, opacity: 0.75 }}>{isDragging ? dragTimeLabel : e.time}</Text>
@@ -1345,30 +1357,6 @@ function AgendaLite() {
             </ScrollView>
           </SafeAreaView>
         )}
-      </Modal>
-
-      {/* Delete confirmation bottom sheet */}
-      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: insets.bottom + 24 }}>
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 8 }}>Afspraak verwijderen?</Text>
-            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, marginBottom: 24 }}>
-              "{deleteTarget?.title}" wordt permanent verwijderd.
-            </Text>
-            <Pressable
-              onPress={() => { if (deleteTarget) deleteEvent(deleteTarget); }}
-              style={({ pressed }) => [{ backgroundColor: '#E74C3C', borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', marginBottom: 10, opacity: pressed ? 0.8 : 1 }]}
-            >
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: '#fff' }}>Verwijderen</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setDeleteTarget(null)}
-              style={({ pressed }) => [{ backgroundColor: colors.gray100, borderRadius: Radius.pill, paddingVertical: 14, alignItems: 'center', opacity: pressed ? 0.7 : 1 }]}
-            >
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>Annuleren</Text>
-            </Pressable>
-          </View>
-        </View>
       </Modal>
 
       {/* QuickAdd modal */}

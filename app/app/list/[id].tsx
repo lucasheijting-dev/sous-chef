@@ -21,7 +21,7 @@ import {
   Share,
   KeyboardAvoidingView,
 } from 'react-native';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
@@ -43,6 +43,7 @@ import { SkeletonListCard } from '@/components/SkeletonCard';
 import Confetti from '@/components/Confetti';
 
 const ADD_INPUT_ACCESSORY_ID = 'sous-chef-add-input';
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
 function haptic(style: 'light' | 'medium' | 'warning' = 'light') {
   if (Platform.OS === 'web') return;
@@ -90,6 +91,11 @@ function SwipeableItem({
   editingItemId,
   onEditSubmit,
   isFirst,
+  tapToEdit,
+  editMode,
+  isDeleting,
+  onDismissDelete,
+  onRequestEdit,
 }: {
   item: ListItem;
   onToggle: () => void;
@@ -98,9 +104,13 @@ function SwipeableItem({
   editingItemId: string | null;
   onEditSubmit: (id: string, text: string) => void;
   isFirst?: boolean;
+  tapToEdit?: boolean;
+  editMode?: boolean;
+  isDeleting?: boolean;
+  onDismissDelete?: () => void;
+  onRequestEdit?: () => void;
 }) {
   const { colors } = useTheme();
-  const swipeRef = useRef<Swipeable>(null);
   const [editText, setEditText] = useState(item.text);
   const isEditing = editingItemId === item.id;
   const rowBounce = useRef(new Animated.Value(1)).current;
@@ -116,85 +126,61 @@ function SwipeableItem({
     prevChecked.current = item.checked;
   }, [item.checked]);
 
-  function handleDelete() {
-    swipeRef.current?.close();
-    onDelete();
-  }
-
-  function handleToggleFromSwipe() {
-    swipeRef.current?.close();
-    onToggle();
-  }
-
-  const renderLeftActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
-    const iconScale = drag.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: 'clamp' });
-    return (
-      <TouchableOpacity style={styles.checkAction} onPress={handleToggleFromSwipe} activeOpacity={0.8}>
-        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-          <Ionicons name="checkmark" size={22} color={Colors.white} />
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderRightActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
-    const iconScale = drag.interpolate({ inputRange: [-80, 0], outputRange: [1, 0.7], extrapolate: 'clamp' });
-    return (
-      <TouchableOpacity style={styles.deleteAction} onPress={handleDelete} activeOpacity={0.8}>
-        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-          <Ionicons name="trash-outline" size={20} color={Colors.white} />
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
-
   return (
-    <Swipeable
-      ref={swipeRef}
-      renderLeftActions={renderLeftActions}
-      renderRightActions={renderRightActions}
-      leftThreshold={60}
-      rightThreshold={40}
-      overshootLeft={false}
-      overshootRight={false}
-      onSwipeableOpen={(direction) => {
-        if (direction === 'right') {
-          handleToggleFromSwipe();
-        }
-      }}
-    >
-      <Animated.View style={{ transform: [{ scale: rowBounce }] }}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.item,
-            { backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isFirst ? 'transparent' : colors.hairline },
-            item.checked && { backgroundColor: colors.gray100 },
-            pressed && { transform: [{ scale: 0.98 }] },
-          ]}
-          onPress={() => { haptic('light'); onToggle(); }}
-          onLongPress={() => { haptic('medium'); onLongPress(); }}
-        >
-          <AnimatedCheckbox checked={item.checked} onPress={onToggle} />
-          {isEditing ? (
-            <TextInput
-              style={[styles.itemText, { color: colors.black, flex: 1, borderBottomWidth: 1, borderBottomColor: Colors.yellow, padding: 0 }]}
-              value={editText}
-              onChangeText={setEditText}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={() => onEditSubmit(item.id, editText)}
-              onBlur={() => onEditSubmit(item.id, editText)}
-              selectionColor={Colors.yellow}
-            />
-          ) : (
-            <Text style={[styles.itemText, { color: colors.black }, item.checked && { color: colors.gray400, textDecorationLine: 'line-through' }]}>{item.text}</Text>
-          )}
-          {!isEditing && (
-            <Ionicons name="reorder-three" size={18} color={item.checked ? colors.gray200 : colors.gray400} />
-          )}
-        </Pressable>
-      </Animated.View>
-    </Swipeable>
+    <Animated.View style={{ transform: [{ scale: rowBounce }], position: 'relative' }}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.item,
+          { backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isFirst ? 'transparent' : colors.hairline },
+          item.checked && { backgroundColor: colors.gray100 },
+          pressed && { transform: [{ scale: 0.98 }] },
+        ]}
+        onPress={() => { if (isDeleting) { onDismissDelete?.(); return; } haptic('light'); if (tapToEdit) onLongPress(); else onToggle(); }}
+        onLongPress={() => { haptic('medium'); onLongPress(); }}
+      >
+        {!tapToEdit && <AnimatedCheckbox checked={item.checked} onPress={onToggle} />}
+        {isEditing ? (
+          <TextInput
+            style={[styles.itemText, { color: colors.black, flex: 1, borderBottomWidth: 1, borderBottomColor: Colors.yellow, padding: 0 }]}
+            value={editText}
+            onChangeText={setEditText}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={() => onEditSubmit(item.id, editText)}
+            onBlur={() => onEditSubmit(item.id, editText)}
+            selectionColor={Colors.yellow}
+          />
+        ) : (
+          <Text style={[styles.itemText, { color: colors.black }, item.checked && { color: colors.gray400, textDecorationLine: 'line-through' }]}>{item.text}</Text>
+        )}
+        {!isEditing && item.list_item_sources && item.list_item_sources.length > 0 && (
+          <Text style={{ fontSize: 13, marginRight: 2 }}>🍽️</Text>
+        )}
+        {!isEditing && (
+          <Ionicons name="reorder-three" size={18} color={item.checked ? colors.gray200 : colors.gray400} />
+        )}
+      </Pressable>
+      {isDeleting && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', overflow: 'hidden', borderRadius: 0 }}>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: '#666', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 6 }}
+            onPress={() => { onDismissDelete?.(); onRequestEdit?.(); }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="pencil-outline" size={16} color="#fff" />
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }}>Bewerken</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 6 }}
+            onPress={onDelete}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="trash-outline" size={16} color="#fff" />
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }}>Verwijder</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </Animated.View>
   );
 }
 
@@ -255,12 +241,13 @@ export default function ListDetailScreen() {
 
   const [pendingDelete, setPendingDelete] = useState<{ item: ListItem; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [doneExpanded, setDoneExpanded] = useState(true);
 
   const prevItemCount = useRef(0);
-  const newItemAnim = useRef(new Animated.Value(0)).current;
-  const newItemSlide = useRef(new Animated.Value(40)).current;
+  const newItemAnim = useRef(new Animated.Value(1)).current;
+  const newItemSlide = useRef(new Animated.Value(0)).current;
   const contentFade = useRef(new Animated.Value(0)).current;
 
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
@@ -279,6 +266,13 @@ export default function ListDetailScreen() {
   const [geoToggling, setGeoToggling] = useState(false);
   const [geoPermModal, setGeoPermModal] = useState(false);
 
+  const [recipeModalVisible, setRecipeModalVisible] = useState(false);
+  const [recipeUrl, setRecipeUrl] = useState('');
+  const [recipeImporting, setRecipeImporting] = useState(false);
+  const [recipeResult, setRecipeResult] = useState<{ title: string; added: string[]; merged: string[]; listName: string; listEmoji: string } | null>(null);
+  const [recipeError, setRecipeError] = useState<string | null>(null);
+  const [recipeServings, setRecipeServings] = useState<number | null>(null);
+
   useEffect(() => {
     if (!isGroceryList) return;
     isGeoAlertEnabled().then(setGeoEnabled);
@@ -289,7 +283,7 @@ export default function ListDetailScreen() {
     const done = items.filter(i => i.checked);
     const lines = [
       ...open.map(i => `○ ${i.text}`),
-      ...(done.length > 0 ? [`\n✓ Gedaan (${done.length})`] : []),
+      ...(done.length > 0 ? [`\n✓ Afgevinkt (${done.length})`] : []),
     ].join('\n');
     const text = `${emoji || '📝'} ${name}\n\n${lines}`;
     haptic('light');
@@ -320,7 +314,10 @@ export default function ListDetailScreen() {
 
   const fetchItems = useCallback(async () => {
     const { data } = await supabase
-      .from('list_items').select('*').eq('list_id', id).order('created_at', { ascending: true });
+      .from('list_items')
+      .select('*, list_item_sources(recipe_id, recipes(title))')
+      .eq('list_id', id)
+      .order('created_at', { ascending: true });
     if (data) {
       if (data.length > prevItemCount.current && prevItemCount.current > 0) {
         newItemAnim.setValue(0);
@@ -382,27 +379,19 @@ export default function ListDetailScreen() {
     const ids = checked.map(i => i.id);
     setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, checked: false } : i));
     await supabase.from('list_items').update({ checked: false }).in('id', ids);
-    showToast('Lijst teruggeZet', 'success');
+    showToast('Lijst teruggezet', 'success');
   }
 
-  function deleteItem(itemId: string) {
+  async function deleteItem(itemId: string) {
     haptic('warning');
-    const target = items.find(i => i.id === itemId);
-    if (!target) return;
-
+    setDeletingItemId(null);
     setItems(prev => prev.filter(i => i.id !== itemId));
-
     if (pendingDelete) {
       clearTimeout(pendingDelete.timer);
       supabase.from('list_items').delete().eq('id', pendingDelete.item.id);
-    }
-
-    const timer = setTimeout(async () => {
-      await supabase.from('list_items').delete().eq('id', itemId);
       setPendingDelete(null);
-    }, 6000);
-
-    setPendingDelete({ item: target, timer });
+    }
+    await supabase.from('list_items').delete().eq('id', itemId);
   }
 
   function undoDelete() {
@@ -459,6 +448,61 @@ export default function ListDetailScreen() {
         },
       ],
     );
+  }
+
+  async function importRecipeFromApp() {
+    const url = recipeUrl.trim();
+    if (!url || !user?.id) return;
+    setRecipeImporting(true);
+    setRecipeResult(null);
+    setRecipeError(null);
+    try {
+      const res = await fetch(`${API_BASE}/recipe/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, listId: id, url, scalingHint: recipeServings ? `voor ${recipeServings} personen` : null }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setRecipeResult(data);
+        setRecipeUrl('');
+        fetchItems();
+      } else {
+        setRecipeError(data.error ?? 'Importeren mislukt. Probeer een ander recept-linkje.');
+      }
+    } catch {
+      setRecipeError('Kon de server niet bereiken. Controleer je verbinding.');
+    } finally {
+      setRecipeImporting(false);
+    }
+  }
+
+  function closeRecipeModal() {
+    setRecipeModalVisible(false);
+    setRecipeUrl('');
+    setRecipeResult(null);
+    setRecipeError(null);
+    setRecipeServings(null);
+  }
+
+  async function deleteRecipeGroup(recipeId: string) {
+    const { data: sources } = await supabase
+      .from('list_item_sources').select('list_item_id').eq('recipe_id', recipeId);
+    if (!sources?.length) return;
+    const itemIds = sources.map((s: any) => s.list_item_id);
+
+    const { data: allSources } = await supabase
+      .from('list_item_sources').select('list_item_id').in('list_item_id', itemIds);
+    const counts: Record<string, number> = {};
+    for (const s of (allSources ?? [])) counts[s.list_item_id] = (counts[s.list_item_id] ?? 0) + 1;
+
+    const toDelete = itemIds.filter((id: string) => (counts[id] ?? 0) <= 1);
+    const toUnlink = itemIds.filter((id: string) => (counts[id] ?? 0) > 1);
+
+    if (toDelete.length) await supabase.from('list_items').delete().in('id', toDelete);
+    if (toUnlink.length) await supabase.from('list_item_sources').delete().eq('recipe_id', recipeId).in('list_item_id', toUnlink);
+    await supabase.from('recipes').delete().eq('id', recipeId);
+    fetchItems();
   }
 
   function toggleGeoAlert(value: boolean) {
@@ -536,15 +580,32 @@ export default function ListDetailScreen() {
     : checked;
   const DONE_SENTINEL_ID = '__done_header__';
   const doneSentinel = { id: DONE_SENTINEL_ID, text: '', checked: false, list_id: '', created_at: '' };
-  const flatItems: any[] = [
-    ...filteredUnchecked,
-    ...(filteredChecked.length > 0 ? [doneSentinel] : []),
-    ...(doneExpanded ? filteredChecked : []),
-  ];
+
+  // Group unchecked items by recipe
+  const recipeGroups = new Map<string, { title: string; items: typeof filteredUnchecked }>();
+  const ungroupedUnchecked: typeof filteredUnchecked = [];
+  for (const item of filteredUnchecked) {
+    const src = item.list_item_sources?.[0];
+    if (src?.recipe_id && src.recipes?.title) {
+      if (!recipeGroups.has(src.recipe_id)) recipeGroups.set(src.recipe_id, { title: src.recipes.title, items: [] });
+      recipeGroups.get(src.recipe_id)!.items.push(item);
+    } else {
+      ungroupedUnchecked.push(item);
+    }
+  }
+
+  const flatItems: any[] = [];
+  for (const [recipeId, { title, items: rItems }] of recipeGroups) {
+    flatItems.push({ id: `__recipe_${recipeId}__`, type: 'recipe_header', recipeId, title });
+    flatItems.push(...rItems);
+  }
+  flatItems.push(...ungroupedUnchecked);
+  if (filteredChecked.length > 0) flatItems.push(doneSentinel);
+  if (doneExpanded) flatItems.push(...filteredChecked);
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={insets.top + (Platform.OS === 'ios' ? 44 : 24)}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
         {totalCount > 0 && (
@@ -606,7 +667,7 @@ export default function ListDetailScreen() {
                 />
               </View>
             )}
-            {unchecked.length > 0 && (
+            {unchecked.length > 0 && listType !== 'tips' && listType !== 'links' && (
               <TouchableOpacity
                 onPress={checkAllItems}
                 style={[styles.checkAllBtn, { backgroundColor: Colors.yellow }]}
@@ -616,7 +677,7 @@ export default function ListDetailScreen() {
                 <Text style={styles.checkAllText}>Alles</Text>
               </TouchableOpacity>
             )}
-            {allDone && (
+            {allDone && listType !== 'tips' && listType !== 'links' && (
               <TouchableOpacity
                 onPress={uncheckAllItems}
                 style={[styles.checkAllBtn, { backgroundColor: colors.gray100 }]}
@@ -630,16 +691,6 @@ export default function ListDetailScreen() {
         )}
 
         {/* Batch delete button */}
-        {!loading && batchDeleteVisible && checked.length > 0 && (
-          <TouchableOpacity
-            style={[styles.batchDeleteBtn, { backgroundColor: '#FEE2E2' }]}
-            onPress={confirmBatchDelete}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="trash-outline" size={15} color="#EF4444" />
-            <Text style={styles.batchDeleteText}>Verwijder afgevinkte items ({checked.length})</Text>
-          </TouchableOpacity>
-        )}
 
         {loading ? (
           <View style={styles.skeletonList}>
@@ -647,10 +698,11 @@ export default function ListDetailScreen() {
           </View>
         ) : (
           <Animated.View style={{ flex: 1, opacity: contentFade }}>
-          <View style={[styles.itemCard, { backgroundColor: colors.surface }]}>
+          <View style={[styles.itemCard, { backgroundColor: colors.surface }, Platform.OS === 'android' && { borderRadius: 0, overflow: 'visible', elevation: 0 }]}>
           <FlatList
             data={flatItems}
             keyExtractor={(i) => i.id}
+            style={{ flex: 1 }}
             contentContainerStyle={styles.list}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
@@ -683,38 +735,56 @@ export default function ListDetailScreen() {
               )
             }
             renderItem={({ item, index }) => {
+              if (item.type === 'recipe_header') {
+                return (
+                  <View style={[styles.recipeGroupHeader, { borderBottomColor: colors.gray100 }]}>
+                    <Text style={[styles.recipeGroupTitle, { color: colors.gray400 }]} numberOfLines={1}>{item.title}</Text>
+                    <TouchableOpacity onPress={() => deleteRecipeGroup(item.recipeId)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.6}>
+                      <Ionicons name="trash-outline" size={15} color={colors.gray400} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
               if (item.id === DONE_SENTINEL_ID) {
                 return (
-                  <TouchableOpacity
-                    style={[styles.doneSectionHeader, { marginTop: 28 }]}
-                    onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDoneExpanded(v => !v); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.doneSectionLabel}>Gedaan ({filteredChecked.length})</Text>
-                    <Ionicons
-                      name={doneExpanded ? 'chevron-up' : 'chevron-down'}
-                      size={16}
-                      color={Colors.gray400}
-                    />
-                  </TouchableOpacity>
+                  <View style={[styles.doneSectionHeader, { marginTop: 28 }]}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}
+                      onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDoneExpanded(v => !v); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.doneSectionLabel}>Afgevinkt ({filteredChecked.length})</Text>
+                      <Ionicons name={doneExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.gray400} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={confirmBatchDelete}
+                      hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
+                      activeOpacity={0.6}
+                    >
+                      <Ionicons name="trash-outline" size={17} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
                 );
               }
               if (listType === 'links') {
                 return <LinkItemRow item={item} colors={colors} />;
               }
-              if (listType === 'tips') {
-                return <TipItemRow item={item} colors={colors} />;
-              }
               const isLastItem = index === flatItems.length - 1;
+              const isTips = listType === 'tips';
               const itemView = (
                 <SwipeableItem
                   item={item}
                   onToggle={() => toggleItem(item)}
                   onDelete={() => deleteItem(item.id)}
-                  onLongPress={() => setEditingItemId(item.id)}
+                  onLongPress={() => { if (isTips) { setEditingItemId(item.id); } else { setDeletingItemId(item.id); } }}
                   editingItemId={editingItemId}
                   onEditSubmit={saveInlineEdit}
                   isFirst={index === 0}
+                  tapToEdit={isTips}
+                  editMode={isTips}
+                  isDeleting={deletingItemId === item.id && !isTips}
+                  onDismissDelete={() => setDeletingItemId(null)}
+                  onRequestEdit={() => setEditingItemId(item.id)}
                 />
               );
               return isLastItem ? (
@@ -728,8 +798,11 @@ export default function ListDetailScreen() {
           </Animated.View>
         )}
 
-        <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14 }]}>
-          <View style={[styles.addPill, { backgroundColor: colors.gray100 }]}>
+        <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          <TouchableOpacity onPress={() => setRecipeModalVisible(true)} style={[styles.recipeImportBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.7}>
+            <Text style={{ fontSize: 20 }}>🍽️</Text>
+          </TouchableOpacity>
+          <View style={[styles.addPill, { backgroundColor: colors.gray100, flex: 1 }]}>
             <TextInput
               style={[styles.addInput, { color: colors.black }]}
               value={newItemText}
@@ -774,6 +847,103 @@ export default function ListDetailScreen() {
         )}
 
         <Toast {...toastProps} />
+
+        <Modal visible={recipeModalVisible} transparent animationType="fade" onRequestClose={closeRecipeModal} statusBarTranslucent>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={styles.recipeModalOverlay}>
+            <View style={[styles.recipeModal, { backgroundColor: colors.white }]}>
+              <Text style={[styles.recipeModalTitle, { color: colors.black }]}>Recept importeren</Text>
+              <Text style={[styles.recipeModalSub, { color: colors.gray400 }]}>
+                Plak een link van een recept-website, TikTok of YouTube. Ingrediënten worden automatisch toegevoegd.
+              </Text>
+
+              {!recipeResult ? (
+                <>
+                  <View style={[styles.recipeUrlInput, { backgroundColor: colors.gray100 }]}>
+                    <Ionicons name="link-outline" size={18} color={colors.gray400} style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={[styles.recipeUrlField, { color: colors.black }]}
+                      value={recipeUrl}
+                      onChangeText={setRecipeUrl}
+                      placeholder="https://..."
+                      placeholderTextColor={colors.gray400}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      returnKeyType="go"
+                      onSubmitEditing={importRecipeFromApp}
+                      selectionColor={Colors.yellow}
+                    />
+                    {recipeUrl.length > 0 && (
+                      <TouchableOpacity onPress={() => setRecipeUrl('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close-circle" size={18} color={colors.gray400} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <View style={[styles.servingsRow, { backgroundColor: colors.gray100 }]}>
+                    <Text style={[styles.servingsLabel, { color: colors.black }]}>Aantal personen</Text>
+                    <View style={styles.servingsStepper}>
+                      <TouchableOpacity
+                        onPress={() => setRecipeServings(p => p && p > 1 ? p - 1 : null)}
+                        style={[styles.stepperBtn, { backgroundColor: colors.white }]}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="remove" size={16} color={colors.black} />
+                      </TouchableOpacity>
+                      <Text style={[styles.stepperVal, { color: colors.black }]}>
+                        {recipeServings ?? '—'}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => setRecipeServings(p => (p ?? 1) + 1)}
+                        style={[styles.stepperBtn, { backgroundColor: colors.white }]}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="add" size={16} color={colors.black} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {recipeError && (
+                    <View style={styles.recipeErrorBox}>
+                      <Ionicons name="warning-outline" size={16} color="#EF4444" style={{ marginRight: 6 }} />
+                      <Text style={styles.recipeErrorText}>{recipeError}</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity
+                    style={[styles.recipeImportAction, (!recipeUrl.trim() || recipeImporting) && { opacity: 0.5 }]}
+                    onPress={importRecipeFromApp}
+                    disabled={!recipeUrl.trim() || recipeImporting}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient colors={['#FCC10C', '#E5A800']} style={styles.recipeImportGrad}>
+                      {recipeImporting
+                        ? <ActivityIndicator size="small" color={Colors.black} />
+                        : <Text style={styles.recipeImportBtnText}>Importeren</Text>}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <View style={styles.recipeResultBox}>
+                  <Text style={styles.recipeResultEmoji}>✅</Text>
+                  <Text style={[styles.recipeResultTitle, { color: colors.black }]}>{recipeResult.title}</Text>
+                  <Text style={[styles.recipeResultSub, { color: colors.gray400 }]}>
+                    {recipeResult.added.length} ingrediënt{recipeResult.added.length !== 1 ? 'en' : ''} toegevoegd aan {recipeResult.listEmoji} {recipeResult.listName}
+                    {recipeResult.merged.length > 0 ? `, ${recipeResult.merged.length} al aanwezig` : ''}
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity style={styles.recipeCloseBtn} onPress={closeRecipeModal} activeOpacity={0.7}>
+                <Text style={[styles.recipeCloseBtnText, { color: colors.gray400 }]}>
+                  {recipeResult ? 'Sluiten' : 'Annuleren'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          </KeyboardAvoidingView>
+        </Modal>
 
         <Modal visible={geoPermModal} transparent animationType="fade" onRequestClose={() => setGeoPermModal(false)}>
           <View style={styles.modalOverlay}>
@@ -832,7 +1002,7 @@ const styles = StyleSheet.create({
   geoTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginBottom: 2 },
   geoSub: { fontFamily: 'Inter_300Light', fontSize: 12 },
   skeletonList: { padding: 20 },
-  list: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 20 },
+  list: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 20 },
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11,
     color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12,
@@ -865,7 +1035,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#C0392B', borderRadius: 0, width: 72,
     justifyContent: 'center', alignItems: 'center', marginBottom: 8,
   },
-  itemCard: { marginHorizontal: 18, marginTop: 14, marginBottom: 8, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
+  editAction: {
+    backgroundColor: '#4A90D8', borderRadius: 0, width: 72,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 8, marginRight: 4,
+  },
+  itemCard: { flex: 1, marginHorizontal: 18, marginTop: 14, marginBottom: 8, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
   emptyContainer: { alignItems: 'center', paddingVertical: 60, gap: 12, paddingHorizontal: 32 },
   emptyIconBox: {
     width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.gray100,
@@ -948,4 +1122,61 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill, backgroundColor: Colors.yellow,
   },
   klaarText: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  recipeImportBtn: {
+    width: 52, height: 52, borderRadius: Radius.pill,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  recipeModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', paddingHorizontal: 24,
+  },
+  recipeModal: {
+    borderRadius: 24,
+    padding: 24, paddingBottom: 28, gap: 14,
+  },
+  recipeModalTitle: { fontFamily: 'Inter_700Bold', fontSize: 20 },
+  recipeModalSub: { fontFamily: 'Inter_300Light', fontSize: 14, lineHeight: 21 },
+  recipeUrlInput: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  recipeUrlField: {
+    flex: 1, fontFamily: 'Inter_400Regular', fontSize: 15, padding: 0,
+  },
+  recipeErrorBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FEE2E2', borderRadius: Radius.md, padding: 12,
+  },
+  recipeErrorText: { fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', flex: 1 },
+  recipeImportAction: { marginTop: 4 },
+  recipeImportGrad: {
+    borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center',
+  },
+  recipeImportBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: Colors.black },
+  recipeResultBox: { alignItems: 'center', gap: 8, paddingVertical: 12 },
+  recipeResultEmoji: { fontSize: 40 },
+  recipeResultTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, textAlign: 'center' },
+  recipeResultSub: { fontFamily: 'Inter_300Light', fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  recipeCloseBtn: { alignItems: 'center', paddingVertical: 8 },
+  recipeCloseBtnText: { fontFamily: 'Inter_400Regular', fontSize: 15 },
+  servingsRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  servingsLabel: { fontFamily: 'Inter_400Regular', fontSize: 15 },
+  servingsStepper: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stepperBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  stepperVal: { fontFamily: 'Inter_600SemiBold', fontSize: 16, minWidth: 24, textAlign: 'center' },
+  recipeGroupHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, marginTop: 16,
+  },
+  recipeGroupTitle: {
+    fontFamily: 'Inter_600SemiBold', fontSize: 12,
+    textTransform: 'uppercase', letterSpacing: 0.8, flex: 1, marginRight: 8,
+  },
 });

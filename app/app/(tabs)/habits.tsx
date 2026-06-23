@@ -700,6 +700,7 @@ function HabitsMain() {
   const [quickAddGood, setQuickAddGood] = useState('');
   const [quickAddElite, setQuickAddElite] = useState('');
   const [quickAddSaving, setQuickAddSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
 
@@ -815,6 +816,12 @@ function HabitsMain() {
     }
     setLoadingKey(null);
     await fetchData();
+  }
+
+  async function deleteHabit(habitId: string) {
+    setHabits(prev => prev.filter(h => h.id !== habitId));
+    setDeletingId(null);
+    await supabase.from('habits').delete().eq('id', habitId).eq('user_id', user!.id);
   }
 
   async function saveQuickAddHabit() {
@@ -1055,15 +1062,28 @@ function HabitsMain() {
             {viewMode === 'day' && allDoneSelected && <AllDoneCard day={selectedDay} />}
 
             {viewMode === 'day' ? habitData.map(({ habit, log, streak }) => (
-              <HabitCard
-                key={habit.id}
-                habit={habit}
-                log={log}
-                streak={streak}
-                selectedDay={selectedDay}
-                loadingKey={loadingKey}
-                onCycle={cycleHabit}
-              />
+              <View key={habit.id} style={{ position: 'relative' }}>
+                <Pressable onLongPress={() => { haptic('medium'); setDeletingId(habit.id); }} onPress={() => { if (deletingId) setDeletingId(null); }}>
+                  <HabitCard
+                    habit={habit}
+                    log={log}
+                    streak={streak}
+                    selectedDay={selectedDay}
+                    loadingKey={loadingKey}
+                    onCycle={cycleHabit}
+                  />
+                </Pressable>
+                {deletingId === habit.id && (
+                  <TouchableOpacity
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 14, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+                    onPress={() => deleteHabit(habit.id)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#fff" />
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )) : (
               <WeekGrid
                 habits={habits}

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, SectionList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Alert, Linking, Image,
+  ActivityIndicator, RefreshControl, Linking, Image,
   Modal, SafeAreaView, Pressable, TextInput, ScrollView,
   Share, PanResponder, Animated,
 } from 'react-native';
@@ -76,6 +76,7 @@ export default function BonnetjesTab() {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [query, setQuery]           = useState('');
   const [filterCat, setFilterCat]   = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Pinch-to-zoom state
   const scale      = useRef(new Animated.Value(1)).current;
@@ -126,14 +127,10 @@ export default function BonnetjesTab() {
   const thisMonth  = receipts.filter(r => r.date?.startsWith(new Date().toISOString().slice(0, 7)));
   const monthTotal = thisMonth.reduce((s, r) => s + (r.total ?? 0), 0);
 
-  function confirmDelete(receipt: Receipt) {
-    Alert.alert('Bonnetje verwijderen?', receipt.store ?? 'Dit bonnetje', [
-      { text: 'Annuleer', style: 'cancel' },
-      { text: 'Verwijder', style: 'destructive', onPress: async () => {
-        await fetch(`${API_BASE}/receipts/${user?.id}/${receipt.id}`, { method: 'DELETE' });
-        setReceipts(prev => prev.filter(r => r.id !== receipt.id));
-      }},
-    ]);
+  async function deleteReceipt(receiptId: string) {
+    setReceipts(prev => prev.filter(r => r.id !== receiptId));
+    setDeletingId(null);
+    await fetch(`${API_BASE}/receipts/${user?.id}/${receiptId}`, { method: 'DELETE' });
   }
 
   function openPDF() {
@@ -270,10 +267,11 @@ export default function BonnetjesTab() {
           </View>
         )}
         renderItem={({ item }) => (
+          <Pressable onPress={() => deletingId && setDeletingId(null)} style={{ position: 'relative' }}>
           <TouchableOpacity
             style={[styles.card, { backgroundColor: colors.white }, Shadow.card]}
             activeOpacity={0.85}
-            onLongPress={() => confirmDelete(item)}
+            onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
           >
             {item.image_url && (
               <View>
@@ -316,6 +314,17 @@ export default function BonnetjesTab() {
               )}
             </View>
           </TouchableOpacity>
+          {deletingId === item.id && (
+            <TouchableOpacity
+              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+              onPress={() => deleteReceipt(item.id)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="trash-outline" size={18} color="#fff" />
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+            </TouchableOpacity>
+          )}
+          </Pressable>
         )}
       />
 

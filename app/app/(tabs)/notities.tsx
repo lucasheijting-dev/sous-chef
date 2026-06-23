@@ -9,18 +9,16 @@ import {
   TextInput,
   Modal,
   ScrollView,
-  SafeAreaView,
   Animated,
   Pressable,
   Platform,
   Share,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Swipeable } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { Note } from '@/lib/types';
@@ -90,11 +88,15 @@ function NoteCard({
   index,
   onPress,
   onDelete,
+  isDeleting,
+  onLongPress,
 }: {
   item: Note;
   index: number;
   onPress: () => void;
   onDelete: () => void;
+  isDeleting?: boolean;
+  onLongPress?: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -114,45 +116,37 @@ function NoteCard({
     return new Date(iso).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
   }
 
-  function renderRightActions() {
-    return (
-      <View style={styles.deleteAction}>
-        <Ionicons name="trash-outline" size={22} color={Colors.white} />
-        <Text style={styles.deleteActionText}>Verwijder</Text>
-      </View>
-    );
-  }
-
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 10 }}>
-      <Swipeable
-        renderRightActions={renderRightActions}
-        onSwipeableOpen={() => {
-          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          onDelete();
-        }}
-        rightThreshold={60}
-        overshootRight={false}
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 10, position: 'relative' }}>
+      <Pressable
+        onPress={onPress}
+        onLongPress={onLongPress}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
       >
-        <Pressable
-          onPress={onPress}
-          onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
-          onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
+        <Animated.View style={[styles.card, { backgroundColor: style.bg, transform: [{ scale }] }]}>
+          <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
+            {item.title || item.body.slice(0, 40)}
+          </Text>
+          <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
+            {item.body}
+          </Text>
+          <View style={styles.cardFooter}>
+            <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
+            <Ionicons name="open-outline" size={12} color={style.date} />
+          </View>
+        </Animated.View>
+      </Pressable>
+      {isDeleting && (
+        <TouchableOpacity
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 10, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+          onPress={onDelete}
+          activeOpacity={0.85}
         >
-          <Animated.View style={[styles.card, { backgroundColor: style.bg, transform: [{ scale }] }]}>
-            <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
-              {item.title || item.body.slice(0, 40)}
-            </Text>
-            <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
-              {item.body}
-            </Text>
-            <View style={styles.cardFooter}>
-              <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
-              <Ionicons name="open-outline" size={12} color={style.date} />
-            </View>
-          </Animated.View>
-        </Pressable>
-      </Swipeable>
+          <Ionicons name="trash-outline" size={18} color="#fff" />
+          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 }
@@ -194,6 +188,7 @@ export default function NotitiesTab() {
   const [editMode, setEditMode] = useState(false);
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
@@ -219,6 +214,7 @@ export default function NotitiesTab() {
   }, [user, fetchNotes]);
 
   function handleDelete(note: Note) {
+    setDeletingId(null);
     setNotes(prev => prev.filter(n => n.id !== note.id));
     setDeletedNote(note);
     setSnackbarVisible(true);
@@ -228,7 +224,7 @@ export default function NotitiesTab() {
       setSnackbarVisible(false);
       setDeletedNote(prev => {
         if (prev?.id === note.id) {
-          supabase.from('notes').delete().eq('id', note.id);
+          supabase.from('notes').delete().eq('id', note.id).eq('user_id', user!.id);
           return null;
         }
         return prev;
@@ -314,6 +310,7 @@ export default function NotitiesTab() {
           )}
         </View>
       ) : (
+        <Pressable onPress={() => setDeletingId(null)} style={{ flex: 1 }}>
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
@@ -330,11 +327,14 @@ export default function NotitiesTab() {
             <NoteCard
               item={item}
               index={index}
-              onPress={() => setSelected(item)}
+              onPress={() => { if (deletingId) { setDeletingId(null); return; } setSelected(item); }}
               onDelete={() => handleDelete(item)}
+              isDeleting={deletingId === item.id}
+              onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
             />
           )}
         />
+        </Pressable>
       )}
 
       <UndoSnackbar visible={snackbarVisible} onUndo={handleUndo} />

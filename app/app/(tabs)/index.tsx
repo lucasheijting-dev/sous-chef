@@ -22,7 +22,7 @@ import {
   Share,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -128,25 +128,21 @@ function AnimatedCard({
   item,
   index,
   onPress,
-  onDeleteConfirm,
   onLongPress,
-  showHint,
-  onHintComplete,
+  isDeleting,
+  onDeletePress,
 }: {
   item: List & { item_count: number; open_count: number };
   index: number;
   onPress: () => void;
-  onDeleteConfirm: () => void;
   onLongPress?: () => void;
-  showHint?: boolean;
-  onHintComplete?: () => void;
+  isDeleting?: boolean;
+  onDeletePress?: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const hintX = useRef(new Animated.Value(0)).current;
   const doneFlash = useRef(new Animated.Value(0)).current;
-  const swipeRef = useRef<Swipeable>(null);
   const longPressDidFire = useRef(false);
 
   const { colors, isDark } = useTheme();
@@ -158,16 +154,7 @@ function AnimatedCard({
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, delay: index * 40, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 200, delay: index * 40, useNativeDriver: true }),
-    ]).start(() => {
-      if (showHint) {
-        setTimeout(() => {
-          Animated.sequence([
-            Animated.timing(hintX, { toValue: -22, duration: 220, useNativeDriver: true }),
-            Animated.spring(hintX, { toValue: 0, useNativeDriver: true, damping: 12, stiffness: 180 }),
-          ]).start(() => onHintComplete?.());
-        }, 400);
-      }
-    });
+    ]).start();
   }, []);
 
   useEffect(() => {
@@ -187,89 +174,67 @@ function AnimatedCard({
   const openCount = item.open_count;
   const progress = totalCount > 0 ? (totalCount - openCount) / totalCount : 0;
 
-  const renderLeftActions = (_prog: Animated.AnimatedInterpolation<number>, drag: Animated.AnimatedInterpolation<number>) => {
-    const iconScale = drag.interpolate({ inputRange: [0, 80], outputRange: [0.7, 1], extrapolate: 'clamp' });
-    return (
-      <TouchableOpacity
-        style={cardStyles.deleteAction}
-        onPress={() => { swipeRef.current?.close(); onDeleteConfirm(); }}
-        activeOpacity={0.8}
-      >
-        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-          <Ionicons name="trash-outline" size={22} color={Colors.white} />
-        </Animated.View>
-      </TouchableOpacity>
-    );
-  };
-
   return (
-    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { translateX: hintX }, { scale }] }]}>
-      <Swipeable ref={swipeRef} renderLeftActions={renderLeftActions} leftThreshold={60} overshootLeft={false}>
-        <Pressable
-          onPress={() => { if (longPressDidFire.current) { longPressDidFire.current = false; return; } onPress(); }}
-          onLongPress={() => { longPressDidFire.current = true; onLongPress?.(); }}
-          delayLongPress={400}
-          onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
-          onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-          style={[styles.tile, { backgroundColor: colors.surface }]}
-        >
-          {/* Tone icon tile */}
-          <View style={[styles.tileIconBox, { backgroundColor: tone.bg }]}>
-            <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
-          </View>
+    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }], position: 'relative' }]}>
+      <Pressable
+        onPress={() => { if (longPressDidFire.current) { longPressDidFire.current = false; return; } onPress(); }}
+        onLongPress={() => { longPressDidFire.current = true; onLongPress?.(); }}
+        delayLongPress={400}
+        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+        style={[styles.tile, { backgroundColor: colors.surface }]}
+      >
+        {/* Tone icon tile */}
+        <View style={[styles.tileIconBox, { backgroundColor: tone.bg }]}>
+          <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
+        </View>
 
-          <View style={styles.tileBottom}>
-            <Text style={[styles.tileName, { color: colors.black }]}>{item.name}</Text>
-            <View style={styles.tileCountRow}>
-              {totalCount > 0 ? (
-                allDone ? (
-                  <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
-                ) : (
-                  <Text style={[styles.tileCount, { color: colors.gray400 }]}>{totalCount - openCount}/{totalCount}</Text>
-                )
+        <View style={styles.tileBottom}>
+          <Text style={[styles.tileName, { color: colors.black }]}>{item.name}</Text>
+          <View style={styles.tileCountRow}>
+            {totalCount > 0 ? (
+              allDone ? (
+                <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
               ) : (
-                <Text style={[styles.tileCount, { color: colors.gray400 }]}>Leeg</Text>
-              )}
-              {typeLabel && (
-                <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>
-                  <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
-                </View>
-              )}
-            </View>
+                <Text style={[styles.tileCount, { color: colors.gray400 }]}>{totalCount - openCount}/{totalCount}</Text>
+              )
+            ) : (
+              <Text style={[styles.tileCount, { color: colors.gray400 }]}>Leeg</Text>
+            )}
+            {typeLabel && (
+              <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>
+                <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
+              </View>
+            )}
           </View>
+        </View>
 
-          {totalCount > 0 && (
-            <View style={styles.tileProgressBg}>
-              <View style={[StyleSheet.absoluteFillObject, { opacity: 0.15, backgroundColor: tone.fg }]} />
-              <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#5A8A5A' : tone.fg }]} />
-            </View>
-          )}
-
-          {/* Long-press hint */}
-          <View style={{ position: 'absolute', top: 10, right: 10, opacity: 0.30 }}>
-            <Ionicons name="ellipsis-horizontal" size={14} color={colors.gray400} />
+        {totalCount > 0 && (
+          <View style={styles.tileProgressBg}>
+            <View style={[StyleSheet.absoluteFillObject, { opacity: 0.15, backgroundColor: tone.fg }]} />
+            <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#5A8A5A' : tone.fg }]} />
           </View>
-          <Animated.View
-            pointerEvents="none"
-            style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: '#5A8A5A', opacity: doneFlash }]}
-          />
-        </Pressable>
-      </Swipeable>
+        )}
+
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: '#5A8A5A', opacity: doneFlash }]}
+        />
+      </Pressable>
+      {isDeleting && (
+        <TouchableOpacity
+          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+          onPress={onDeletePress}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="trash-outline" size={18} color="#fff" />
+          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+        </TouchableOpacity>
+      )}
     </Animated.View>
   );
 }
 
-const cardStyles = StyleSheet.create({
-  deleteAction: {
-    backgroundColor: '#EF4444',
-    borderRadius: Radius.xl,
-    width: 72,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 0,
-    marginRight: 8,
-  },
-});
 
 // ── Notes ──────────────────────────────────────────────────────────────────────
 
@@ -550,14 +515,11 @@ export default function LijstenTab() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const [deleteSheet, setDeleteSheet] = useState<{ listId: string; listName: string } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingListDelete, setPendingListDelete] = useState<{ listId: string; listName: string; items: typeof lists } | null>(null);
   const [listUndoVisible, setListUndoVisible] = useState(false);
   const listUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDeleteIdRef = useRef<string | null>(null);
-  const [swipeHintDone, setSwipeHintDone] = useState(true);
-  const [peekTarget, setPeekTarget] = useState<{ list: (typeof lists)[0]; x: number; y: number } | null>(null);
-  const [peekItems, setPeekItems] = useState<{ id: string; text: string; checked: boolean }[]>([]);
   const [reorderModalVisible, setReorderModalVisible] = useState(false);
   const [reorderList, setReorderList] = useState<typeof lists>([]);
   const [reorderDragIndex, setReorderDragIndex] = useState<number | null>(null);
@@ -632,11 +594,6 @@ export default function LijstenTab() {
     return () => { supabase.removeChannel(ch); };
   }, [user, fetchLists, fetchNotes]);
 
-  useEffect(() => {
-    AsyncStorage.getItem('swipe_hint_done').then(v => {
-      if (!v) setSwipeHintDone(false);
-    });
-  }, []);
 
   useEffect(() => {
     getCache<(List & { item_count: number; open_count: number })[]>('cache_lists').then(d => {
@@ -742,7 +699,6 @@ export default function LijstenTab() {
     const filtered = lists.filter(l => l.id !== listId);
     setLists(filtered);
     setCache('cache_lists', filtered);
-    setDeleteSheet(null);
     setPendingListDelete({ listId, listName, items: snapshot });
     pendingDeleteIdRef.current = listId;
     setListUndoVisible(true);
@@ -761,7 +717,7 @@ export default function LijstenTab() {
         setListUndoVisible(false);
         setPendingListDelete(null);
       });
-      await supabase.from('lists').delete().eq('id', listId);
+      await supabase.from('lists').delete().eq('id', listId).eq('user_id', user!.id);
       pendingDeleteIdRef.current = null;
     }, 4000);
   }
@@ -777,14 +733,6 @@ export default function LijstenTab() {
       Animated.timing(undoOpacity, { toValue: 0, duration: 160, useNativeDriver: true }),
       Animated.timing(undoSlide, { toValue: 60, duration: 180, useNativeDriver: true }),
     ]).start(() => setListUndoVisible(false));
-  }
-
-  async function openPeek(list: (typeof lists)[0]) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const { data } = await supabase
-      .from('list_items').select('id, text, checked').eq('list_id', list.id).order('created_at', { ascending: true }).limit(5);
-    setPeekItems(data ?? []);
-    setPeekTarget({ list, x: 0, y: 0 });
   }
 
   function openReorder() {
@@ -1009,18 +957,17 @@ export default function LijstenTab() {
             )}
             {/* Active lists */}
             {activeLists.length > 0 && (
-              <View style={styles.tileRow}>
+              <Pressable onPress={() => setDeletingId(null)} style={styles.tileRow}>
                 {activeLists.map((item, index) => (
                   <AnimatedCard key={item.id} item={item} index={index}
-                    showHint={!swipeHintDone && index === 0}
-                    onHintComplete={() => { setSwipeHintDone(true); AsyncStorage.setItem('swipe_hint_done', '1'); }}
-                    onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                    onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
-                    onLongPress={() => openPeek(item)}
+                    onPress={() => { if (deletingId) { setDeletingId(null); return; } router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } }); }}
+                    onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
+                    isDeleting={deletingId === item.id}
+                    onDeletePress={() => deleteList(item.id, item.name)}
                   />
                 ))}
                 {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
-              </View>
+              </Pressable>
             )}
             {/* Done lists sink to bottom */}
             {doneLists.length > 0 && (
@@ -1030,16 +977,17 @@ export default function LijstenTab() {
                   <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Klaar ({doneLists.length})</Text>
                   <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
                 </View>
-                <View style={styles.tileRow}>
+                <Pressable onPress={() => setDeletingId(null)} style={styles.tileRow}>
                   {doneLists.map((item, index) => (
                     <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
-                      onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                      onDeleteConfirm={() => setDeleteSheet({ listId: item.id, listName: item.name })}
-                      onLongPress={() => openPeek(item)}
+                      onPress={() => { if (deletingId) { setDeletingId(null); return; } router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } }); }}
+                      onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
+                      isDeleting={deletingId === item.id}
+                      onDeletePress={() => deleteList(item.id, item.name)}
                     />
                   ))}
                   {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
-                </View>
+                </Pressable>
               </>
             )}
           </ScrollView>
@@ -1484,16 +1432,6 @@ export default function LijstenTab() {
         </SafeAreaView>
       </Modal>
 
-      {/* Delete list bottom sheet */}
-      <ConfirmSheet
-        visible={!!deleteSheet}
-        title={`"${deleteSheet?.listName}" verwijderen?`}
-        subtitle="Deze lijst en alle items worden permanent verwijderd."
-        destructiveLabel="Verwijder lijst"
-        onConfirm={() => deleteSheet && deleteList(deleteSheet.listId, deleteSheet.listName)}
-        onCancel={() => setDeleteSheet(null)}
-      />
-
       {/* Undo snackbar */}
       {listUndoVisible && (
         <Animated.View style={[undoStyles.snackbar, { bottom: insets.bottom + 90, opacity: undoOpacity, transform: [{ translateY: undoSlide }] }]}>
@@ -1503,59 +1441,6 @@ export default function LijstenTab() {
           </TouchableOpacity>
         </Animated.View>
       )}
-
-      {/* Peek modal */}
-      <Modal visible={!!peekTarget} transparent animationType="fade" onRequestClose={() => setPeekTarget(null)}>
-        <Pressable style={peekStyles.overlay} onPress={() => setPeekTarget(null)}>
-          <Pressable style={[peekStyles.card, { backgroundColor: colors.white }]} onPress={() => {
-            if (peekTarget) {
-              setPeekTarget(null);
-              router.push({ pathname: '/list/[id]', params: { id: peekTarget.list.id, name: peekTarget.list.name, emoji: peekTarget.list.emoji, list_type: peekTarget.list.list_type ?? 'checklist' } });
-            }
-          }}>
-            <View style={peekStyles.header}>
-              <Text style={peekStyles.emoji}>{peekTarget?.list.emoji || '📝'}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[peekStyles.title, { color: colors.black }]} numberOfLines={1}>{peekTarget?.list.name}</Text>
-                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400 }}>
-                  {peekTarget?.list.open_count} open · {peekTarget?.list.item_count} totaal
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => {
-                setPeekTarget(null);
-                if (peekTarget) router.push({ pathname: '/list/[id]', params: { id: peekTarget.list.id, name: peekTarget.list.name, emoji: peekTarget.list.emoji, list_type: peekTarget.list.list_type ?? 'checklist' } });
-              }} style={peekStyles.openBtn}>
-                <Text style={peekStyles.openBtnText}>Open</Text>
-              </TouchableOpacity>
-            </View>
-            {(peekTarget?.list.item_count ?? 0) > 0 && (
-              <View style={{ height: 4, borderRadius: 2, backgroundColor: colors.gray100, marginBottom: 12, overflow: 'hidden' }}>
-                <View style={{
-                  height: 4,
-                  borderRadius: 2,
-                  width: `${((peekTarget!.list.item_count - peekTarget!.list.open_count) / peekTarget!.list.item_count) * 100}%` as any,
-                  backgroundColor: peekTarget!.list.open_count === 0 ? '#4CAF50' : Colors.yellow,
-                }} />
-              </View>
-            )}
-            {peekItems.length === 0 ? (
-              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, paddingVertical: 8 }}>Geen items</Text>
-            ) : (
-              peekItems.map(pi => (
-                <View key={pi.id} style={peekStyles.peekRow}>
-                  <Ionicons name={pi.checked ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={pi.checked ? '#4CAF50' : colors.gray400} />
-                  <Text style={[peekStyles.peekText, { color: colors.black, opacity: pi.checked ? 0.4 : 1, textDecorationLine: pi.checked ? 'line-through' : 'none' }]}>{pi.text}</Text>
-                </View>
-              ))
-            )}
-            {(peekTarget?.list.item_count ?? 0) > 5 && (
-              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, marginTop: 6 }}>
-                + {(peekTarget?.list.item_count ?? 0) - 5} meer items
-              </Text>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
 
       {/* Reorder modal */}
       <Modal visible={reorderModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setReorderModalVisible(false)}>
@@ -1846,17 +1731,6 @@ const undoStyles = StyleSheet.create({
   undoBtn: { fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow, marginLeft: 12 },
 });
 
-const peekStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  card: { width: '100%', borderRadius: Radius.xl, padding: 20, gap: 10, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, shadowOffset: { width: 0, height: 8 }, elevation: 10 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4 },
-  emoji: { fontSize: 28 },
-  title: { fontFamily: 'Inter_700Bold', fontSize: 16 },
-  openBtn: { backgroundColor: Colors.yellow, paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill },
-  openBtnText: { fontFamily: 'Inter_700Bold', fontSize: 13, color: Colors.black },
-  peekRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 5 },
-  peekText: { fontFamily: 'Inter_400Regular', fontSize: 14, flex: 1 },
-});
 
 const reorderStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg },
