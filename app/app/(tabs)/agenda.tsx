@@ -665,7 +665,7 @@ function AgendaLite() {
     setAllEvents(prev => prev.filter(e => e.id !== event.id));
     setDeletingId(null);
     if (event.source === 'sous-chef') {
-      await supabase.from('events').delete().eq('id', event.id).eq('user_id', user!.id);
+      await fetch(`${API_BASE}/events/${event.id}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
     } else if (event.source === 'phone' && Platform.OS !== 'web') {
       try { await Calendar.deleteEventAsync(event.id.replace('phone-', '')); } catch (_) {}
     }

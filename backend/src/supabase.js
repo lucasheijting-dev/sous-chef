@@ -665,6 +665,16 @@ async function updateEvent(userId, eventId, { date, time }) {
   if (error) throw new Error(error.message);
 }
 
+async function getEventById(userId, eventId) {
+  const { data } = await supabase
+    .from('events')
+    .select('id, title, date, time, caldav_uid, calendar_stream')
+    .eq('id', eventId)
+    .eq('user_id', userId)
+    .single();
+  return data ?? null;
+}
+
 async function deleteEventById(userId, eventId) {
   await supabase.from('events').delete().eq('id', eventId).eq('user_id', userId);
 }
@@ -1155,6 +1165,7 @@ module.exports = {
   moveAllListItems,
   searchNotes,
   sortListItemsAlphabetically,
+  getEventById,
   deleteEventById,
   getNotes,
   appendToNote,
