@@ -13,6 +13,7 @@ const authRouter              = require('./src/auth');
 const recipesRouter           = require('./src/recipes');
 const sharingRouter           = require('./src/sharing');
 const eventsRouter            = require('./src/events');
+const listsRouter             = require('./src/lists');
 const cronJobs           = require('./src/cronJobs');
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/auth', authRouter);
 app.use('/recipe', recipesRouter);
 app.use('/sharing', sharingRouter);
 app.use('/events', eventsRouter);
+app.use('/lists', listsRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3000;

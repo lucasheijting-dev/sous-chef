@@ -1459,12 +1459,12 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const matchingNote = fuzzyFindByTitle(existingNotes, title);
       if (matchingNote) {
         await db.appendToNote(matchingNote.id, body);
-        return `📝 Toegevoegd aan bestaande notitie *${matchingNote.title}*.`;
+        return `📝 Toegevoegd aan *${matchingNote.title}*:\n\n${body}`;
       }
 
       const note  = await db.createNote(userId, title, body);
       undo.record(userId, 'add_note', { noteId: note.id, title: note.title });
-      return `📝 Notitie opgeslagen: *${note.title}*`;
+      return `📝 *${note.title}*\n\n${body}`;
     }
 
     // ── Update (replace) note body ───────────────────────────────────────────
@@ -1492,7 +1492,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
       const appendText = intent.note_body ?? originalText;
       await db.appendToNote(target.id, appendText);
-      return `📝 Toegevoegd aan *${target.title}*.`;
+      return `📝 Toegevoegd aan *${target.title}*:\n\n${appendText}`;
     }
 
     // ── Delete note (with confirmation) ──────────────────────────────────────

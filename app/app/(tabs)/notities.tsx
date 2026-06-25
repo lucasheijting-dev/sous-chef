@@ -385,29 +385,31 @@ export default function NotitiesTab() {
       <UndoSnackbar visible={snackbarVisible} onUndo={handleUndo} />
 
       <Modal visible={noteInviteVisible} transparent animationType="slide" onRequestClose={() => setNoteInviteVisible(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setNoteInviteVisible(false)}>
-          <Pressable style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
-            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
-            <TextInput
-              value={noteInvitePhone}
-              onChangeText={t => { setNoteInvitePhone(t); setNoteInviteError(''); }}
-              placeholder="+31 6 12345678"
-              keyboardType="phone-pad"
-              style={{ borderWidth: 1, borderColor: noteInviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
-              autoFocus
-            />
-            {!!noteInviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{noteInviteError}</Text>}
-            <TouchableOpacity
-              onPress={sendNoteInvite}
-              disabled={noteInviting || !noteInvitePhone.trim()}
-              style={{ backgroundColor: noteInviting || !noteInvitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
-              activeOpacity={0.85}
-            >
-              {noteInviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
-            </TouchableOpacity>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={() => setNoteInviteVisible(false)}>
+            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
+              <TextInput
+                value={noteInvitePhone}
+                onChangeText={t => { setNoteInvitePhone(t); setNoteInviteError(''); }}
+                placeholder="Voeg een chefje toe"
+                keyboardType="phone-pad"
+                style={{ borderWidth: 1, borderColor: noteInviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
+                autoFocus
+              />
+              {!!noteInviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{noteInviteError}</Text>}
+              <TouchableOpacity
+                onPress={sendNoteInvite}
+                disabled={noteInviting || !noteInvitePhone.trim()}
+                style={{ backgroundColor: noteInviting || !noteInvitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+                activeOpacity={0.85}
+              >
+                {noteInviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
+              </TouchableOpacity>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSelected(null); setEditMode(false); }}>

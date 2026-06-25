@@ -303,11 +303,18 @@ export default function ListDetailScreen() {
       title: `${name}${badge}`,
       headerBackTitle: '',
       headerTintColor: Colors.yellow,
-      headerRight: items.length > 0 ? () => (
-        <TouchableOpacity onPress={shareList} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 4 }}>
-          <Ionicons name="share-outline" size={22} color={Colors.black} />
-        </TouchableOpacity>
-      ) : undefined,
+      headerRight: () => (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 4 }}>
+          <TouchableOpacity onPress={() => { setInvitePhone(''); setInviteError(''); setInviteModalVisible(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="person-add-outline" size={20} color={Colors.black} />
+          </TouchableOpacity>
+          {items.length > 0 && (
+            <TouchableOpacity onPress={shareList} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="share-outline" size={22} color={Colors.black} />
+            </TouchableOpacity>
+          )}
+        </View>
+      ),
     });
   }, [name, emoji, listType, items]);
 
@@ -404,10 +411,10 @@ export default function ListDetailScreen() {
     setItems(prev => prev.filter(i => i.id !== itemId));
     if (pendingDelete) {
       clearTimeout(pendingDelete.timer);
-      supabase.from('list_items').delete().eq('id', pendingDelete.item.id);
+      fetch(`${API_BASE}/lists/items/${pendingDelete.item.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
       setPendingDelete(null);
     }
-    await supabase.from('list_items').delete().eq('id', itemId);
+    await fetch(`${API_BASE}/lists/items/${itemId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   function undoDelete() {
@@ -731,25 +738,19 @@ export default function ListDetailScreen() {
           </View>
         )}
 
-        {/* Members row */}
-        {(members.length > 0 || true) && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>
+        {/* Members row — only shown when there are actual members */}
+        {members.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 6 }}>
+            <Ionicons name="people-outline" size={13} color={colors.gray400} />
             {members.map(m => {
-              const name = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
-              const initials = name.slice(0, 2).toUpperCase();
+              const memberName = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
+              const initials = memberName.slice(0, 2).toUpperCase();
               return (
-                <View key={m.user_id} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: Colors.black }}>{initials}</Text>
+                <View key={m.user_id} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
                 </View>
               );
             })}
-            <TouchableOpacity
-              onPress={() => { setInvitePhone(''); setInviteError(''); setInviteModalVisible(true); }}
-              style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' }}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="person-add-outline" size={14} color={colors.gray400} />
-            </TouchableOpacity>
           </View>
         )}
 
@@ -1027,29 +1028,31 @@ export default function ListDetailScreen() {
         </Modal>
 
         <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={() => setInviteModalVisible(false)}>
-            <Pressable style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
-              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
-              <TextInput
-                value={invitePhone}
-                onChangeText={t => { setInvitePhone(t); setInviteError(''); }}
-                placeholder="+31 6 12345678"
-                keyboardType="phone-pad"
-                style={{ borderWidth: 1, borderColor: inviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
-                autoFocus
-              />
-              {!!inviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{inviteError}</Text>}
-              <TouchableOpacity
-                onPress={sendInvite}
-                disabled={inviting || !invitePhone.trim()}
-                style={{ backgroundColor: inviting || !invitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
-                activeOpacity={0.85}
-              >
-                {inviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
-              </TouchableOpacity>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={() => setInviteModalVisible(false)}>
+              <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
+                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
+                <TextInput
+                  value={invitePhone}
+                  onChangeText={t => { setInvitePhone(t); setInviteError(''); }}
+                  placeholder="Voeg een chefje toe"
+                  keyboardType="phone-pad"
+                  style={{ borderWidth: 1, borderColor: inviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
+                  autoFocus
+                />
+                {!!inviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{inviteError}</Text>}
+                <TouchableOpacity
+                  onPress={sendInvite}
+                  disabled={inviting || !invitePhone.trim()}
+                  style={{ backgroundColor: inviting || !invitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+                  activeOpacity={0.85}
+                >
+                  {inviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
+                </TouchableOpacity>
+              </Pressable>
             </Pressable>
-          </Pressable>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
       </KeyboardAvoidingView>

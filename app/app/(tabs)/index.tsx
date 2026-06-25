@@ -742,7 +742,7 @@ export default function LijstenTab() {
         setListUndoVisible(false);
         setPendingListDelete(null);
       });
-      await supabase.from('lists').delete().eq('id', listId).eq('user_id', user!.id);
+      await fetch(`${API_BASE}/lists/${listId}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
       pendingDeleteIdRef.current = null;
     }, 4000);
   }
@@ -1655,13 +1655,13 @@ const styles = StyleSheet.create({
   tabTextUnderline: { height: 2.5, width: '100%', borderRadius: 3, position: 'absolute', bottom: 0 },
 
   skeletonList: { padding: 20 },
-  tileGrid: { padding: 18, paddingTop: 4, paddingBottom: TAB_BAR_CLEARANCE },
+  tileGrid: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: TAB_BAR_CLEARANCE },
   sortSticky: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 14, paddingBottom: 10 },
-  tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 13, marginBottom: 13 },
-  tileWrap: { flex: 1, minWidth: '46%', maxWidth: '50%' },
+  tileRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
+  tileWrap: { width: '50%', paddingHorizontal: 6 },
 
   // ── List tile card (white surface + tone icon) ──
-  tile: { flex: 1, borderRadius: Radius.lg, padding: 16, minHeight: 168, justifyContent: 'space-between' },
+  tile: { borderRadius: Radius.lg, padding: 16, height: 168, justifyContent: 'space-between' },
   tileIconBox: { width: 42, height: 42, borderRadius: 13, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   tileEmoji: { fontSize: 22 },
   tileBottom: {},
