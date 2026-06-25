@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View,
   Text,
@@ -14,6 +15,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   ActivityIndicator,
+  PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -52,31 +54,39 @@ const LEVELS = [
   { key: 'elite', emoji: '🏆', label: 'Elite', medalBg: Colors.yellow, borderActive: Colors.yellow, pts: 3 },
 ] as const;
 
-function localDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// ── Pure UTC date helpers (no local-timezone ambiguity) ──────────────────────
+
+function utcDateStr(ms: number): string {
+  return new Date(ms).toISOString().split('T')[0];
 }
 
-const STRIP_DAYS = Math.max(7, new Date().getDate()); // at least 7 so week-lookback never underflows
-const today = localDate(new Date());
+function utcMsFromStr(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return Date.UTC(y, m - 1, d);
+}
+
+// today is UTC calendar date — resets at UTC midnight (= 2am Amsterdam summer).
+// This prevents the common "just past midnight local, but still same habit day" issue.
+const today = new Date().toISOString().split('T')[0];
 
 const MONTH_START = (() => {
-  const d = new Date(); d.setDate(1);
-  return localDate(d);
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
 })();
 
-const NINETY_DAYS_AGO = (() => {
-  const d = new Date(); d.setDate(d.getDate() - 90);
-  return localDate(d);
-})();
+const NINETY_DAYS_AGO = utcDateStr(Date.now() - 90 * 86400000);
+
+const STRIP_DAYS = Math.max(7, new Date().getUTCDate());
 
 function getDayStrip(count: number) {
+  const todayMs = utcMsFromStr(today);
   return Array.from({ length: count }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (count - 1 - i));
+    const ms = todayMs - (count - 1 - i) * 86400000;
+    const d = new Date(ms);
     return {
-      date: localDate(d),
-      day: d.toLocaleDateString('nl-NL', { weekday: 'short' }).slice(0, 2).toUpperCase(),
-      num: String(d.getDate()),
+      date: utcDateStr(ms),
+      day: d.toLocaleDateString('nl-NL', { weekday: 'short', timeZone: 'UTC' }).slice(0, 2).toUpperCase(),
+      num: String(d.getUTCDate()),
     };
   });
 }
@@ -87,29 +97,26 @@ const WEEK_DAYS_SHORT = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function dayLabel(dateKey: string): string {
-  const d = new Date(dateKey + 'T00:00:00');
-  const diff = Math.round((new Date(today + 'T00:00:00').getTime() - d.getTime()) / 86400000);
+  const diff = Math.round((utcMsFromStr(today) - utcMsFromStr(dateKey)) / 86400000);
   if (diff === 0) return 'Vandaag';
   if (diff === 1) return 'Gisteren';
-  return d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
+  return new Date(utcMsFromStr(dateKey)).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 }
 
 function computeStreak(habitId: string, logs: HabitLog[], endDate: string): number {
-  const d = new Date(endDate + 'T00:00:00');
+  let ms = utcMsFromStr(endDate);
   let streak = 0;
   for (let i = 0; i < 90; i++) {
-    const ds = d.toISOString().split('T')[0];
+    const ds = utcDateStr(ms);
     if (!logs.some(l => l.habit_id === habitId && l.date === ds)) break;
     streak++;
-    d.setDate(d.getDate() - 1);
+    ms -= 86400000;
   }
   return streak;
 }
 
 function computeWeekScore(logs: HabitLog[]): number {
-  const d = new Date();
-  d.setDate(d.getDate() - 6);
-  const weekStart = d.toISOString().split('T')[0];
+  const weekStart = utcDateStr(utcMsFromStr(today) - 6 * 86400000);
   return logs
     .filter(l => l.date >= weekStart && l.date <= today)
     .reduce((s, l) => s + (LEVELS.find(lv => lv.key === l.level)?.pts ?? 0), 0);
@@ -146,14 +153,14 @@ function computePerfectDays(habits: Habit[], monthLogs: HabitLog[]): number {
 function computeOverallStreak(habits: Habit[], logs: HabitLog[]): number {
   if (habits.length === 0) return 0;
   let streak = 0;
-  const d = new Date(today + 'T00:00:00');
+  let ms = utcMsFromStr(today);
   for (let i = 0; i < 90; i++) {
-    const ds = d.toISOString().split('T')[0];
+    const ds = utcDateStr(ms);
     const dayLogs = logs.filter(l => l.date === ds);
     const allDone = habits.every(h => dayLogs.some(l => l.habit_id === h.id));
     if (!allDone) break;
     streak++;
-    d.setDate(d.getDate() - 1);
+    ms -= 86400000;
   }
   return streak;
 }
@@ -585,28 +592,76 @@ function HabitCard({
 
 // ── Habit Bar Card (day view) ──────────────────────────────────────────────────
 
-function HabitBarCard({ habit, log }: { habit: Habit; log: HabitLog | undefined }) {
+const BAR_FILLED = ['#22C55E', '#A9AFB7', Colors.yellow]; // mini=green, plus=silver, elite=gold
+
+function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | undefined; isToday: boolean }) {
   const { colors } = useTheme();
   const level = log?.level;
   const filledCount = level === 'elite' ? 3 : level === 'good' ? 2 : level === 'mini' ? 1 : 0;
+  const emptyBg = (isToday && filledCount === 0) ? '#FEE2E2' : colors.gray100;
   return (
     <View style={[hbar.card, { backgroundColor: colors.surface }]}>
       <Text style={[hbar.name, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
       <View style={hbar.bars}>
-        <View style={[hbar.bar, { backgroundColor: filledCount >= 1 ? '#BD7E4E' : colors.gray100 }]} />
-        <View style={[hbar.bar, { backgroundColor: filledCount >= 2 ? '#A9AFB7' : colors.gray100 }]} />
-        <View style={[hbar.bar, { backgroundColor: filledCount >= 3 ? Colors.yellow : colors.gray100 }]} />
+        <View style={[hbar.bar, { backgroundColor: filledCount >= 1 ? BAR_FILLED[0] : emptyBg }]} />
+        <View style={[hbar.bar, { backgroundColor: filledCount >= 2 ? BAR_FILLED[1] : emptyBg }]} />
+        <View style={[hbar.bar, { backgroundColor: filledCount >= 3 ? BAR_FILLED[2] : emptyBg }]} />
       </View>
     </View>
   );
 }
 
 const hbar = StyleSheet.create({
-  card: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, marginBottom: 2 },
+  card: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 15, flex: 1, marginRight: 12 },
   bars: { flexDirection: 'row', gap: 5 },
   bar: { width: 26, height: 26, borderRadius: 7 },
 });
+
+// ── Swipe-to-delete wrapper ────────────────────────────────────────────────────
+
+function SwipeDeleteRow({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+
+  const close = useCallback(() => {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, overshootClamping: true }).start();
+    isOpen.current = false;
+  }, [translateX]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+      onPanResponderMove: (_, gs) => {
+        const x = isOpen.current ? Math.max(gs.dx - 72, -72) : Math.min(Math.max(gs.dx, -72), 0);
+        translateX.setValue(x);
+      },
+      onPanResponderRelease: (_, gs) => {
+        const threshold = isOpen.current ? -36 : -36;
+        if (gs.dx < threshold || (isOpen.current && gs.dx < 0)) {
+          Animated.spring(translateX, { toValue: -72, useNativeDriver: true, overshootClamping: true }).start();
+          isOpen.current = true;
+        } else {
+          close();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <View style={{ overflow: 'hidden', borderRadius: Radius.lg }}>
+      <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 72, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => { close(); setTimeout(onDelete, 150); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="trash-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      </View>
+      <Animated.View {...panResponder.panHandlers} style={{ transform: [{ translateX }] }}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
 
 // ── Week Grid ──────────────────────────────────────────────────────────────────
 
@@ -623,46 +678,43 @@ function WeekGrid({
   const { colors } = useTheme();
 
   const weekDays = useMemo(() => {
-    const d = new Date(selectedDay + 'T00:00:00');
-    const dow = (d.getDay() + 6) % 7;
-    const monday = new Date(d);
-    monday.setDate(d.getDate() - dow);
+    const ms = utcMsFromStr(selectedDay);
+    const dow = (new Date(ms).getUTCDay() + 6) % 7;
+    const mondayMs = ms - dow * 86400000;
     return Array.from({ length: 7 }, (_, i) => {
-      const day = new Date(monday);
-      day.setDate(monday.getDate() + i);
-      const dateStr = localDate(day);
+      const dayMs = mondayMs + i * 86400000;
+      const dateStr = utcDateStr(dayMs);
       return {
         date: dateStr,
         dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i],
-        num: day.getDate(),
+        num: new Date(dayMs).getUTCDate(),
         isToday: dateStr === today,
         isFuture: dateStr > today,
       };
     });
   }, [selectedDay]);
 
-  const medalBg: Record<string, string> = { mini: '#BD7E4E', good: '#A9AFB7', elite: Colors.yellow };
-  const medalFg: Record<string, string> = { mini: '#fff', good: '#fff', elite: Colors.black };
+  const levelColor: Record<string, string> = { mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow };
 
   return (
     <View style={{ paddingHorizontal: 18, paddingBottom: 4 }}>
-      {/* Header */}
+      {/* Day headers */}
       <View style={{ flexDirection: 'row', marginBottom: 10 }}>
-        <View style={{ width: 96 }} />
+        <View style={{ width: 90 }} />
         {weekDays.map(d => (
           <View key={d.date} style={{ flex: 1, alignItems: 'center' }}>
             <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 9, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
-            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: d.isToday ? Colors.yellow : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
-              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 11, color: d.isToday ? Colors.black : d.isFuture ? colors.gray200 : colors.black }}>{d.num}</Text>
+            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: d.isToday ? Colors.yellow : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: d.isToday ? Colors.black : d.isFuture ? colors.gray200 : colors.black }}>{d.num}</Text>
             </View>
           </View>
         ))}
       </View>
 
-      {/* Habit rows */}
+      {/* Habit rows — dots only */}
       {habits.map(habit => (
-        <View key={habit.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
-          <Text numberOfLines={2} style={{ width: 96, fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, paddingRight: 8 }}>{habit.name}</Text>
+        <View key={habit.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+          <Text numberOfLines={1} style={{ width: 90, fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, paddingRight: 6 }}>{habit.name}</Text>
           {weekDays.map(d => {
             const log = logs.find(l => l.habit_id === habit.id && l.date === d.date);
             const isLoading = loadingKey === `${habit.id}-${d.date}-cycle`;
@@ -675,17 +727,14 @@ function WeekGrid({
                 activeOpacity={0.7}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color={Colors.yellow} style={{ width: 28, height: 28 }} />
+                  <ActivityIndicator size="small" color={Colors.yellow} style={{ width: 22, height: 22 }} />
                 ) : (
                   <View style={{
-                    width: 28, height: 28, borderRadius: 14,
-                    backgroundColor: log ? medalBg[log.level] : d.isFuture ? 'transparent' : colors.gray100,
+                    width: 22, height: 22, borderRadius: 11,
+                    backgroundColor: log ? levelColor[log.level] : d.isFuture ? 'transparent' : colors.gray100,
                     borderWidth: !log && !d.isFuture ? 1 : 0,
                     borderColor: colors.gray200,
-                    justifyContent: 'center', alignItems: 'center',
-                  }}>
-                    {log && <Text style={{ fontSize: 13, color: medalFg[log.level] }}>{LEVELS.find(l => l.key === log.level)?.emoji}</Text>}
-                  </View>
+                  }} />
                 )}
               </TouchableOpacity>
             );
@@ -729,8 +778,6 @@ function HabitsMain() {
   const [quickAddGood, setQuickAddGood] = useState('');
   const [quickAddElite, setQuickAddElite] = useState('');
   const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [detailHabit, setDetailHabit] = useState<Habit | null>(null);
 
@@ -759,6 +806,13 @@ function HabitsMain() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Re-snap selectedDay to UTC today whenever the habits tab is focused (handles overnight app sessions)
+  useFocusEffect(useCallback(() => {
+    const realToday = new Date().toISOString().split('T')[0];
+    setSelectedDay(prev => (prev > realToday ? realToday : prev));
+    fetchData();
+  }, [fetchData]));
 
   useEffect(() => {
     setTimeout(() => stripRef.current?.scrollToEnd({ animated: false }), 100);
@@ -850,7 +904,6 @@ function HabitsMain() {
 
   async function deleteHabit(habitId: string) {
     setHabits(prev => prev.filter(h => h.id !== habitId));
-    setDeletingId(null);
     await supabase.from('habits').delete().eq('id', habitId).eq('user_id', user!.id);
   }
 
@@ -968,39 +1021,6 @@ function HabitsMain() {
           </View>
         </View>
 
-        {/* ── Summary cards ── */}
-        {habits.length > 0 && (
-          <View style={s.summaryRow}>
-            <View style={[s.sumCard, { backgroundColor: colors.surface }]}>
-              <AnimatedCounter value={habits.length} style={[s.sumBig, { color: colors.black }]} />
-              <Text style={[s.sumSmall, { color: colors.gray400 }]}>{habits.length === 1 ? 'habit' : 'habits'}</Text>
-            </View>
-            <View style={[s.sumCard, s.sumCardWide, { backgroundColor: colors.surface }]}>
-              {weekScore > 0 ? (
-                <>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <Text style={[s.sumBig, { color: Colors.yellow }]}>⭐</Text>
-                    <AnimatedCounter value={weekScore} style={[s.sumBig, { color: colors.black }]} />
-                  </View>
-                  <Text style={[s.sumSmall, { color: colors.gray400 }]}>punten deze week</Text>
-                </>
-              ) : (
-                <Text style={[s.sumMotiv, { color: Colors.yellowText }]}>{bannerSubtitle || 'Begin je dag sterk'}</Text>
-              )}
-            </View>
-          </View>
-        )}
-
-        {/* ── Overall progress ── */}
-        {habits.length > 0 && (
-          <View style={s.progressRow}>
-            <View style={[s.progressTrack, { backgroundColor: colors.gray100 }]}>
-              <View style={[s.progressFill, { width: `${Math.round(completionPct * 100)}%` as any, backgroundColor: Colors.yellow }]} />
-            </View>
-            <Text style={[s.progressPct, { color: colors.gray400 }]}>{Math.round(completionPct * 100)}%</Text>
-          </View>
-        )}
-
         {/* ── Day strip (sc-weekstrip) ── */}
         {habits.length > 0 && (
           <FlatList
@@ -1092,32 +1112,52 @@ function HabitsMain() {
             {viewMode === 'day' && allDoneSelected && <AllDoneCard day={selectedDay} />}
 
             {viewMode === 'day' ? habitData.map(({ habit, log }) => (
-              <View key={habit.id} style={{ position: 'relative', marginBottom: 10 }}>
-                <Pressable
-                  onLongPress={() => { haptic('medium'); setDeletingId(habit.id); }}
-                  onPress={() => { if (deletingId) { setDeletingId(null); return; } setDetailHabit(habit); }}
-                >
-                  <HabitBarCard habit={habit} log={log} />
-                </Pressable>
-                {deletingId === habit.id && (
-                  <TouchableOpacity
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
-                    onPress={() => deleteHabit(habit.id)}
-                    activeOpacity={0.85}
+              <View key={habit.id} style={{ marginBottom: 10 }}>
+                <SwipeDeleteRow onDelete={() => deleteHabit(habit.id)}>
+                  <Pressable
+                    onLongPress={() => { haptic('medium'); setDetailHabit(habit); }}
+                    onPress={() => setDetailHabit(habit)}
                   >
-                    <Ionicons name="trash-outline" size={18} color="#fff" />
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
-                  </TouchableOpacity>
-                )}
+                    <HabitBarCard habit={habit} log={log} isToday={selectedDay === today} />
+                  </Pressable>
+                </SwipeDeleteRow>
               </View>
             )) : (
-              <WeekGrid
-                habits={habits}
-                logs={logs}
-                loadingKey={loadingKey}
-                selectedDay={selectedDay}
-                onCycle={cycleHabit}
-              />
+              <>
+                {/* Week navigation */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, marginBottom: 6 }}>
+                  <TouchableOpacity onPress={() => selectDay(utcDateStr(utcMsFromStr(selectedDay) - 7 * 86400000))} activeOpacity={0.7}>
+                    <Ionicons name="chevron-back" size={22} color={colors.gray400} />
+                  </TouchableOpacity>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>
+                    {(() => {
+                      const ms = utcMsFromStr(selectedDay);
+                      const dow = (new Date(ms).getUTCDay() + 6) % 7;
+                      const monMs = ms - dow * 86400000;
+                      const sunMs = monMs + 6 * 86400000;
+                      const fmt = (m: number) => new Date(m).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+                      return `${fmt(monMs)} – ${fmt(sunMs)}`;
+                    })()}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const next = utcDateStr(utcMsFromStr(selectedDay) + 7 * 86400000);
+                      if (next <= today) selectDay(next);
+                    }}
+                    activeOpacity={0.7}
+                    disabled={utcDateStr(utcMsFromStr(selectedDay) + 7 * 86400000) > today}
+                  >
+                    <Ionicons name="chevron-forward" size={22} color={utcDateStr(utcMsFromStr(selectedDay) + 7 * 86400000) > today ? colors.gray200 : colors.gray400} />
+                  </TouchableOpacity>
+                </View>
+                <WeekGrid
+                  habits={habits}
+                  logs={logs}
+                  loadingKey={loadingKey}
+                  selectedDay={selectedDay}
+                  onCycle={cycleHabit}
+                />
+              </>
             )}
 
           </Animated.View>
