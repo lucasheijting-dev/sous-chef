@@ -14,10 +14,12 @@ const recipesRouter           = require('./src/recipes');
 const sharingRouter           = require('./src/sharing');
 const eventsRouter            = require('./src/events');
 const listsRouter             = require('./src/lists');
+const notesRouter             = require('./src/notes');
+const habitsRouter            = require('./src/habits');
 const cronJobs           = require('./src/cronJobs');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));
 
 app.use('/webhook', webhookRouter);
 app.use('/calendar', calendarFeedRouter);
@@ -33,7 +35,25 @@ app.use('/recipe', recipesRouter);
 app.use('/sharing', sharingRouter);
 app.use('/events', eventsRouter);
 app.use('/lists', listsRouter);
+app.use('/notes', notesRouter);
+app.use('/habits', habitsRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
+app.get('/debug-db', async (_, res) => {
+  const { createClient } = require('@supabase/supabase-js');
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  const client = createClient(url, key);
+  const selectResult = await client.from('notes').select('id').limit(1);
+  const deleteResult = await client.from('notes').delete().eq('id', '00000000-0000-0000-0000-000000000000');
+  res.json({
+    url_set: !!url,
+    key_set: !!key,
+    key_prefix: key ? key.substring(0, 30) : null,
+    select_error: selectResult.error?.message ?? null,
+    delete_error: deleteResult.error?.message ?? null,
+  });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

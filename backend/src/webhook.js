@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
       const { handleImageMessage } = require('./imageHandler');
       const { getOrCreateUserFull } = require('./supabase');
       const user = await getOrCreateUserFull(from);
-      await handleImageMessage({ from, mediaId: message.image.id, userId: user.id });
+      await handleImageMessage({ from, mediaId: message.image.id, userId: user.id, caption: message.image.caption ?? null });
       return;
     }
 

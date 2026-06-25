@@ -167,9 +167,12 @@ async function renameList(listId, newName) {
 }
 
 async function deleteList(listId) {
-  await supabase.from('list_items').delete().eq('list_id', listId);
-  await supabase.from('list_members').delete().eq('list_id', listId);
-  await supabase.from('lists').delete().eq('id', listId);
+  const r1 = await supabase.from('list_items').delete().eq('list_id', listId);
+  if (r1.error) throw new Error(`deleteList items: ${r1.error.message}`);
+  const r2 = await supabase.from('list_members').delete().eq('list_id', listId);
+  if (r2.error) throw new Error(`deleteList members: ${r2.error.message}`);
+  const r3 = await supabase.from('lists').delete().eq('id', listId);
+  if (r3.error) throw new Error(`deleteList: ${r3.error.message}`);
 }
 
 async function addListItem(listId, text) {
@@ -193,7 +196,36 @@ async function getListItems(listId) {
 }
 
 async function deleteListItem(itemId) {
-  await supabase.from('list_items').delete().eq('id', itemId);
+  const { error } = await supabase.from('list_items').delete().eq('id', itemId);
+  if (error) throw new Error(`deleteListItem: ${error.message}`);
+}
+
+async function deleteRecipeGroup(recipeId) {
+  const { data: sources } = await supabase
+    .from('list_item_sources').select('list_item_id').eq('recipe_id', recipeId);
+  if (!sources?.length) {
+    await supabase.from('recipes').delete().eq('id', recipeId);
+    return;
+  }
+  const itemIds = sources.map(s => s.list_item_id);
+  const { data: allSources } = await supabase
+    .from('list_item_sources').select('list_item_id').in('list_item_id', itemIds);
+  const counts = {};
+  for (const s of (allSources ?? [])) counts[s.list_item_id] = (counts[s.list_item_id] ?? 0) + 1;
+  const toDelete = itemIds.filter(id => (counts[id] ?? 0) <= 1);
+  const toUnlink = itemIds.filter(id => (counts[id] ?? 0) > 1);
+  if (toDelete.length) await supabase.from('list_items').delete().in('id', toDelete);
+  if (toUnlink.length) await supabase.from('list_item_sources').delete().eq('recipe_id', recipeId).in('list_item_id', toUnlink);
+  await supabase.from('recipes').delete().eq('id', recipeId);
+}
+
+async function addListItemWithImage(listId, text, imageUrl) {
+  const [{ data, error }] = await Promise.all([
+    supabase.from('list_items').insert({ list_id: listId, text, checked: false, image_url: imageUrl }).select('id, text').single(),
+    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', listId),
+  ]);
+  if (error) throw new Error(`Failed to add list item with image: ${error.message}`);
+  return data;
 }
 
 // ── Recurring Items ────────────────────────────────────────────────────────────
@@ -240,7 +272,8 @@ async function createNote(userId, title, body) {
 }
 
 async function deleteNote(noteId) {
-  await supabase.from('notes').delete().eq('id', noteId);
+  const { error } = await supabase.from('notes').delete().eq('id', noteId);
+  if (error) throw new Error(`deleteNote: ${error.message}`);
 }
 
 // ── Events ─────────────────────────────────────────────────────────────────────
@@ -529,6 +562,18 @@ async function deactivateHabit(habitId) {
   await supabase.from('habits').update({ is_active: false }).eq('id', habitId);
 }
 
+async function deleteHabit(habitId, userId) {
+  const r1 = await supabase.from('habit_logs').delete().eq('habit_id', habitId);
+  if (r1.error) throw new Error(`deleteHabit logs: ${r1.error.message}`);
+  const r2 = await supabase.from('habits').delete().eq('id', habitId).eq('user_id', userId);
+  if (r2.error) throw new Error(`deleteHabit: ${r2.error.message}`);
+}
+
+async function deleteHabitLog(logId) {
+  const { error } = await supabase.from('habit_logs').delete().eq('id', logId);
+  if (error) throw new Error(`deleteHabitLog: ${error.message}`);
+}
+
 async function logHabit(userId, habitId, level, date) {
   const logDate = date ?? new Date().toISOString().split('T')[0];
   const { error } = await supabase
@@ -678,7 +723,8 @@ async function getEventById(userId, eventId) {
 }
 
 async function deleteEventById(userId, eventId) {
-  await supabase.from('events').delete().eq('id', eventId).eq('user_id', userId);
+  const { error } = await supabase.from('events').delete().eq('id', eventId).eq('user_id', userId);
+  if (error) throw new Error(`deleteEventById: ${error.message}`);
 }
 
 async function updateEventCalDAVUid(eventId, caldavUid) {
@@ -1128,6 +1174,7 @@ module.exports = {
   addListItem,
   getListItems,
   deleteListItem,
+  deleteRecipeGroup,
   createRecurringItem,
   getDueRecurringItems,
   updateRecurringItemNextDue,
@@ -1230,6 +1277,12 @@ module.exports = {
   getPendingShareInvites,
   acceptShareInvite,
   declineShareInvite,
+  uploadUserImage,
+  updateNoteImageUrl,
+  updateListItemImageUrl,
+  addListItemWithImage,
+  deleteHabit,
+  deleteHabitLog,
 };
 
 // ── Receipts ────────────────────────────────────────────────────────────────────
@@ -1309,4 +1362,46 @@ async function assignReceiptCategory(receiptId, categoryId) {
   const { data, error } = await supabase.from('receipts').update({ receipt_category_id: categoryId }).eq('id', receiptId).select('*').single();
   if (error) throw new Error(error.message);
   return data;
+}
+
+// ── User Images ──────────────────────────────────────────────────────────────────
+
+async function ensureUserImagesBucket() {
+  const { data: buckets } = await supabase.storage.listBuckets();
+  if (buckets?.find(b => b.name === 'user-images')) return;
+  const { error } = await supabase.storage.createBucket('user-images', { public: true });
+  if (error && !error.message?.includes('already exists')) {
+    throw new Error(`Could not create user-images bucket: ${error.message}`);
+  }
+}
+
+async function uploadUserImage(userId, data, mimeType) {
+  await ensureUserImagesBucket();
+  const buffer = Buffer.isBuffer(data)
+    ? data
+    : Buffer.from(data.includes(',') ? data.split(',')[1] : data, 'base64');
+  const ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+  const path = `${userId}/${Date.now()}.${ext}`;
+  const { error } = await supabase.storage.from('user-images').upload(path, buffer, {
+    contentType: mimeType,
+    upsert: false,
+  });
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  const { data: urlData } = supabase.storage.from('user-images').getPublicUrl(path);
+  return urlData.publicUrl;
+}
+
+async function updateNoteImageUrl(userId, noteId, imageUrl) {
+  const { error } = await supabase.from('notes')
+    .update({ image_url: imageUrl })
+    .eq('id', noteId)
+    .eq('user_id', userId);
+  if (error) throw new Error(`updateNoteImageUrl failed: ${error.message}`);
+}
+
+async function updateListItemImageUrl(userId, itemId, imageUrl) {
+  const { error } = await supabase.from('list_items')
+    .update({ image_url: imageUrl })
+    .eq('id', itemId);
+  if (error) throw new Error(`updateListItemImageUrl failed: ${error.message}`);
 }

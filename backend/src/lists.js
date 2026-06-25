@@ -48,4 +48,35 @@ router.delete('/items/:itemId', async (req, res) => {
   }
 });
 
+// DELETE /lists/recipes/:recipeId?user_id=xxx — delete a recipe group (items only linked to this recipe get deleted; shared items get unlinked)
+router.delete('/recipes/:recipeId', async (req, res) => {
+  try {
+    const { recipeId } = req.params;
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    await db.deleteRecipeGroup(recipeId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Lists] Recipe delete error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /lists/items/:itemId/image?user_id=xxx
+router.post('/items/:itemId/image', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { user_id } = req.query;
+    const { base64, mime_type } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!base64)  return res.status(400).json({ error: 'Missing base64' });
+    const imageUrl = await db.uploadUserImage(user_id, base64, mime_type || 'image/jpeg');
+    await db.updateListItemImageUrl(user_id, itemId, imageUrl);
+    res.json({ image_url: imageUrl });
+  } catch (err) {
+    console.error('[Lists] Item image error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
