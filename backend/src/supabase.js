@@ -167,6 +167,8 @@ async function renameList(listId, newName) {
 }
 
 async function deleteList(listId) {
+  await supabase.from('list_items').delete().eq('list_id', listId);
+  await supabase.from('list_members').delete().eq('list_id', listId);
   await supabase.from('lists').delete().eq('id', listId);
 }
 

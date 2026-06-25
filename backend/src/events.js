@@ -6,6 +6,26 @@ const caldav  = require('./caldav');
 
 const router = express.Router();
 
+// POST /events?user_id=xxx
+router.post('/', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const { title, date, time, calendar_stream } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!title?.trim() || !date) return res.status(400).json({ error: 'Missing title or date' });
+    const event = await db.createEvent(user_id, {
+      title: title.trim(),
+      date,
+      time: time ?? null,
+      calendarStream: calendar_stream ?? null,
+    });
+    res.json(event);
+  } catch (err) {
+    console.error('[Events] Create error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /events/:eventId?user_id=xxx
 // Deletes from Supabase and, if the event has a caldav_uid, from CalDAV too.
 router.delete('/:eventId', async (req, res) => {
