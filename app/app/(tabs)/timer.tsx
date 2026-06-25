@@ -621,22 +621,32 @@ export default function TimerTab() {
     startBreakInterval();
   }
 
-  function handleResumeFromBreak() {
+  async function handleResumeFromBreak() {
     if (breakIntervalRef.current) { clearInterval(breakIntervalRef.current); breakIntervalRef.current = null; }
-    const breakDuration = Date.now() - pausedAtMsRef.current;
-    totalPausedMsRef.current += breakDuration;
-    haptic('medium');
 
     // End break in DB
     if (breakIdRef.current && user && user.id !== 'dev') {
-      supabase.from('timer_breaks').update({
+      const breakDuration = Date.now() - pausedAtMsRef.current;
+      await supabase.from('timer_breaks').update({
         actual_duration: Math.ceil(breakDuration / 1000),
         ended_at: new Date().toISOString(),
-      }).eq('id', breakIdRef.current).then(() => { breakIdRef.current = null; });
+      }).eq('id', breakIdRef.current);
+      breakIdRef.current = null;
     }
 
-    setPhase('running');
-    startInterval();
+    // Complete old session with elapsed time
+    if (sessionIdRef.current && user && user.id !== 'dev') {
+      const elapsed = (Date.now() - startedAtMsRef.current - totalPausedMsRef.current) / 1000;
+      await supabase.from('timer_sessions').update({
+        status: 'completed',
+        actual_duration: Math.ceil(elapsed),
+        ended_at: new Date().toISOString(),
+      }).eq('id', sessionIdRef.current);
+      sessionIdRef.current = null;
+    }
+
+    // Start a fresh new session
+    handleStart();
   }
 
   function handleAbandon() {

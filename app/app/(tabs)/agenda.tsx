@@ -689,11 +689,22 @@ function AgendaLite() {
     const timeStr = quickAddTime
       ? `${String(quickAddTime.getHours()).padStart(2,'0')}:${String(quickAddTime.getMinutes()).padStart(2,'0')}`
       : null;
-    const { data } = await supabase.from('events').insert({
-      user_id: user.id, title: quickAddTitle.trim(), date: dateStr, time: timeStr,
-      calendar_stream: quickAddStream ?? null,
-    }).select().single();
-    if (data) setAllEvents(prev => [...prev, { ...data, source: 'sous-chef' as const, calendar_stream: quickAddStream }]);
+    const res = await fetch(`${API_BASE}/events?user_id=${user.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: quickAddTitle.trim(), date: dateStr, time: timeStr, calendar_stream: quickAddStream ?? null }),
+    }).catch(() => null);
+    const created = res ? await res.json().catch(() => null) : null;
+    if (created?.id) {
+      setAllEvents(prev => [...prev, {
+        id: created.id,
+        title: quickAddTitle.trim(),
+        date: dateStr,
+        time: timeStr,
+        source: 'sous-chef' as const,
+        calendar_stream: quickAddStream,
+      } as any]);
+    }
     setQuickAddVisible(false);
     setQuickAddSaving(false);
   }

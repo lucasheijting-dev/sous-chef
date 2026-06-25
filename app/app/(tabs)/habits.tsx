@@ -47,22 +47,26 @@ function haptic(style: 'light' | 'medium' | 'success' = 'light') {
 }
 
 const LEVELS = [
-  { key: 'mini',  emoji: '🥉', label: 'Brons',  medalBg: '#BD7E4E', borderActive: '#BD7E4E', pts: 1 },
-  { key: 'good',  emoji: '🥈', label: 'Zilver', medalBg: '#A9AFB7', borderActive: '#A9AFB7', pts: 2 },
-  { key: 'elite', emoji: '🥇', label: 'Goud',   medalBg: Colors.yellow, borderActive: Colors.yellow, pts: 3 },
+  { key: 'mini',  emoji: '⚡', label: 'Mini',  medalBg: '#BD7E4E', borderActive: '#BD7E4E', pts: 1 },
+  { key: 'good',  emoji: '⭐', label: 'Plus',  medalBg: '#A9AFB7', borderActive: '#A9AFB7', pts: 2 },
+  { key: 'elite', emoji: '🏆', label: 'Elite', medalBg: Colors.yellow, borderActive: Colors.yellow, pts: 3 },
 ] as const;
 
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 const STRIP_DAYS = Math.max(7, new Date().getDate()); // at least 7 so week-lookback never underflows
-const today = new Date().toISOString().split('T')[0];
+const today = localDate(new Date());
 
 const MONTH_START = (() => {
   const d = new Date(); d.setDate(1);
-  return d.toISOString().split('T')[0];
+  return localDate(d);
 })();
 
 const NINETY_DAYS_AGO = (() => {
   const d = new Date(); d.setDate(d.getDate() - 90);
-  return d.toISOString().split('T')[0];
+  return localDate(d);
 })();
 
 function getDayStrip(count: number) {
@@ -70,7 +74,7 @@ function getDayStrip(count: number) {
     const d = new Date();
     d.setDate(d.getDate() - (count - 1 - i));
     return {
-      date: d.toISOString().split('T')[0],
+      date: localDate(d),
       day: d.toLocaleDateString('nl-NL', { weekday: 'short' }).slice(0, 2).toUpperCase(),
       num: String(d.getDate()),
     };
@@ -579,6 +583,31 @@ function HabitCard({
   );
 }
 
+// ── Habit Bar Card (day view) ──────────────────────────────────────────────────
+
+function HabitBarCard({ habit, log }: { habit: Habit; log: HabitLog | undefined }) {
+  const { colors } = useTheme();
+  const level = log?.level;
+  const filledCount = level === 'elite' ? 3 : level === 'good' ? 2 : level === 'mini' ? 1 : 0;
+  return (
+    <View style={[hbar.card, { backgroundColor: colors.surface }]}>
+      <Text style={[hbar.name, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
+      <View style={hbar.bars}>
+        <View style={[hbar.bar, { backgroundColor: filledCount >= 1 ? '#BD7E4E' : colors.gray100 }]} />
+        <View style={[hbar.bar, { backgroundColor: filledCount >= 2 ? '#A9AFB7' : colors.gray100 }]} />
+        <View style={[hbar.bar, { backgroundColor: filledCount >= 3 ? Colors.yellow : colors.gray100 }]} />
+      </View>
+    </View>
+  );
+}
+
+const hbar = StyleSheet.create({
+  card: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, marginBottom: 2 },
+  name: { fontFamily: 'Inter_600SemiBold', fontSize: 15, flex: 1, marginRight: 12 },
+  bars: { flexDirection: 'row', gap: 5 },
+  bar: { width: 26, height: 26, borderRadius: 7 },
+});
+
 // ── Week Grid ──────────────────────────────────────────────────────────────────
 
 function WeekGrid({
@@ -601,7 +630,7 @@ function WeekGrid({
     return Array.from({ length: 7 }, (_, i) => {
       const day = new Date(monday);
       day.setDate(monday.getDate() + i);
-      const dateStr = day.toISOString().split('T')[0];
+      const dateStr = localDate(day);
       return {
         date: dateStr,
         dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i],
@@ -703,6 +732,7 @@ function HabitsMain() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  const [detailHabit, setDetailHabit] = useState<Habit | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
@@ -799,7 +829,7 @@ function HabitsMain() {
         { habit_id: habit.id, user_id: user.id, date, level: 'mini', logged_at: new Date().toISOString() },
         { onConflict: 'habit_id,date' }
       );
-      showToast(`🥉 ${habit.name} — Brons!`, 'success');
+      showToast(`${LEVELS[0].emoji} ${habit.name} — ${LEVELS[0].label}!`, 'success');
     } else {
       const idx = CYCLE.indexOf(currentLog.level as any);
       if (idx === CYCLE.length - 1) {
@@ -1061,21 +1091,17 @@ function HabitsMain() {
 
             {viewMode === 'day' && allDoneSelected && <AllDoneCard day={selectedDay} />}
 
-            {viewMode === 'day' ? habitData.map(({ habit, log, streak }) => (
-              <View key={habit.id} style={{ position: 'relative' }}>
-                <Pressable onLongPress={() => { haptic('medium'); setDeletingId(habit.id); }} onPress={() => { if (deletingId) setDeletingId(null); }}>
-                  <HabitCard
-                    habit={habit}
-                    log={log}
-                    streak={streak}
-                    selectedDay={selectedDay}
-                    loadingKey={loadingKey}
-                    onCycle={cycleHabit}
-                  />
+            {viewMode === 'day' ? habitData.map(({ habit, log }) => (
+              <View key={habit.id} style={{ position: 'relative', marginBottom: 10 }}>
+                <Pressable
+                  onLongPress={() => { haptic('medium'); setDeletingId(habit.id); }}
+                  onPress={() => { if (deletingId) { setDeletingId(null); return; } setDetailHabit(habit); }}
+                >
+                  <HabitBarCard habit={habit} log={log} />
                 </Pressable>
                 {deletingId === habit.id && (
                   <TouchableOpacity
-                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 14, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
                     onPress={() => deleteHabit(habit.id)}
                     activeOpacity={0.85}
                   >
@@ -1094,16 +1120,6 @@ function HabitsMain() {
               />
             )}
 
-            <MonthOverview
-              habits={habits}
-              monthLogs={monthLogs}
-              onDayPress={(d) => {
-                selectDay(d);
-                setViewMode('day');
-                const idx = strip.findIndex(s => s.date === d);
-                if (idx >= 0) stripRef.current?.scrollToIndex({ index: idx, animated: true });
-              }}
-            />
           </Animated.View>
         )}
       </ScrollView>
@@ -1114,6 +1130,53 @@ function HabitsMain() {
       <Confetti active={confettiActive} />
 
       {/* Streak milestone overlay */}
+      {/* Habit detail modal */}
+      <Modal visible={!!detailHabit} transparent animationType="slide" onRequestClose={() => setDetailHabit(null)}>
+        <Pressable style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }} onPress={() => setDetailHabit(null)}>
+          <Pressable style={[{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 16, gap: 12 }]} onPress={() => {}}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: colors.black, flex: 1, marginRight: 8 }} numberOfLines={2}>{detailHabit?.name}</Text>
+              <TouchableOpacity onPress={() => setDetailHabit(null)}>
+                <Ionicons name="close" size={22} color={colors.gray400} />
+              </TouchableOpacity>
+            </View>
+            {([
+              { key: 'mini' as const,  emoji: '⚡', label: 'Mini',  goal: detailHabit?.mini_goal,  color: '#BD7E4E' },
+              { key: 'good' as const,  emoji: '⭐', label: 'Plus',  goal: detailHabit?.good_goal,  color: '#A9AFB7' },
+              { key: 'elite' as const, emoji: '🏆', label: 'Elite', goal: detailHabit?.elite_goal, color: Colors.yellow },
+            ] as const).map(lv => {
+              const currentLog = detailHabit ? getLog(detailHabit.id, selectedDay) : undefined;
+              const isActive = currentLog?.level === lv.key;
+              return (
+                <TouchableOpacity
+                  key={lv.key}
+                  onPress={() => { if (detailHabit) { logHabit(detailHabit, lv.key); setDetailHabit(null); } }}
+                  activeOpacity={0.75}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg, borderWidth: 2, borderColor: isActive ? lv.color : colors.gray100, backgroundColor: isActive ? `${lv.color}18` : colors.gray100 }}
+                >
+                  <View style={{ width: 34, height: 34, borderRadius: 9, backgroundColor: lv.color, justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 17 }}>{lv.emoji}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: colors.black }}>{lv.label}</Text>
+                    {lv.goal ? <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400, marginTop: 1 }}>{lv.goal}</Text> : null}
+                  </View>
+                  {isActive && <Ionicons name="checkmark-circle" size={22} color={lv.color} />}
+                </TouchableOpacity>
+              );
+            })}
+            {detailHabit && getLog(detailHabit.id, selectedDay) && (
+              <TouchableOpacity
+                onPress={() => { if (detailHabit) { const log = getLog(detailHabit.id, selectedDay); if (log) logHabit(detailHabit, log.level); setDetailHabit(null); } }}
+                style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
+              >
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#EF4444' }}>Ongedaan maken</Text>
+              </TouchableOpacity>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal visible={!!milestoneStreak} transparent animationType="fade" onRequestClose={() => setMilestoneStreak(null)}>
         <Pressable style={mStyles.overlay} onPress={() => setMilestoneStreak(null)}>
           <Pressable style={[mStyles.milestoneCard, { backgroundColor: colors.white }]} onPress={() => {}}>
@@ -1161,9 +1224,9 @@ function HabitsMain() {
             <ScrollView contentContainerStyle={{ padding: 24, gap: 20 }}>
               {[
                 { label: 'Naam', value: quickAddName, setter: setQuickAddName, placeholder: 'Bijv. Mediteren, Lezen, Sporten...', autoFocus: true },
-                { label: '🥉 Mini-doel', value: quickAddMini, setter: setQuickAddMini, placeholder: 'Bijv. 5 minuten' },
-                { label: '🥈 Goed-doel', value: quickAddGood, setter: setQuickAddGood, placeholder: 'Bijv. 15 minuten' },
-                { label: '🥇 Elite-doel', value: quickAddElite, setter: setQuickAddElite, placeholder: 'Bijv. 30 minuten' },
+                { label: '⚡ Mini-doel', value: quickAddMini, setter: setQuickAddMini, placeholder: 'Bijv. 5 minuten' },
+                { label: '⭐ Plus-doel', value: quickAddGood, setter: setQuickAddGood, placeholder: 'Bijv. 15 minuten' },
+                { label: '🏆 Elite-doel', value: quickAddElite, setter: setQuickAddElite, placeholder: 'Bijv. 30 minuten' },
               ].map(field => (
                 <View key={field.label} style={{ gap: 8 }}>
                   <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>{field.label}</Text>

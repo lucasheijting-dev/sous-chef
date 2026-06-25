@@ -792,15 +792,26 @@ export default function LijstenTab() {
   async function createNewList() {
     if (!newListName.trim() || !user || user.id === 'dev') return;
     setNewListCreating(true);
-    const { data } = await supabase.from('lists').insert({
-      user_id: user.id,
-      name: newListName.trim(),
-      emoji: '📝',
-      sort_order: lists.length,
-    }).select('id, name, emoji, sort_order, list_type, user_id, created_at').single();
-    if (data) {
+    const name = newListName.trim();
+    const res = await fetch(`${API_BASE}/lists?user_id=${user.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, emoji: '📝' }),
+    }).catch(() => null);
+    const data = res ? await res.json().catch(() => null) : null;
+    if (data?.id) {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setLists(prev => [...prev, { ...data, item_count: 0, open_count: 0 }]);
+      setLists(prev => [...prev, {
+        id: data.id,
+        name,
+        emoji: '📝',
+        sort_order: lists.length,
+        list_type: data.list_type ?? 'checklist',
+        user_id: user.id,
+        created_at: new Date().toISOString(),
+        item_count: 0,
+        open_count: 0,
+      }]);
     }
     setNewListCreating(false);
     setNewListModalVisible(false);
