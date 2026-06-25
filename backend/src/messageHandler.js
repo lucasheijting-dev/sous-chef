@@ -216,17 +216,18 @@ async function handleMessage({ from, text }) {
   }
 
   // Load all context in parallel
-  const [lists, activeHabits, userContext, calendarStreams, conversationHistory, userPrefs] = await Promise.all([
+  const [lists, activeHabits, userContext, calendarStreams, conversationHistory, userPrefs, noteTitles] = await Promise.all([
     db.getLists(userId),
     db.getActiveHabits(userId),
     db.getUserContext(userId),
     db.getCalendarStreams(userId),
     Promise.resolve(session.getHistory(userId)),
     db.getUserPrefs(userId),
+    db.getNotes(userId).then(ns => ns.map(n => ({ id: n.id, title: n.title }))).catch(() => []),
   ]);
   const timezone = userPrefs?.timezone ?? 'Europe/Amsterdam';
 
-  const intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, conversationHistory, userContext, timezone });
+  const intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, notes: noteTitles, conversationHistory, userContext, timezone });
 
   Promise.all([
     db.logMessage(userId, text, intent.category),
@@ -565,6 +566,21 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       return checked
         ? `✅ *${target.text}* afgevinkt op ${list.emoji ?? '📝'} ${list.name}.`
         : `↩️ *${target.text}* teruggezet op ${list.emoji ?? '📝'} ${list.name}.`;
+    }
+
+    // ── Rename item ──────────────────────────────────────────────────────────
+
+    case 'list_item_rename': {
+      if (!intent.list_id || !intent.old_text || !intent.new_text) return 'Geef op: welke lijst, de huidige tekst en de nieuwe tekst.';
+      const list = lists.find(l => l.id === intent.list_id);
+      if (!list) return 'Die lijst kon ik niet vinden.';
+
+      const items  = await db.getListItems(intent.list_id);
+      const target = fuzzyFindItem(items, intent.old_text);
+      if (!target) return `_${intent.old_text}_ staat niet op ${list.emoji ?? '📝'} ${list.name}.`;
+
+      await db.updateListItemText(target.id, intent.new_text);
+      return `✏️ *${target.text}* → *${intent.new_text}* op ${list.emoji ?? '📝'} ${list.name}.`;
     }
 
     // ── Remove item ──────────────────────────────────────────────────────────
@@ -932,6 +948,39 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const dateStr = newDate ? ` naar ${fmtDate(newDate)}` : '';
       const timeStr = newTime ? ` om ${newTime}` : '';
       return `📅 *${event.title}* verplaatst${dateStr}${timeStr}.`;
+    }
+
+    // ── Rename event ─────────────────────────────────────────────────────────
+
+    case 'event_rename': {
+      const renameTitle = intent.event_title;
+      const newTitle    = intent.new_title;
+      if (!renameTitle || !newTitle) return 'Geef de huidige naam van de afspraak en de nieuwe naam.';
+      const matches = await db.getEventsByTitle(userId, renameTitle);
+      if (matches.length === 0) return `Geen afspraak gevonden met "${renameTitle}".`;
+      const event = matches[0];
+
+      await db.updateEventTitle(event.id, newTitle);
+
+      // Update CalDAV/Google/Outlook if synced
+      if (event.caldavUid) {
+        try {
+          const _ci4 = await db.getCalendarProvider(userId).catch(() => null);
+          const _cp4 = _ci4?.calendar_provider ?? (_ci4?.caldav_username ? 'iphone' : null);
+          const _cc4 = _cp4 === 'iphone' || !_cp4 ? (caldav.isConfigured() ? await db.getCalDAVCredentials(userId) : null) : null;
+          const newUid = await _calUpdate(userId, _cp4, _ci4, _cc4, event.calendarStream, event.caldavUid, {
+            title: newTitle, date: event.date, time: event.time ?? null,
+            recurrence: event.recurrence ?? null, reminderMinutesBefore: null,
+          });
+          if (newUid && newUid !== event.caldavUid) {
+            await db.updateEventCalDAVUid(event.id, newUid);
+          }
+        } catch (err) {
+          console.error('Calendar rename sync failed:', err.message);
+        }
+      }
+
+      return `📅 *${event.title}* hernoemd naar *${newTitle}*.`;
     }
 
     // ── Search event ─────────────────────────────────────────────────────────
@@ -1404,9 +1453,31 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     case 'note': {
       const body  = intent.note_body ?? originalText;
       const title = intent.note_title ?? body.slice(0, 50);
+
+      // Check if there's an existing note that matches the topic → append instead of creating new
+      const existingNotes = await db.getNotes(userId);
+      const matchingNote = fuzzyFindByTitle(existingNotes, title);
+      if (matchingNote) {
+        await db.appendToNote(matchingNote.id, body);
+        return `📝 Toegevoegd aan bestaande notitie *${matchingNote.title}*.`;
+      }
+
       const note  = await db.createNote(userId, title, body);
       undo.record(userId, 'add_note', { noteId: note.id, title: note.title });
       return `📝 Notitie opgeslagen: *${note.title}*`;
+    }
+
+    // ── Update (replace) note body ───────────────────────────────────────────
+
+    case 'note_update': {
+      const updateTitle = intent.note_title;
+      if (!updateTitle) return 'Welke notitie wil je bijwerken?';
+      const notes  = await db.getNotes(userId);
+      const target = fuzzyFindByTitle(notes, updateTitle);
+      if (!target) return `Geen notitie gevonden met "${updateTitle}".`;
+      const newBody = intent.new_body ?? intent.note_body ?? originalText;
+      await db.updateNote(target.id, newBody);
+      return `📝 Notitie *${target.title}* bijgewerkt.`;
     }
 
     // ── Append to note ───────────────────────────────────────────────────────

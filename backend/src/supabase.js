@@ -700,6 +700,10 @@ async function appendToNote(noteId, appendText) {
   await supabase.from('notes').update({ body: newBody }).eq('id', noteId);
 }
 
+async function updateNote(noteId, newBody) {
+  await supabase.from('notes').update({ body: newBody }).eq('id', noteId);
+}
+
 // ── Extended Habit Operations ──────────────────────────────────────────────────
 
 async function getHabitStreak(userId, habitId) {
@@ -1169,6 +1173,7 @@ module.exports = {
   deleteEventById,
   getNotes,
   appendToNote,
+  updateNote,
   getHabitStreak,
   logMessage,
   enqueueCalDAVOperation,

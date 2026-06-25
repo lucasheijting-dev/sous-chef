@@ -47,6 +47,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **list_share** — lijst als kopieerbare tekst terugsturen (bijv. "stuur mijn boodschappenlijst", "deel mijn lijst"); vul list_id in
 - **list_all_open** — alle open items over alle lijsten
 - **correct_last** — laatste item corrigeren; vul correct_to in
+- **list_item_rename** — tekst van een bestaand lijstitem wijzigen (bijv. "verander 'melk' naar 'halfvolle melk'", "wijzig biefstuk in varkenshaas"); vul list_id, old_text en new_text in
 - **recurring_item** — terugkerend item (bijv. "elke vrijdag: koffie kopen", "dagelijks: pillen")
 - **new_list** — nieuwe lijst aanmaken; vul emoji en list_type in
 
@@ -54,6 +55,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **calendar** — afspraak(en) vastleggen; vul calendar_stream in; optioneel: event_duration_minutes (duur in minuten), event_attendees (array van namen), event_location (locatie als string)
 - **event_update_reminder** — reminder toevoegen aan een al geplande afspraak (bijv. "herinner me eraan", "stuur me een reminder", "remind me" als follow-up op een eerder geplande afspraak); vul event_title, event_date en reminder_minutes_before in
 - **event_reschedule** — afspraak verplaatsen naar andere datum/tijd (bijv. "verplaats tandarts naar donderdag", "zet mijn vergadering een uur later"); vul event_title, event_date_new OF event_date_offset ("+1d"/"-2d"), event_time_new in
+- **event_rename** — naam/titel van een afspraak wijzigen (bijv. "hernoem vergadering naar kickoff", "wijzig de titel van mijn tandarts afspraak"); vul event_title (huidige titel) en new_title in; optioneel event_date voor disambiguatie
 - **events_bulk_reschedule** — meerdere afspraken op één dag verplaatsen (bijv. "verplaats al mijn afspraken van vrijdag naar zaterdag"); vul from_date en to_date in als YYYY-MM-DD
 - **events_conflict** — controleer op dubbel geplande afspraken (bijv. "heb ik iets dubbel gepland?", "staat er iets te veel op vrijdag?"); vul conflict_date in als YYYY-MM-DD (of gebruik vandaag als standaard)
 - **event_search** — opzoeken wanneer een specifieke afspraak is (bijv. "wanneer is mijn tandarts?", "hoe laat is mijn vergadering?", "is mijn afspraak al ingepland?"); vul event_search_query in. Gebruik dit ook als de gebruiker vraagt naar een specifiek event op naam — NIET events_today
@@ -67,10 +69,11 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - **receipt_query** — vragen over uitgaven (bijv. "hoeveel heb ik deze maand uitgegeven?", "wat was mijn duurste aankoop?"); vul query_period in: "this_month", "last_month", "this_week", of "all"
 
 **Notities:**
-- **note** — notitie opslaan; ook als gebruiker via voicenote zegt "bewaar dit als notitie", "noteer dit", "sla dit op" → sla de volledige tekst op als note_body
-- **note_append** — toevoegen aan bestaande notitie
+- **note** — notitie opslaan; ook als gebruiker via voicenote zegt "bewaar dit als notitie", "noteer dit", "sla dit op" → sla de volledige tekst op als note_body. LET OP: als er al een bestaande notitie bestaat over hetzelfde onderwerp (zie ## Actieve notities onderaan), gebruik dan liever **note_append** om er aan toe te voegen
+- **note_append** — toevoegen aan bestaande notitie; gebruik dit ook als de content logisch past bij een bestaande notitie
 - **note_read** — notitie teruglezen (bijv. "lees mijn notitie over X", "wat staat er in mijn notitie?"); vul note_title in
 - **note_search** — zoeken in notities (bijv. "zoek in mijn notities naar X"); vul note_query in
+- **note_update** — volledige inhoud van een notitie vervangen (bijv. "update mijn notitie X", "vervang de inhoud van notitie Y met ..."); vul note_title en new_body in
 - **note_delete** — notitie verwijderen; DESTRUCTIEF
 - **note_to_list** — actiepunten/taken uit een notitie halen en als lijst-items opslaan (bijv. "maak een to-do lijst van mijn notitie X", "zet de taken uit notitie Y op mijn takenlijst"); vul note_title en optioneel list_id in
 
@@ -477,13 +480,17 @@ Geef ALLEEN geldige JSON terug zonder markdown code blocks:
   "slot_date": null,
   "reminder_time": null,
   "note_query": null,
+  "new_body": null,
+  "old_text": null,
+  "new_text": null,
+  "new_title": null,
   "urgent": null,
   "recurrence_until": null
 }
 
 Vul alleen de relevante velden in en laat de rest null.`;
 
-async function parseIntent({ text, availableLists, activeHabits, calendarStreams = [], conversationHistory = [], userContext = '', timezone = 'Europe/Amsterdam' }) {
+async function parseIntent({ text, availableLists, activeHabits, calendarStreams = [], notes = [], conversationHistory = [], userContext = '', timezone = 'Europe/Amsterdam' }) {
   const listsContext = availableLists.length > 0
     ? `\n\n## Beschikbare lijsten\n${availableLists.map(l => `- ID: ${l.id} | Naam: "${l.name}" | Emoji: ${l.emoji || '📝'}`).join('\n')}`
     : '\n\n## Beschikbare lijsten\nGeen lijsten aangemaakt.';
@@ -494,6 +501,10 @@ async function parseIntent({ text, availableLists, activeHabits, calendarStreams
 
   const streamsContext = calendarStreams.length > 0
     ? `\n\n## Beschikbare kalenders\n${calendarStreams.map(s => `- claude_key: "${s.claude_key}" | Naam: "${s.name}" | Emoji: ${s.emoji || '📅'}`).join('\n')}`
+    : '';
+
+  const notesContext = notes.length > 0
+    ? `\n\n## Actieve notities\n${notes.map(n => `- ID: ${n.id} | Titel: "${n.title}"`).join('\n')}`
     : '';
 
   const contextBlock = userContext
@@ -523,7 +534,7 @@ async function parseIntent({ text, availableLists, activeHabits, calendarStreams
     system: [
       {
         type: 'text',
-        text: SYSTEM_PROMPT + listsContext + habitsContext + streamsContext + contextBlock,
+        text: SYSTEM_PROMPT + listsContext + habitsContext + streamsContext + notesContext + contextBlock,
         cache_control: { type: 'ephemeral' },
       },
       {
