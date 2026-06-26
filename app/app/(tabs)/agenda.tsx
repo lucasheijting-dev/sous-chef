@@ -565,7 +565,11 @@ function AgendaLite() {
     const [start, end] = ranges[timePeriod];
     let evts = allEvents.filter(e => e.date && e.date >= start && e.date <= end);
     if (streamFilter) evts = evts.filter(e => e.calendar_stream === streamFilter);
-    return evts;
+    return evts.sort((a, b) => {
+      const d = (a.date ?? '').localeCompare(b.date ?? '');
+      if (d !== 0) return d;
+      return (a.time ?? '99:99').localeCompare(b.time ?? '99:99');
+    });
   }, [allEvents, timePeriod, streamFilter]);
 
   const months = useMemo(() => {
@@ -655,7 +659,7 @@ function AgendaLite() {
   async function saveDetailStream(newStream: string | null) {
     if (!selectedEvent || selectedEvent.source !== 'sous-chef') return;
     setDetailSaving(true);
-    await supabase.from('events').update({ calendar_stream: newStream }).eq('id', selectedEvent.id);
+    await fetch(`${API_BASE}/events/${selectedEvent.id}?user_id=${user?.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ calendar_stream: newStream }) }).catch(() => {});
     setAllEvents(prev => prev.map(e => e.id === selectedEvent.id ? { ...e, calendar_stream: newStream } : e));
     setDetailStream(newStream);
     setDetailSaving(false);
@@ -733,7 +737,7 @@ function AgendaLite() {
       ? `${String(editTime.getHours()).padStart(2,'0')}:${String(editTime.getMinutes()).padStart(2,'0')}`
       : null;
     if (editEvent.source === 'sous-chef') {
-      await supabase.from('events').update({ title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream }).eq('id', editEvent.id);
+      await fetch(`${API_BASE}/events/${editEvent.id}?user_id=${user?.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream }) }).catch(() => {});
     }
     setAllEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream } : e));
     setEditEvent(null);
@@ -1258,7 +1262,7 @@ function AgendaLite() {
                     const nm = Math.round(((newTop - 4) / 60 - (nh - 6)) * 60 / 15) * 15;
                     const newTime = `${String(Math.min(nh,23)).padStart(2,'0')}:${String(Math.min(nm,59)).padStart(2,'0')}`;
                     if (e.source === 'sous-chef') {
-                      await supabase.from('events').update({ time: newTime }).eq('id', e.id);
+                      await fetch(`${API_BASE}/events/${e.id}?user_id=${user?.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ time: newTime }) }).catch(() => {});
                     }
                     setAllEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, time: newTime } : ev));
                     setDragEvent(null);
@@ -1433,8 +1437,10 @@ function AgendaLite() {
                 }
               </TouchableOpacity>
               {showTimePicker && (
-                <DateTimePicker value={quickAddTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
-                  onChange={(_, t) => { if (t) { setQuickAddTime(t); setShowTimePicker(false); } }} />
+                <View onStartShouldSetResponder={() => true} onTouchEnd={e => e.stopPropagation()}>
+                  <DateTimePicker value={quickAddTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
+                    onChange={(_, t) => { if (t) { setQuickAddTime(t); setShowTimePicker(false); } }} />
+                </View>
               )}
               {/* Stream/category picker */}
               {streams.length > 0 && (
@@ -1530,8 +1536,10 @@ function AgendaLite() {
                 }
               </TouchableOpacity>
               {editShowTimePicker && editEvent?.source !== 'phone' && (
-                <DateTimePicker value={editTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
-                  onChange={(_, t) => { if (t) { setEditTime(t); setEditShowTimePicker(false); } }} />
+                <View onStartShouldSetResponder={() => true} onTouchEnd={e => e.stopPropagation()}>
+                  <DateTimePicker value={editTime ?? new Date()} mode="time" display="spinner" locale="nl-NL" is24Hour
+                    onChange={(_, t) => { if (t) { setEditTime(t); setEditShowTimePicker(false); } }} />
+                </View>
               )}
               {editEvent?.source === 'sous-chef' && streams.length > 0 && (
                 <View style={{ gap: 8 }}>

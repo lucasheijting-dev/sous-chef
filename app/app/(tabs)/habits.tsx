@@ -613,7 +613,7 @@ function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | u
 const hbar = StyleSheet.create({
   card: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 15, flex: 1, marginRight: 12 },
-  dot: { width: 26, height: 26, borderRadius: 13 },
+  dot: { width: 64, height: 14, borderRadius: 7 },
 });
 
 // ── Week Grid ──────────────────────────────────────────────────────────────────

@@ -196,6 +196,10 @@ export default function NotitiesTab() {
   const [noteInviting, setNoteInviting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
+  const [addNoteVisible, setAddNoteVisible] = useState(false);
+  const [addNoteTitle, setAddNoteTitle] = useState('');
+  const [addNoteBody, setAddNoteBody] = useState('');
+  const [addNoteSaving, setAddNoteSaving] = useState(false);
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
@@ -511,6 +515,73 @@ export default function NotitiesTab() {
                 <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400 }}>Chefje toevoegen</Text>
               </TouchableOpacity>
             )}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* FAB */}
+      <TouchableOpacity
+        onPress={() => { setAddNoteTitle(''); setAddNoteBody(''); setAddNoteVisible(true); }}
+        style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 52, height: 52, borderRadius: 26, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', shadowColor: Colors.yellow, shadowOpacity: 0.4, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={26} color={Colors.black} />
+      </TouchableOpacity>
+
+      {/* Add note modal */}
+      <Modal visible={addNoteVisible} animationType="slide" presentationStyle="formSheet" onRequestClose={() => setAddNoteVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+              <TouchableOpacity onPress={() => setAddNoteVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={18} color={colors.gray400} />
+              </TouchableOpacity>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Nieuwe notitie</Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!user || !addNoteBody.trim() || addNoteSaving) return;
+                  setAddNoteSaving(true);
+                  const res = await fetch(`${API_BASE}/notes?user_id=${user.id}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: addNoteTitle.trim() || null, body: addNoteBody.trim() }),
+                  }).catch(() => null);
+                  const data = res ? await res.json().catch(() => null) : null;
+                  if (data?.id) {
+                    const newNote: Note = { id: data.id, user_id: user.id, title: addNoteTitle.trim() || null, body: addNoteBody.trim(), created_at: new Date().toISOString() };
+                    setNotes(prev => [newNote, ...prev]);
+                  }
+                  setAddNoteSaving(false);
+                  setAddNoteVisible(false);
+                }}
+                disabled={!addNoteBody.trim() || addNoteSaving}
+                style={[styles.closeBtn, { backgroundColor: Colors.yellow, opacity: addNoteBody.trim() ? 1 : 0.4 }]}
+              >
+                {addNoteSaving ? <ActivityIndicator size="small" color={Colors.black} /> : <Ionicons name="checkmark" size={18} color={Colors.black} />}
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={[styles.modalTitle, { color: colors.black }]}
+                value={addNoteTitle}
+                onChangeText={setAddNoteTitle}
+                placeholder="Titel (optioneel)"
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                returnKeyType="next"
+                autoFocus
+              />
+              <TextInput
+                style={[styles.modalBody, { color: colors.black, minHeight: 160 }]}
+                value={addNoteBody}
+                onChangeText={setAddNoteBody}
+                placeholder="Schrijf hier je notitie..."
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                multiline
+                textAlignVertical="top"
+              />
+            </ScrollView>
           </SafeAreaView>
         </KeyboardAvoidingView>
       </Modal>

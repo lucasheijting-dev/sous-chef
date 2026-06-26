@@ -367,7 +367,14 @@ export default function TimerTab() {
       .select('*')
       .eq('user_id', user.id)
       .order('sort_order');
-    if (data) setCategories(data);
+    if (data) {
+      setCategories(data);
+      setSelectedCategoryId(prev => {
+        if (prev) return prev;
+        const werk = data.find((c: any) => c.name.toLowerCase() === 'werk');
+        return werk ? werk.id : (data[0]?.id ?? null);
+      });
+    }
     setLoadingData(false);
   }, [user]);
 
@@ -1460,12 +1467,28 @@ export default function TimerTab() {
               </View>
               <ScrollView contentContainerStyle={{ padding: 20, gap: 20 }}>
                 <View style={{ gap: 8 }}>
+                  <Text style={[s.formLabel, { color: colors.gray400 }]}>Snelle keuze</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {[['💼','Werk'],['🏋️','Sport'],['📚','Studie'],['🎵','Muziek'],['🧘','Rust'],['🍳','Koken'],['🎨','Creatief'],['💻','Coderen']].map(([emoji, name]) => (
+                      <TouchableOpacity
+                        key={name}
+                        onPress={() => setCatName(`${emoji} ${name}`)}
+                        style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, backgroundColor: catName === `${emoji} ${name}` ? Colors.yellow : colors.gray100, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                        activeOpacity={0.75}
+                      >
+                        <Text style={{ fontSize: 15 }}>{emoji}</Text>
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: catName === `${emoji} ${name}` ? Colors.black : colors.gray400 }}>{name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                <View style={{ gap: 8 }}>
                   <Text style={[s.formLabel, { color: colors.gray400 }]}>Naam</Text>
                   <TextInput
                     style={[s.formInput, { borderColor: colors.gray200, backgroundColor: colors.offWhite, color: colors.black }]}
                     value={catName}
                     onChangeText={setCatName}
-                    placeholder="Bijv. Work, Sport, Studie..."
+                    placeholder="Bijv. 💼 Werk, 🏋️ Sport..."
                     placeholderTextColor={colors.gray400}
                     autoFocus
                     selectionColor={Colors.yellow}

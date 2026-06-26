@@ -703,6 +703,17 @@ async function sortListItemsAlphabetically(listId) {
   }
 }
 
+async function patchEvent(userId, eventId, fields) {
+  const allowed = {};
+  if (fields.title !== undefined) allowed.title = fields.title;
+  if (fields.date  !== undefined) allowed.date  = fields.date;
+  if (fields.time  !== undefined) allowed.time  = fields.time;
+  if (fields.calendar_stream !== undefined) allowed.calendar_stream = fields.calendar_stream;
+  const { error } = await supabase.from('events').update(allowed).eq('id', eventId).eq('user_id', userId);
+  if (error) throw new Error(`patchEvent: ${error.message}`);
+  return {};
+}
+
 async function updateEvent(userId, eventId, { date, time }) {
   const { error } = await supabase
     .from('events')
@@ -1212,6 +1223,7 @@ module.exports = {
   getEventsForDate,
   getEventsByTitle,
   updateEvent,
+  patchEvent,
   updateEventTitle,
   getEventsForDateRange,
   bulkUpdateEventDate,

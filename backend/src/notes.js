@@ -5,6 +5,21 @@ const db      = require('./supabase');
 
 const router = express.Router();
 
+// POST /notes?user_id=xxx
+router.post('/', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const { title, body } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!body?.trim()) return res.status(400).json({ error: 'Missing body' });
+    const note = await db.createNote(user_id, title?.trim() || null, body.trim());
+    res.json(note);
+  } catch (err) {
+    console.error('[Notes] Create error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /notes/:noteId?user_id=xxx
 router.delete('/:noteId', async (req, res) => {
   try {

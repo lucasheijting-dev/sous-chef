@@ -26,6 +26,21 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PATCH /events/:eventId?user_id=xxx — update title, date, time, calendar_stream
+router.patch('/:eventId', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const { title, date, time, calendar_stream } = req.body;
+    await db.patchEvent(user_id, eventId, { title, date, time, calendar_stream });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Events] Patch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /events/:eventId?user_id=xxx
 // Deletes from Supabase and, if the event has a caldav_uid, from CalDAV too.
 router.delete('/:eventId', async (req, res) => {
