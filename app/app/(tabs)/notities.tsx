@@ -15,8 +15,11 @@ import {
   Share,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
+import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -91,16 +94,12 @@ function NoteCard({
   index,
   onPress,
   onDelete,
-  isDeleting,
-  onLongPress,
   isShared,
 }: {
   item: Note;
   index: number;
   onPress: () => void;
   onDelete: () => void;
-  isDeleting?: boolean;
-  onLongPress?: () => void;
   isShared?: boolean;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -122,41 +121,32 @@ function NoteCard({
   }
 
   return (
-    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 10, position: 'relative' }}>
-      <Pressable
-        onPress={onPress}
-        onLongPress={onLongPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
-        onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
-      >
-        <Animated.View style={[styles.card, { backgroundColor: style.bg, transform: [{ scale }] }]}>
-          {isShared && (
-            <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 6, zIndex: 1 }}>
-              <Text style={{ fontSize: 11 }}>👥</Text>
-            </View>
-          )}
-          <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
-            {item.title || item.body.slice(0, 40)}
-          </Text>
-          <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
-            {item.body}
-          </Text>
-          <View style={styles.cardFooter}>
-            <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
-            <Ionicons name="open-outline" size={12} color={style.date} />
-          </View>
-        </Animated.View>
-      </Pressable>
-      {isDeleting && (
-        <TouchableOpacity
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 10, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
-          onPress={onDelete}
-          activeOpacity={0.85}
+    <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 10 }}>
+      <SwipeDeleteRow onDelete={onDelete} borderRadius={Radius.lg}>
+        <Pressable
+          onPress={onPress}
+          onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+          onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 50 }).start()}
         >
-          <Ionicons name="trash-outline" size={18} color="#fff" />
-          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
-        </TouchableOpacity>
-      )}
+          <Animated.View style={[styles.card, { backgroundColor: style.bg, transform: [{ scale }] }]}>
+            {isShared && (
+              <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 6, zIndex: 1 }}>
+                <Text style={{ fontSize: 11 }}>👥</Text>
+              </View>
+            )}
+            <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
+              {item.title || item.body.slice(0, 40)}
+            </Text>
+            <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
+              {item.body}
+            </Text>
+            <View style={styles.cardFooter}>
+              <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
+              <Ionicons name="open-outline" size={12} color={style.date} />
+            </View>
+          </Animated.View>
+        </Pressable>
+      </SwipeDeleteRow>
     </Animated.View>
   );
 }
@@ -198,18 +188,19 @@ export default function NotitiesTab() {
   const [editMode, setEditMode] = useState(false);
   const [editBody, setEditBody] = useState('');
   const [editSaving, setEditSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sharedNoteIds, setSharedNoteIds] = useState<Set<string>>(new Set());
   const [noteInviteVisible, setNoteInviteVisible] = useState(false);
   const [noteInviteTarget, setNoteInviteTarget] = useState<Note | null>(null);
   const [noteInvitePhone, setNoteInvitePhone] = useState('');
   const [noteInviteError, setNoteInviteError] = useState('');
   const [noteInviting, setNoteInviting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     const [notesRes, sharedNoteRes] = await Promise.all([
-      supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('notes').select('id, user_id, title, body, created_at, image_url').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('note_members').select('note_id').eq('user_id', user.id),
     ]);
     if (notesRes.data) { setNotes(notesRes.data); setCache('cache_notes', notesRes.data); }
@@ -258,7 +249,6 @@ export default function NotitiesTab() {
   }
 
   function handleDelete(note: Note) {
-    setDeletingId(null);
     setNotes(prev => prev.filter(n => n.id !== note.id));
     setDeletedNote(note);
     setSnackbarVisible(true);
@@ -268,7 +258,7 @@ export default function NotitiesTab() {
       setSnackbarVisible(false);
       setDeletedNote(prev => {
         if (prev?.id === note.id) {
-          supabase.from('notes').delete().eq('id', note.id).eq('user_id', user!.id);
+          fetch(`${API_BASE}/notes/${note.id}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
           return null;
         }
         return prev;
@@ -286,6 +276,36 @@ export default function NotitiesTab() {
     });
     setDeletedNote(null);
     setSnackbarVisible(false);
+  }
+
+  async function addPhotoToNote(note: typeof selected) {
+    if (!note || !user || uploadingImage) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.6,
+      base64: true,
+      exif: false,
+    });
+    if (result.canceled || !result.assets[0]?.base64) return;
+    setUploadingImage(true);
+    try {
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const res = await fetch(`${API_BASE}/notes/${note.id}/image?user_id=${user.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64: asset.base64, mime_type: mimeType }),
+      }).catch(() => null);
+      const data = res ? await res.json().catch(() => null) : null;
+      if (data?.image_url) {
+        setNotes(prev => prev.map(n => n.id === note.id ? { ...n, image_url: data.image_url } : n));
+        setSelected(prev => prev ? { ...prev, image_url: data.image_url } : null);
+      }
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   const filtered = notes.filter(n =>
@@ -354,7 +374,6 @@ export default function NotitiesTab() {
           )}
         </View>
       ) : (
-        <Pressable onPress={() => setDeletingId(null)} style={{ flex: 1 }}>
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
@@ -371,18 +390,21 @@ export default function NotitiesTab() {
             <NoteCard
               item={item}
               index={index}
-              onPress={() => { if (deletingId) { setDeletingId(null); return; } setSelected(item); }}
+              onPress={() => setSelected(item)}
               onDelete={() => handleDelete(item)}
-              isDeleting={deletingId === item.id}
-              onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
               isShared={sharedNoteIds.has(item.id)}
             />
           )}
         />
-        </Pressable>
       )}
 
       <UndoSnackbar visible={snackbarVisible} onUndo={handleUndo} />
+
+      <Modal visible={!!imageViewUrl} transparent animationType="fade" onRequestClose={() => setImageViewUrl(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setImageViewUrl(null)}>
+          {imageViewUrl && <Image source={{ uri: imageViewUrl }} style={{ width: '95%', height: '70%' }} resizeMode="contain" />}
+        </Pressable>
+      </Modal>
 
       <Modal visible={noteInviteVisible} transparent animationType="slide" onRequestClose={() => setNoteInviteVisible(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
@@ -427,6 +449,16 @@ export default function NotitiesTab() {
                 >
                   <Ionicons name="share-outline" size={17} color={colors.black} />
                 </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => addPhotoToNote(selected)}
+                  disabled={uploadingImage}
+                  style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
+                >
+                  {uploadingImage
+                    ? <ActivityIndicator size="small" color={colors.black} />
+                    : <Ionicons name="camera-outline" size={17} color={colors.black} />
+                  }
+                </TouchableOpacity>
                 {editMode ? (
                   <TouchableOpacity
                     onPress={async () => {
@@ -462,6 +494,11 @@ export default function NotitiesTab() {
                 />
               ) : (
                 <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selected?.body}</Text>
+              )}
+              {selected?.image_url && (
+                <TouchableOpacity onPress={() => setImageViewUrl(selected.image_url!)} activeOpacity={0.9} style={{ marginTop: 20 }}>
+                  <Image source={{ uri: selected.image_url }} style={{ width: '100%', height: 220, borderRadius: Radius.lg }} resizeMode="cover" />
+                </TouchableOpacity>
               )}
             </ScrollView>
             {!editMode && selected && (

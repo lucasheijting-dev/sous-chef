@@ -36,6 +36,7 @@ import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE, getTone, TONE_ORDER, Tones }
 import { SkeletonListCard } from '@/components/SkeletonCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCache, setCache } from '@/lib/cache';
+import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -128,22 +129,17 @@ function AnimatedCard({
   item,
   index,
   onPress,
-  onLongPress,
-  isDeleting,
-  onDeletePress,
+  onDelete,
 }: {
   item: List & { item_count: number; open_count: number; is_shared?: boolean };
   index: number;
   onPress: () => void;
-  onLongPress?: () => void;
-  isDeleting?: boolean;
-  onDeletePress?: () => void;
+  onDelete: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const doneFlash = useRef(new Animated.Value(0)).current;
-  const longPressDidFire = useRef(false);
 
   const { colors, isDark } = useTheme();
   const tone = getTone(index, isDark);
@@ -175,11 +171,10 @@ function AnimatedCard({
   const progress = totalCount > 0 ? (totalCount - openCount) / totalCount : 0;
 
   return (
-    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }], position: 'relative' }]}>
+    <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }]}>
+      <SwipeDeleteRow onDelete={onDelete} borderRadius={Radius.lg} deleteWidth={80}>
       <Pressable
-        onPress={() => { if (longPressDidFire.current) { longPressDidFire.current = false; return; } onPress(); }}
-        onLongPress={() => { longPressDidFire.current = true; onLongPress?.(); }}
-        delayLongPress={400}
+        onPress={onPress}
         onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
         style={[styles.tile, { backgroundColor: colors.surface }]}
@@ -226,16 +221,7 @@ function AnimatedCard({
           style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: '#5A8A5A', opacity: doneFlash }]}
         />
       </Pressable>
-      {isDeleting && (
-        <TouchableOpacity
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
-          onPress={onDeletePress}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="trash-outline" size={18} color="#fff" />
-          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
-        </TouchableOpacity>
-      )}
+      </SwipeDeleteRow>
     </Animated.View>
   );
 }
@@ -520,7 +506,6 @@ export default function LijstenTab() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pendingListDelete, setPendingListDelete] = useState<{ listId: string; listName: string; items: typeof lists } | null>(null);
   const [listUndoVisible, setListUndoVisible] = useState(false);
   const listUndoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -638,7 +623,7 @@ export default function LijstenTab() {
     setSelectedNote(null);
     setEditingNote(false);
     setNotes(prev => prev.filter(n => n.id !== noteId));
-    await supabase.from('notes').delete().eq('id', noteId);
+    fetch(`${API_BASE}/notes/${noteId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   async function saveNoteEdit() {
@@ -993,17 +978,15 @@ export default function LijstenTab() {
             )}
             {/* Active lists */}
             {activeLists.length > 0 && (
-              <Pressable onPress={() => setDeletingId(null)} style={styles.tileRow}>
+              <View style={styles.tileRow}>
                 {activeLists.map((item, index) => (
                   <AnimatedCard key={item.id} item={item} index={index}
-                    onPress={() => { if (deletingId) { setDeletingId(null); return; } router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } }); }}
-                    onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
-                    isDeleting={deletingId === item.id}
-                    onDeletePress={() => deleteList(item.id, item.name)}
+                    onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                    onDelete={() => deleteList(item.id, item.name)}
                   />
                 ))}
                 {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
-              </Pressable>
+              </View>
             )}
             {/* Done lists sink to bottom */}
             {doneLists.length > 0 && (
@@ -1013,17 +996,15 @@ export default function LijstenTab() {
                   <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Klaar ({doneLists.length})</Text>
                   <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
                 </View>
-                <Pressable onPress={() => setDeletingId(null)} style={styles.tileRow}>
+                <View style={styles.tileRow}>
                   {doneLists.map((item, index) => (
                     <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
-                      onPress={() => { if (deletingId) { setDeletingId(null); return; } router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } }); }}
-                      onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(item.id); }}
-                      isDeleting={deletingId === item.id}
-                      onDeletePress={() => deleteList(item.id, item.name)}
+                      onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                      onDelete={() => deleteList(item.id, item.name)}
                     />
                   ))}
                   {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
-                </Pressable>
+                </View>
               </>
             )}
           </ScrollView>

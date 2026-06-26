@@ -20,8 +20,11 @@ import {
   InputAccessoryView,
   Share,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
@@ -92,10 +95,8 @@ function SwipeableItem({
   onEditSubmit,
   isFirst,
   tapToEdit,
-  editMode,
-  isDeleting,
-  onDismissDelete,
-  onRequestEdit,
+  onAddPhoto,
+  onViewImage,
 }: {
   item: ListItem;
   onToggle: () => void;
@@ -105,10 +106,8 @@ function SwipeableItem({
   onEditSubmit: (id: string, text: string) => void;
   isFirst?: boolean;
   tapToEdit?: boolean;
-  editMode?: boolean;
-  isDeleting?: boolean;
-  onDismissDelete?: () => void;
-  onRequestEdit?: () => void;
+  onAddPhoto?: () => void;
+  onViewImage?: (url: string) => void;
 }) {
   const { colors } = useTheme();
   const [editText, setEditText] = useState(item.text);
@@ -127,59 +126,54 @@ function SwipeableItem({
   }, [item.checked]);
 
   return (
-    <Animated.View style={{ transform: [{ scale: rowBounce }], position: 'relative' }}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.item,
-          { backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isFirst ? 'transparent' : colors.hairline },
-          item.checked && { backgroundColor: colors.gray100 },
-          pressed && { transform: [{ scale: 0.98 }] },
-        ]}
-        onPress={() => { if (isDeleting) { onDismissDelete?.(); return; } haptic('light'); if (tapToEdit) onLongPress(); else onToggle(); }}
-        onLongPress={() => { haptic('medium'); onLongPress(); }}
-      >
-        {!tapToEdit && <AnimatedCheckbox checked={item.checked} onPress={onToggle} />}
-        {isEditing ? (
-          <TextInput
-            style={[styles.itemText, { color: colors.black, flex: 1, borderBottomWidth: 1, borderBottomColor: Colors.yellow, padding: 0 }]}
-            value={editText}
-            onChangeText={setEditText}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={() => onEditSubmit(item.id, editText)}
-            onBlur={() => onEditSubmit(item.id, editText)}
-            selectionColor={Colors.yellow}
-          />
-        ) : (
-          <Text style={[styles.itemText, { color: colors.black }, item.checked && { color: colors.gray400, textDecorationLine: 'line-through' }]}>{item.text}</Text>
-        )}
-        {!isEditing && item.list_item_sources && item.list_item_sources.length > 0 && (
-          <Text style={{ fontSize: 13, marginRight: 2 }}>🍽️</Text>
-        )}
-        {!isEditing && (
-          <Ionicons name="reorder-three" size={18} color={item.checked ? colors.gray200 : colors.gray400} />
-        )}
-      </Pressable>
-      {isDeleting && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row', overflow: 'hidden', borderRadius: 0 }}>
-          <TouchableOpacity
-            style={{ flex: 1, backgroundColor: '#666', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 6 }}
-            onPress={() => { onDismissDelete?.(); onRequestEdit?.(); }}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="pencil-outline" size={16} color="#fff" />
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }}>Bewerken</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{ flex: 1, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 6 }}
-            onPress={onDelete}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="trash-outline" size={16} color="#fff" />
-            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 13, color: '#fff' }}>Verwijder</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+    <Animated.View style={{ transform: [{ scale: rowBounce }] }}>
+      <SwipeDeleteRow onDelete={onDelete}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.item,
+            { backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isFirst ? 'transparent' : colors.hairline },
+            item.checked && { backgroundColor: colors.gray100 },
+            pressed && { transform: [{ scale: 0.98 }] },
+          ]}
+          onPress={() => { haptic('light'); if (tapToEdit) onLongPress(); else onToggle(); }}
+          onLongPress={() => { haptic('medium'); onLongPress(); }}
+        >
+          {!tapToEdit && <AnimatedCheckbox checked={item.checked} onPress={onToggle} />}
+          {isEditing ? (
+            <TextInput
+              style={[styles.itemText, { color: colors.black, flex: 1, borderBottomWidth: 1, borderBottomColor: Colors.yellow, padding: 0 }]}
+              value={editText}
+              onChangeText={setEditText}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => onEditSubmit(item.id, editText)}
+              onBlur={() => onEditSubmit(item.id, editText)}
+              selectionColor={Colors.yellow}
+            />
+          ) : (
+            <Text style={[styles.itemText, { color: colors.black }, item.checked && { color: colors.gray400, textDecorationLine: 'line-through' }]}>{item.text}</Text>
+          )}
+          {!isEditing && item.list_item_sources && item.list_item_sources.length > 0 && (
+            <Text style={{ fontSize: 13, marginRight: 2 }}>🍽️</Text>
+          )}
+          {!isEditing && (
+            <TouchableOpacity
+              onPress={() => item.image_url ? onViewImage?.(item.image_url) : onAddPhoto?.()}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ marginRight: 4 }}
+              activeOpacity={0.7}
+            >
+              {item.image_url
+                ? <Image source={{ uri: item.image_url }} style={{ width: 26, height: 26, borderRadius: 5 }} />
+                : <Ionicons name="camera-outline" size={16} color={colors.gray400} />
+              }
+            </TouchableOpacity>
+          )}
+          {!isEditing && (
+            <Ionicons name="reorder-three" size={18} color={item.checked ? colors.gray200 : colors.gray400} />
+          )}
+        </Pressable>
+      </SwipeDeleteRow>
     </Animated.View>
   );
 }
@@ -241,7 +235,6 @@ export default function ListDetailScreen() {
 
   const [pendingDelete, setPendingDelete] = useState<{ item: ListItem; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
-  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [doneExpanded, setDoneExpanded] = useState(true);
 
@@ -279,6 +272,9 @@ export default function ListDetailScreen() {
   const [recipeError, setRecipeError] = useState<string | null>(null);
   const [recipeServings, setRecipeServings] = useState<number | null>(null);
 
+  const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
+  const [uploadingImageItemId, setUploadingImageItemId] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isGroceryList) return;
     isGeoAlertEnabled().then(setGeoEnabled);
@@ -301,16 +297,20 @@ export default function ListDetailScreen() {
     const badge = listType === 'links' ? ' 🔗' : listType === 'tips' ? ' 💡' : '';
     navigation.setOptions({
       title: `${name}${badge}`,
-      headerBackTitle: '',
+      headerBackTitle: 'Terug',
       headerTintColor: Colors.yellow,
       headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 4 }}>
-          <TouchableOpacity onPress={() => { setInvitePhone(''); setInviteError(''); setInviteModalVisible(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="person-add-outline" size={20} color={Colors.black} />
+          <TouchableOpacity onPress={() => { setInvitePhone(''); setInviteError(''); setInviteModalVisible(true); }} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="person-add-outline" size={17} color={Colors.black} />
+            </View>
           </TouchableOpacity>
           {items.length > 0 && (
-            <TouchableOpacity onPress={shareList} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="share-outline" size={22} color={Colors.black} />
+            <TouchableOpacity onPress={shareList} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+              <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="share-outline" size={17} color={Colors.black} />
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -407,7 +407,6 @@ export default function ListDetailScreen() {
 
   async function deleteItem(itemId: string) {
     haptic('warning');
-    setDeletingItemId(null);
     setItems(prev => prev.filter(i => i.id !== itemId));
     if (pendingDelete) {
       clearTimeout(pendingDelete.timer);
@@ -425,6 +424,34 @@ export default function ListDetailScreen() {
       return [...without, pendingDelete.item].sort((a, b) => a.created_at.localeCompare(b.created_at));
     });
     setPendingDelete(null);
+  }
+
+  async function addPhotoToItem(itemId: string) {
+    if (!user || uploadingImageItemId) return;
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.6,
+      base64: true,
+      exif: false,
+    });
+    if (result.canceled || !result.assets[0]?.base64) return;
+    setUploadingImageItemId(itemId);
+    try {
+      const asset = result.assets[0];
+      const res = await fetch(`${API_BASE}/lists/items/${itemId}/image?user_id=${user.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64: asset.base64, mime_type: asset.mimeType ?? 'image/jpeg' }),
+      }).catch(() => null);
+      const data = res ? await res.json().catch(() => null) : null;
+      if (data?.image_url) {
+        setItems(prev => prev.map(i => i.id === itemId ? { ...i, image_url: data.image_url } : i));
+      }
+    } finally {
+      setUploadingImageItemId(null);
+    }
   }
 
   async function addItem() {
@@ -464,7 +491,8 @@ export default function ListDetailScreen() {
           onPress: async () => {
             haptic('warning');
             const ids = checkedItems.map(i => i.id);
-            await supabase.from('list_items').delete().in('id', ids);
+            setItems(prev => prev.filter(i => !i.checked));
+            await Promise.all(ids.map(id => fetch(`${API_BASE}/lists/items/${id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {})));
             showToast(`${ids.length} item${ids.length > 1 ? 's' : ''} verwijderd`, 'info');
             fetchItems();
           },
@@ -534,22 +562,7 @@ export default function ListDetailScreen() {
   }
 
   async function deleteRecipeGroup(recipeId: string) {
-    const { data: sources } = await supabase
-      .from('list_item_sources').select('list_item_id').eq('recipe_id', recipeId);
-    if (!sources?.length) return;
-    const itemIds = sources.map((s: any) => s.list_item_id);
-
-    const { data: allSources } = await supabase
-      .from('list_item_sources').select('list_item_id').in('list_item_id', itemIds);
-    const counts: Record<string, number> = {};
-    for (const s of (allSources ?? [])) counts[s.list_item_id] = (counts[s.list_item_id] ?? 0) + 1;
-
-    const toDelete = itemIds.filter((id: string) => (counts[id] ?? 0) <= 1);
-    const toUnlink = itemIds.filter((id: string) => (counts[id] ?? 0) > 1);
-
-    if (toDelete.length) await supabase.from('list_items').delete().in('id', toDelete);
-    if (toUnlink.length) await supabase.from('list_item_sources').delete().eq('recipe_id', recipeId).in('list_item_id', toUnlink);
-    await supabase.from('recipes').delete().eq('id', recipeId);
+    await fetch(`${API_BASE}/lists/recipes/${recipeId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
     fetchItems();
   }
 
@@ -838,15 +851,13 @@ export default function ListDetailScreen() {
                   item={item}
                   onToggle={() => toggleItem(item)}
                   onDelete={() => deleteItem(item.id)}
-                  onLongPress={() => { if (isTips) { setEditingItemId(item.id); } else { setDeletingItemId(item.id); } }}
+                  onLongPress={() => setEditingItemId(item.id)}
                   editingItemId={editingItemId}
                   onEditSubmit={saveInlineEdit}
                   isFirst={index === 0}
                   tapToEdit={isTips}
-                  editMode={isTips}
-                  isDeleting={deletingItemId === item.id && !isTips}
-                  onDismissDelete={() => setDeletingItemId(null)}
-                  onRequestEdit={() => setEditingItemId(item.id)}
+                  onAddPhoto={() => addPhotoToItem(item.id)}
+                  onViewImage={setImageViewUrl}
                 />
               );
               return isLastItem ? (
@@ -1025,6 +1036,12 @@ export default function ListDetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
+        </Modal>
+
+        <Modal visible={!!imageViewUrl} transparent animationType="fade" onRequestClose={() => setImageViewUrl(null)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setImageViewUrl(null)}>
+            {imageViewUrl && <Image source={{ uri: imageViewUrl }} style={{ width: '95%', height: '70%' }} resizeMode="contain" />}
+          </Pressable>
         </Modal>
 
         <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>

@@ -28,6 +28,8 @@ export type ListItem = {
   text: string;
   checked: boolean;
   created_at: string;
+  image_url?: string | null;
+  list_item_sources?: { recipe_id: string; recipes: { title: string } | null }[];
 };
 
 export type Note = {
@@ -36,6 +38,7 @@ export type Note = {
   title: string | null;
   body: string;
   created_at: string;
+  image_url?: string | null;
 };
 
 export type CalEvent = {
@@ -66,6 +69,40 @@ export type HabitLog = {
   habit_id: string;
   user_id: string;
   date: string;
-  level: 'mini' | 'good' | 'elite';
+  level: 'mini' | 'good' | 'elite' | 'not_done';
   logged_at: string;
+};
+
+export type TimerCategory = {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  sort_order: number;
+  created_at: string;
+};
+
+export type TimerSession = {
+  id: string;
+  user_id: string;
+  category_id: string | null;
+  task_name: string | null;
+  planned_duration: number;
+  actual_duration: number | null;
+  status: 'running' | 'completed' | 'abandoned';
+  mood_score: number | null;
+  reflection_note: string | null;
+  abandon_reason: 'distraction' | 'too_long' | 'done' | 'other' | null;
+  abandon_note: string | null;
+  started_at: string;
+  ended_at: string | null;
+};
+
+export type TimerBreak = {
+  id: string;
+  session_id: string;
+  planned_duration: number;
+  actual_duration: number | null;
+  started_at: string;
+  ended_at: string | null;
 };

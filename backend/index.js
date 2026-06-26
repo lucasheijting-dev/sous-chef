@@ -39,22 +39,6 @@ app.use('/notes', notesRouter);
 app.use('/habits', habitsRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
-app.get('/debug-db', async (_, res) => {
-  const { createClient } = require('@supabase/supabase-js');
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_KEY;
-  const client = createClient(url, key);
-  const selectResult = await client.from('notes').select('id').limit(1);
-  const deleteResult = await client.from('notes').delete().eq('id', '00000000-0000-0000-0000-000000000000');
-  res.json({
-    url_set: !!url,
-    key_set: !!key,
-    key_prefix: key ? key.substring(0, 30) : null,
-    select_error: selectResult.error?.message ?? null,
-    delete_error: deleteResult.error?.message ?? null,
-  });
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Sous-Chef backend running on port ${PORT}`);

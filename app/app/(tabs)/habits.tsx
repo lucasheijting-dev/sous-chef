@@ -15,7 +15,6 @@ import {
   TextInput,
   KeyboardAvoidingView,
   ActivityIndicator,
-  PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,6 +30,9 @@ import { SkeletonHabitCard } from '@/components/SkeletonCard';
 import { Toast, useToast } from '@/components/Toast';
 import Confetti from '@/components/Confetti';
 import { getCache, setCache } from '@/lib/cache';
+import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -49,7 +51,7 @@ function haptic(style: 'light' | 'medium' | 'success' = 'light') {
 }
 
 const LEVELS = [
-  { key: 'mini',  emoji: '⚡', label: 'Mini',  medalBg: '#BD7E4E', borderActive: '#BD7E4E', pts: 1 },
+  { key: 'mini',  emoji: '⚡', label: 'Mini',  medalBg: '#22C55E', borderActive: '#22C55E', pts: 1 },
   { key: 'good',  emoji: '⭐', label: 'Plus',  medalBg: '#A9AFB7', borderActive: '#A9AFB7', pts: 2 },
   { key: 'elite', emoji: '🏆', label: 'Elite', medalBg: Colors.yellow, borderActive: Colors.yellow, pts: 3 },
 ] as const;
@@ -548,9 +550,9 @@ function HabitCard({
   }, [level]);
 
   const medalBg: Record<string, string> = {
-    mini: '#BD7E4E', good: isDark ? '#B6BCC4' : '#A9AFB7', elite: Colors.yellow,
+    mini: '#22C55E', good: isDark ? '#B6BCC4' : '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444',
   };
-  const medalFg: Record<string, string> = { mini: '#fff', good: '#fff', elite: Colors.black };
+  const medalFg: Record<string, string> = { mini: '#fff', good: '#fff', elite: Colors.black, not_done: '#fff' };
   const isFilled = !!level;
 
   const goalText = level === 'elite' ? habit.elite_goal : level === 'good' ? habit.good_goal : level === 'mini' ? habit.mini_goal : null;
@@ -592,21 +594,18 @@ function HabitCard({
 
 // ── Habit Bar Card (day view) ──────────────────────────────────────────────────
 
-const BAR_FILLED = ['#22C55E', '#A9AFB7', Colors.yellow]; // mini=green, plus=silver, elite=gold
+const LEVEL_COLOR: Record<string, string> = {
+  mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444',
+};
 
 function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | undefined; isToday: boolean }) {
   const { colors } = useTheme();
   const level = log?.level;
-  const filledCount = level === 'elite' ? 3 : level === 'good' ? 2 : level === 'mini' ? 1 : 0;
-  const emptyBg = (isToday && filledCount === 0) ? '#FEE2E2' : colors.gray100;
+  const dotColor = level ? LEVEL_COLOR[level] : (isToday ? '#FEE2E2' : colors.gray100);
   return (
     <View style={[hbar.card, { backgroundColor: colors.surface }]}>
       <Text style={[hbar.name, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
-      <View style={hbar.bars}>
-        <View style={[hbar.bar, { backgroundColor: filledCount >= 1 ? BAR_FILLED[0] : emptyBg }]} />
-        <View style={[hbar.bar, { backgroundColor: filledCount >= 2 ? BAR_FILLED[1] : emptyBg }]} />
-        <View style={[hbar.bar, { backgroundColor: filledCount >= 3 ? BAR_FILLED[2] : emptyBg }]} />
-      </View>
+      <View style={[hbar.dot, { backgroundColor: dotColor }]} />
     </View>
   );
 }
@@ -614,66 +613,21 @@ function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | u
 const hbar = StyleSheet.create({
   card: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 15, flex: 1, marginRight: 12 },
-  bars: { flexDirection: 'row', gap: 5 },
-  bar: { width: 26, height: 26, borderRadius: 7 },
+  dot: { width: 26, height: 26, borderRadius: 13 },
 });
-
-// ── Swipe-to-delete wrapper ────────────────────────────────────────────────────
-
-function SwipeDeleteRow({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
-
-  const close = useCallback(() => {
-    Animated.spring(translateX, { toValue: 0, useNativeDriver: true, overshootClamping: true }).start();
-    isOpen.current = false;
-  }, [translateX]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) =>
-        Math.abs(gs.dx) > 8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
-      onPanResponderMove: (_, gs) => {
-        const x = isOpen.current ? Math.max(gs.dx - 72, -72) : Math.min(Math.max(gs.dx, -72), 0);
-        translateX.setValue(x);
-      },
-      onPanResponderRelease: (_, gs) => {
-        const threshold = isOpen.current ? -36 : -36;
-        if (gs.dx < threshold || (isOpen.current && gs.dx < 0)) {
-          Animated.spring(translateX, { toValue: -72, useNativeDriver: true, overshootClamping: true }).start();
-          isOpen.current = true;
-        } else {
-          close();
-        }
-      },
-    })
-  ).current;
-
-  return (
-    <View style={{ overflow: 'hidden', borderRadius: Radius.lg }}>
-      <View style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 72, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center' }}>
-        <TouchableOpacity onPress={() => { close(); setTimeout(onDelete, 150); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="trash-outline" size={22} color="#fff" />
-        </TouchableOpacity>
-      </View>
-      <Animated.View {...panResponder.panHandlers} style={{ transform: [{ translateX }] }}>
-        {children}
-      </Animated.View>
-    </View>
-  );
-}
 
 // ── Week Grid ──────────────────────────────────────────────────────────────────
 
 function WeekGrid({
   habits, logs, loadingKey, selectedDay,
-  onCycle,
+  onCycle, onDetail,
 }: {
   habits: Habit[];
   logs: HabitLog[];
   loadingKey: string | null;
   selectedDay: string;
   onCycle: (habit: Habit, log: HabitLog | undefined, date: string) => void;
+  onDetail: (habit: Habit) => void;
 }) {
   const { colors } = useTheme();
 
@@ -694,7 +648,7 @@ function WeekGrid({
     });
   }, [selectedDay]);
 
-  const levelColor: Record<string, string> = { mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow };
+  const levelColor: Record<string, string> = { mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444' };
 
   return (
     <View style={{ paddingHorizontal: 18, paddingBottom: 4 }}>
@@ -714,7 +668,9 @@ function WeekGrid({
       {/* Habit rows — dots only */}
       {habits.map(habit => (
         <View key={habit.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-          <Text numberOfLines={1} style={{ width: 90, fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, paddingRight: 6 }}>{habit.name}</Text>
+          <TouchableOpacity onLongPress={() => { haptic('medium'); onDetail(habit); }} activeOpacity={0.7} style={{ width: 90 }}>
+            <Text numberOfLines={1} style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black, paddingRight: 6 }}>{habit.name}</Text>
+          </TouchableOpacity>
           {weekDays.map(d => {
             const log = logs.find(l => l.habit_id === habit.id && l.date === d.date);
             const isLoading = loadingKey === `${habit.id}-${d.date}-cycle`;
@@ -839,8 +795,8 @@ function HabitsMain() {
 
     if (existing?.level === level) {
       haptic('light');
-      await supabase.from('habit_logs').delete().eq('id', existing.id);
-      showToast(`${habit.name} ongedaan gemaakt`, 'info');
+      await fetch(`${API_BASE}/habits/logs/${existing.id}?user_id=${user.id}`, { method: 'DELETE' }).catch(() => {});
+      showToast(`${habit.name} verwijderd`, 'info');
     } else {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await supabase.from('habit_logs').upsert(
@@ -874,7 +830,7 @@ function HabitsMain() {
   async function cycleHabit(habit: Habit, currentLog: HabitLog | undefined, dateOverride?: string) {
     if (!user) return;
     const date = dateOverride ?? selectedDay;
-    const CYCLE: Array<'mini' | 'good' | 'elite'> = ['mini', 'good', 'elite'];
+    const CYCLE: Array<'mini' | 'good' | 'elite' | 'not_done'> = ['mini', 'good', 'elite', 'not_done'];
     const key = `${habit.id}-${date}-cycle`;
     setLoadingKey(key);
     if (!currentLog) {
@@ -886,16 +842,20 @@ function HabitsMain() {
       showToast(`${LEVELS[0].emoji} ${habit.name} — ${LEVELS[0].label}!`, 'success');
     } else {
       const idx = CYCLE.indexOf(currentLog.level as any);
-      if (idx === CYCLE.length - 1) {
+      if (idx === CYCLE.length - 1 || currentLog.level === 'not_done') {
         haptic('light');
-        await supabase.from('habit_logs').delete().eq('id', currentLog.id);
-        showToast(`${habit.name} ongedaan`, 'info');
+        await fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user.id}`, { method: 'DELETE' }).catch(() => {});
+        showToast(`${habit.name} verwijderd`, 'info');
       } else {
         const next = CYCLE[idx + 1];
-        haptic('success');
+        haptic(next === 'not_done' ? 'light' : 'success');
         await supabase.from('habit_logs').update({ level: next, logged_at: new Date().toISOString() }).eq('id', currentLog.id);
-        const lvl = LEVELS.find(l => l.key === next)!;
-        showToast(`${lvl.emoji} ${habit.name} — ${lvl.label}!`, 'success');
+        if (next === 'not_done') {
+          showToast(`${habit.name} — Niet gedaan`, 'info');
+        } else {
+          const lvl = LEVELS.find(l => l.key === next)!;
+          showToast(`${lvl.emoji} ${habit.name} — ${lvl.label}!`, 'success');
+        }
       }
     }
     setLoadingKey(null);
@@ -904,7 +864,7 @@ function HabitsMain() {
 
   async function deleteHabit(habitId: string) {
     setHabits(prev => prev.filter(h => h.id !== habitId));
-    await supabase.from('habits').delete().eq('id', habitId).eq('user_id', user!.id);
+    fetch(`${API_BASE}/habits/${habitId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   async function saveQuickAddHabit() {
@@ -996,11 +956,6 @@ function HabitsMain() {
           <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
             <Text style={[s.headerTitle, { color: colors.black }]}>Habits</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-              {allDoneToday && (
-                <View style={[s.streakBadgeHeader, { backgroundColor: Colors.yellow + '22' }]}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellowText }}>🔥 Alles klaar!</Text>
-                </View>
-              )}
               {habits.length > 0 && (
                 <View style={{ flexDirection: 'row', backgroundColor: colors.gray100, borderRadius: 10, padding: 2 }}>
                   {(['day', 'week'] as const).map(m => (
@@ -1063,15 +1018,6 @@ function HabitsMain() {
           />
         )}
 
-        {isPastDay && (
-          <View style={[s.pastNotice, { backgroundColor: colors.gray100 }]}>
-            <Ionicons name="time-outline" size={13} color={colors.gray400} />
-            <Text style={[s.pastNoticeText, { color: colors.gray400 }]}>
-              Je bekijkt {dayLabel(selectedDay).toLowerCase()}
-            </Text>
-          </View>
-        )}
-
         {habits.length === 0 ? (
           <View style={s.emptyContainer}>
             <View style={[s.emptyIcon, { backgroundColor: colors.gray100 }]}>
@@ -1113,7 +1059,7 @@ function HabitsMain() {
 
             {viewMode === 'day' ? habitData.map(({ habit, log }) => (
               <View key={habit.id} style={{ marginBottom: 10 }}>
-                <SwipeDeleteRow onDelete={() => deleteHabit(habit.id)}>
+                <SwipeDeleteRow onDelete={() => deleteHabit(habit.id)} borderRadius={Radius.lg}>
                   <Pressable
                     onLongPress={() => { haptic('medium'); setDetailHabit(habit); }}
                     onPress={() => setDetailHabit(habit)}
@@ -1156,6 +1102,7 @@ function HabitsMain() {
                   loadingKey={loadingKey}
                   selectedDay={selectedDay}
                   onCycle={cycleHabit}
+                  onDetail={setDetailHabit}
                 />
               </>
             )}
@@ -1181,7 +1128,7 @@ function HabitsMain() {
               </TouchableOpacity>
             </View>
             {([
-              { key: 'mini' as const,  emoji: '⚡', label: 'Mini',  goal: detailHabit?.mini_goal,  color: '#BD7E4E' },
+              { key: 'mini' as const,  emoji: '⚡', label: 'Mini',  goal: detailHabit?.mini_goal,  color: '#22C55E' },
               { key: 'good' as const,  emoji: '⭐', label: 'Plus',  goal: detailHabit?.good_goal,  color: '#A9AFB7' },
               { key: 'elite' as const, emoji: '🏆', label: 'Elite', goal: detailHabit?.elite_goal, color: Colors.yellow },
             ] as const).map(lv => {
@@ -1205,14 +1152,37 @@ function HabitsMain() {
                 </TouchableOpacity>
               );
             })}
-            {detailHabit && getLog(detailHabit.id, selectedDay) && (
-              <TouchableOpacity
-                onPress={() => { if (detailHabit) { const log = getLog(detailHabit.id, selectedDay); if (log) logHabit(detailHabit, log.level); setDetailHabit(null); } }}
-                style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
-              >
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#EF4444' }}>Ongedaan maken</Text>
-              </TouchableOpacity>
-            )}
+            {detailHabit && (() => {
+              const currentLog = getLog(detailHabit.id, selectedDay);
+              const isNotDone = currentLog?.level === 'not_done';
+              return (
+                <TouchableOpacity
+                  onPress={() => {
+                    if (!detailHabit) return;
+                    if (currentLog && !isNotDone) {
+                      supabase.from('habit_logs').update({ level: 'not_done', logged_at: new Date().toISOString() }).eq('id', currentLog.id).then(() => fetchData());
+                      showToast(`${detailHabit.name} — Niet gedaan`, 'info');
+                    } else if (isNotDone && currentLog) {
+                      fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+                      showToast(`${detailHabit.name} verwijderd`, 'info');
+                      fetchData();
+                    } else {
+                      supabase.from('habit_logs').upsert(
+                        { habit_id: detailHabit.id, user_id: user?.id, date: selectedDay, level: 'not_done', logged_at: new Date().toISOString() },
+                        { onConflict: 'habit_id,date' }
+                      ).then(() => fetchData());
+                      showToast(`${detailHabit.name} — Niet gedaan`, 'info');
+                    }
+                    setDetailHabit(null);
+                  }}
+                  style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
+                >
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: isNotDone ? colors.gray400 : '#EF4444' }}>
+                    {isNotDone ? 'Verwijderen' : 'Niet gedaan'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })()}
           </Pressable>
         </Pressable>
       </Modal>
