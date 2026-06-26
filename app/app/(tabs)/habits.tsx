@@ -597,13 +597,17 @@ function HabitCard({
 const LEVEL_COLOR: Record<string, string> = {
   mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444',
 };
+const LEVEL_COLOR_LIGHT: Record<string, string> = {
+  mini: '#22C55E22', good: '#A9AFB722', elite: Colors.yellow + '22', not_done: '#EF444422',
+};
 
 function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | undefined; isToday: boolean }) {
   const { colors } = useTheme();
   const level = log?.level;
+  const cardBg = level ? LEVEL_COLOR_LIGHT[level] : colors.surface;
   const dotColor = level ? LEVEL_COLOR[level] : (isToday ? '#FEE2E2' : colors.gray100);
   return (
-    <View style={[hbar.card, { backgroundColor: colors.surface }]}>
+    <View style={[hbar.card, { backgroundColor: cardBg }]}>
       <Text style={[hbar.name, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
       <View style={[hbar.dot, { backgroundColor: dotColor }]} />
     </View>
