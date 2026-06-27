@@ -45,6 +45,7 @@ function AppStack() {
       <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       <Stack.Screen name="whatsapp-activate" options={{ headerShown: false }} />
       <Stack.Screen name="list/[id]" options={{}} />
+      <Stack.Screen name="admin" options={{ title: 'Admin', headerShown: true }} />
     </Stack>
   );
 }

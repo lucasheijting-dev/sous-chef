@@ -17,6 +17,7 @@ const listsRouter             = require('./src/lists');
 const notesRouter             = require('./src/notes');
 const habitsRouter            = require('./src/habits');
 const referralRouter          = require('./src/referral');
+const adminRouter             = require('./src/admin');
 const cronJobs           = require('./src/cronJobs');
 
 const app = express();
@@ -39,6 +40,7 @@ app.use('/lists', listsRouter);
 app.use('/notes', notesRouter);
 app.use('/habits', habitsRouter);
 app.use('/join', referralRouter);
+app.use('/admin', adminRouter);
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
 
 const PORT = process.env.PORT || 3000;

@@ -60,6 +60,10 @@ async function handleOnboardingMessage({ from, text, userId }) {
     await sendMessage(from,
       `👋 *Welkom Chefje!*\n\nGa terug naar de *De Sous-Chef app* om je toegangscode aan te vragen. Daarna kun je mij hier alles sturen! 🍳`
     );
+    // Notify Lucas
+    sendMessage('31630491259',
+      `🆕 *Nieuwe aanmelding!*\n📱 +${from}\n\nDe Sous-Chef groeit 🍳`
+    ).catch(() => {});
     return true;
   }
 

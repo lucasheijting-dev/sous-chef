@@ -1312,7 +1312,16 @@ module.exports = {
   addListItemWithImage,
   deleteHabit,
   deleteHabitLog,
+  getAllUsersAdmin,
 };
+
+async function getAllUsersAdmin() {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number, message_count, onboarding_completed, calendar_provider, created_at, user_context')
+    .order('created_at', { ascending: false });
+  return data ?? [];
+}
 
 // ── Receipts ────────────────────────────────────────────────────────────────────
 
