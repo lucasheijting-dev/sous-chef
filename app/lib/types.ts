@@ -73,6 +73,32 @@ export type HabitLog = {
   logged_at: string;
 };
 
+export type HabitGoal = {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  period: 'month' | 'year';
+  goal_type: 'frequency' | 'elite_count';
+  target: number;
+  created_at: string;
+  habits?: {
+    id: string;
+    name: string;
+    mini_goal: string | null;
+    good_goal: string | null;
+    elite_goal: string | null;
+  };
+};
+
+export type NotifPrefs = {
+  weekoverzicht?: { enabled: boolean };
+  habit_herinnering?: { enabled: boolean };
+  afspraak_herinnering?: { enabled: boolean };
+  verjaardag_herinnering?: { enabled: boolean };
+  wekelijkse_suggesties?: { enabled: boolean };
+  agenda_sync_waarschuwing?: { enabled: boolean };
+};
+
 export type TimerCategory = {
   id: string;
   user_id: string;

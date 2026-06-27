@@ -122,15 +122,18 @@ async function getBestReminderHour(userId) {
 async function getUsersForDigest() {
   const { data: prefs } = await supabase
     .from('user_prefs')
-    .select('user_id')
+    .select('user_id, notification_prefs')
     .eq('digest_enabled', true);
 
-  if (!prefs?.length) return [];
+  const eligible = (prefs ?? []).filter(p =>
+    (p.notification_prefs?.weekoverzicht?.enabled ?? true) !== false
+  );
+  if (!eligible.length) return [];
 
   const { data: users } = await supabase
     .from('users')
     .select('id, whatsapp_number')
-    .in('id', prefs.map(p => p.user_id));
+    .in('id', eligible.map(p => p.user_id));
 
   return users ?? [];
 }
@@ -424,13 +427,14 @@ async function getHabitReminderUsers(currentHour) {
 
   const { data: prefs } = await supabase
     .from('user_prefs')
-    .select('user_id, habits_reminder_time, habit_reminder_sent_date')
+    .select('user_id, habits_reminder_time, habit_reminder_sent_date, notification_prefs')
     .eq('habits_enabled', true)
     .not('habits_reminder_time', 'is', null);
 
   const matched = (prefs ?? []).filter(p => {
     const hour = parseInt((p.habits_reminder_time ?? '20:00').split(':')[0], 10);
-    return hour === currentHour && p.habit_reminder_sent_date !== today;
+    const notifEnabled = (p.notification_prefs?.habit_herinnering?.enabled ?? true) !== false;
+    return hour === currentHour && p.habit_reminder_sent_date !== today && notifEnabled;
   });
 
   if (!matched.length) return [];
@@ -480,16 +484,19 @@ async function getUsersForSuggestions() {
 
   const { data: prefs } = await supabase
     .from('user_prefs')
-    .select('user_id')
+    .select('user_id, notification_prefs')
     .eq('suggestions_enabled', true)
     .or(`suggestion_last_sent_at.is.null,suggestion_last_sent_at.lt.${cutoff.toISOString()}`);
 
-  if (!prefs?.length) return [];
+  const eligible = (prefs ?? []).filter(p =>
+    (p.notification_prefs?.wekelijkse_suggesties?.enabled ?? true) !== false
+  );
+  if (!eligible.length) return [];
 
   const { data: users } = await supabase
     .from('users')
     .select('id, whatsapp_number')
-    .in('id', prefs.map(p => p.user_id));
+    .in('id', eligible.map(p => p.user_id));
 
   return users ?? [];
 }
@@ -1183,6 +1190,59 @@ async function deleteOldListsForUser(userId, days = 30) {
   return data ?? [];
 }
 
+// ── Notification Prefs ────────────────────────────────────────────────────────
+
+async function getNotifPrefs(userId) {
+  const { data } = await supabase
+    .from('user_prefs')
+    .select('notification_prefs')
+    .eq('user_id', userId)
+    .single();
+  return data?.notification_prefs ?? {};
+}
+
+async function saveNotifPrefs(userId, prefs) {
+  await supabase
+    .from('user_prefs')
+    .upsert({ user_id: userId, notification_prefs: prefs }, { onConflict: 'user_id' });
+}
+
+async function getNotifPrefsForUsers(userIds) {
+  if (!userIds.length) return {};
+  const { data } = await supabase
+    .from('user_prefs')
+    .select('user_id, notification_prefs')
+    .in('user_id', userIds);
+  const map = {};
+  for (const row of data ?? []) map[row.user_id] = row.notification_prefs ?? {};
+  return map;
+}
+
+// ── Habit Goals ───────────────────────────────────────────────────────────────
+
+async function getHabitGoals(userId) {
+  const { data } = await supabase
+    .from('habit_goals')
+    .select('*, habits(id, name, mini_goal, good_goal, elite_goal)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  return data ?? [];
+}
+
+async function createHabitGoal(userId, { habit_id, period, goal_type, target }) {
+  const { data, error } = await supabase
+    .from('habit_goals')
+    .insert({ user_id: userId, habit_id, period, goal_type, target })
+    .select('*, habits(id, name, mini_goal, good_goal, elite_goal)')
+    .single();
+  if (error) throw new Error(`createHabitGoal: ${error.message}`);
+  return data;
+}
+
+async function deleteHabitGoal(id, userId) {
+  await supabase.from('habit_goals').delete().eq('id', id).eq('user_id', userId);
+}
+
 module.exports = {
   getOrCreateUserFull,
   markOnboardingComplete,
@@ -1312,6 +1372,12 @@ module.exports = {
   addListItemWithImage,
   deleteHabit,
   deleteHabitLog,
+  getNotifPrefs,
+  saveNotifPrefs,
+  getNotifPrefsForUsers,
+  getHabitGoals,
+  createHabitGoal,
+  deleteHabitGoal,
   getAllUsersAdmin,
 };
 

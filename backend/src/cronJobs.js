@@ -204,8 +204,13 @@ cron.schedule('0 8 * * *', async () => {
 
   try {
     const events = await db.getEventsDueForReminder(today);
+    const userIds = [...new Set(events.map(e => e.user_id).filter(Boolean))];
+    const notifMap = await db.getNotifPrefsForUsers(userIds);
+
     for (const e of events) {
       if (!e.whatsapp_number) continue;
+      const prefs = notifMap[e.user_id] ?? {};
+      if ((prefs.afspraak_herinnering?.enabled ?? true) === false) continue;
       const dateStr = new Date(e.date).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
       await sendMessage(e.whatsapp_number, `📅 *Herinnering: ${e.title}*\n\nDit staat gepland op ${dateStr}.`);
       await db.markEventReminderSent(e.id);
@@ -222,8 +227,13 @@ cron.schedule('30 8 * * *', async () => {
   console.log('[Birthdays] Checking birthday reminders...');
   try {
     const birthdays = await db.getTodayBirthdayEvents();
+    const userIds = [...new Set(birthdays.map(e => e.user_id).filter(Boolean))];
+    const notifMap = await db.getNotifPrefsForUsers(userIds);
+
     for (const e of birthdays) {
       if (!e.whatsapp_number) continue;
+      const prefs = notifMap[e.user_id] ?? {};
+      if ((prefs.verjaardag_herinnering?.enabled ?? true) === false) continue;
       const personName = e.title.replace(/verjaardag\s*/i, '').trim();
       await sendMessage(e.whatsapp_number, `🎂 *Vandaag is het de verjaardag van ${personName}!* Vergeet niet te feliciteren 🎉`);
       await db.markEventReminderSent(e.id);
@@ -363,6 +373,8 @@ cron.schedule('30 7 * * *', async () => {
         const ok = await caldav.checkConnection(creds.username, creds.password).catch(() => false);
         if (!ok) {
           const prefs = await db.getUserPrefs(user.id) ?? {};
+          const notifPrefs = prefs.notification_prefs ?? {};
+          if ((notifPrefs.agenda_sync_waarschuwing?.enabled ?? true) === false) continue;
           const lastAlert = prefs.caldav_health_alerted_at;
           const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
 

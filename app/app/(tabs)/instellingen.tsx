@@ -268,6 +268,9 @@ export default function InstellingenTab() {
     '#2ECC71', '#E84393', '#95A5A6', '#1ABC9C', '#E67E22', '#8E44AD',
   ];
 
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, { enabled: boolean }>>({});
+  const [notifPrefsLoaded, setNotifPrefsLoaded] = useState(false);
+
   const [createdAt, setCreatedAt] = useState<string | null>(null);
   const [caldavConnected, setCaldavConnected] = useState(false);
   const [caldavCreds, setCaldavCreds] = useState<{ username: string; password: string } | null>(null);
@@ -341,6 +344,12 @@ export default function InstellingenTab() {
 
   useFocusEffect(useCallback(() => {
     if (!user || user.id === 'dev') return;
+    // Load notification prefs
+    Promise.resolve(
+      supabase.from('user_prefs').select('notification_prefs').eq('user_id', user.id).single()
+    ).then(({ data }) => { setNotifPrefs(data?.notification_prefs ?? {}); setNotifPrefsLoaded(true); })
+      .catch(() => setNotifPrefsLoaded(true));
+
     supabase
       .from('users')
       .select('caldav_username, calendar_provider')
@@ -569,6 +578,15 @@ export default function InstellingenTab() {
   }
 
   const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+
+  async function toggleNotifPref(key: string, enabled: boolean) {
+    if (!user) return;
+    const next = { ...notifPrefs, [key]: { enabled } };
+    setNotifPrefs(next);
+    await Promise.resolve(
+      supabase.from('user_prefs').upsert({ user_id: user.id, notification_prefs: next }, { onConflict: 'user_id' })
+    ).catch(() => {});
+  }
 
   async function openCalendarProfile() {
     if (!user || user.id === 'dev') return;
@@ -931,6 +949,37 @@ export default function InstellingenTab() {
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => setAccountModalVisible(true)}
           />
+        </View>
+
+        {/* ── Notificaties ────────────────────────────────────────────── */}
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Notificaties</Text>
+        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          {([
+            { key: 'weekoverzicht',            icon: 'newspaper-outline'         as const, label: 'Weekoverzicht',          subtitle: 'Maandag 09:00 via WhatsApp'   },
+            { key: 'habit_herinnering',        icon: 'trophy-outline'            as const, label: 'Habit herinnering',      subtitle: 'Dagelijks op ingestelde tijd' },
+            { key: 'afspraak_herinnering',     icon: 'calendar-outline'          as const, label: 'Afspraak herinnering',   subtitle: 'Dag van tevoren om 08:00'     },
+            { key: 'verjaardag_herinnering',   icon: 'gift-outline'              as const, label: 'Verjaardagsherinnering', subtitle: 'Op de dag zelf om 08:30'      },
+            { key: 'wekelijkse_suggesties',    icon: 'bulb-outline'              as const, label: 'Wekelijkse suggesties',  subtitle: 'Donderdag 10:00 via WhatsApp' },
+            { key: 'agenda_sync_waarschuwing', icon: 'warning-outline'           as const, label: 'Agenda-sync waarschuwing', subtitle: 'Bij verbindingsproblemen'   },
+          ] as const).map(({ key, icon, label, subtitle }, i) => (
+            <View key={key}>
+              {i > 0 && <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />}
+              <SettingsRow
+                icon={icon}
+                label={label}
+                subtitle={subtitle}
+                right={
+                  <Switch
+                    value={notifPrefs[key]?.enabled ?? true}
+                    onValueChange={v => toggleNotifPref(key, v)}
+                    trackColor={{ false: colors.gray200, true: Colors.yellow }}
+                    thumbColor={Colors.white}
+                    disabled={!notifPrefsLoaded}
+                  />
+                }
+              />
+            </View>
+          ))}
         </View>
 
         {/* ── Info ───────────────────────────────────────────────────── */}
