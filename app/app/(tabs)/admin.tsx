@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +9,8 @@ import { useTheme } from '@/context/ThemeContext';
 import { Colors, Radius } from '@/constants/Design';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+
+type CostItem = { label: string; eur: number; variable?: boolean };
 
 type AdminUser = {
   id: string;
@@ -27,7 +28,7 @@ type Stats = {
   active_users: number;
   total_messages: number;
   est_monthly_eur: number;
-  fixed_costs: { label: string; eur: number }[];
+  cost_items: CostItem[];
   users: AdminUser[];
 };
 
@@ -82,7 +83,7 @@ export default function AdminScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[s.flex, { backgroundColor: bg }]} edges={['bottom']}>
+      <SafeAreaView style={[s.flex, { backgroundColor: bg }]} edges={['top', 'bottom']}>
         <ActivityIndicator style={{ marginTop: 60 }} color={Colors.yellow} />
       </SafeAreaView>
     );
@@ -90,53 +91,50 @@ export default function AdminScreen() {
 
   if (error || !stats) {
     return (
-      <SafeAreaView style={[s.flex, { backgroundColor: bg }]} edges={['bottom']}>
+      <SafeAreaView style={[s.flex, { backgroundColor: bg }]} edges={['top', 'bottom']}>
         <Text style={[s.errorText, { color: colors.gray400 }]}>{error || 'Geen data'}</Text>
       </SafeAreaView>
     );
   }
 
+  const totalCost = stats.cost_items.reduce((a, c) => a + c.eur, 0);
+
   return (
-    <SafeAreaView style={[s.flex, { backgroundColor: bg }]} edges={['bottom']}>
+    <SafeAreaView style={[s.flex, { backgroundColor: bg }]} edges={['top', 'bottom']}>
       <ScrollView
         contentContainerStyle={s.scroll}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.yellow} />}
       >
+        <Text style={[s.pageTitle, { color: colors.black }]}>Admin 🛡️</Text>
+
         {/* ── Stat cards ── */}
         <View style={s.row}>
           <StatCard icon="people-outline" label="Aangemeld" value={String(stats.total_users)} bg={cardBg} labelColor={labelColor} colors={colors} />
-          <StatCard icon="chatbubbles-outline" label="Actief" value={String(stats.active_users)} bg={cardBg} labelColor={labelColor} colors={colors} />
+          <StatCard icon="flash-outline" label="Actief" value={String(stats.active_users)} bg={cardBg} labelColor={labelColor} colors={colors} />
         </View>
         <View style={s.row}>
-          <StatCard icon="send-outline" label="Berichten" value={String(stats.total_messages)} bg={cardBg} labelColor={labelColor} colors={colors} />
+          <StatCard icon="chatbubbles-outline" label="Berichten" value={String(stats.total_messages)} bg={cardBg} labelColor={labelColor} colors={colors} />
           <StatCard icon="wallet-outline" label="Est. /mnd" value={`€${stats.est_monthly_eur}`} bg={cardBg} labelColor={labelColor} colors={colors} accent={Colors.yellow} />
         </View>
 
         {/* ── Kosten breakdown ── */}
         <Text style={[s.sectionTitle, { color: labelColor }]}>KOSTEN BREAKDOWN</Text>
         <View style={[s.card, { backgroundColor: cardBg }]}>
-          {stats.fixed_costs.map((c, i) => (
+          {stats.cost_items.map((c, i) => (
             <View key={c.label}>
               {i > 0 && <View style={[s.divider, { backgroundColor: colors.gray100 }]} />}
               <View style={s.costRow}>
-                <Text style={[s.costLabel, { color: colors.black }]}>{c.label}</Text>
-                <Text style={[s.costVal, { color: c.eur > 0 ? colors.black : labelColor }]}>
+                <Text style={[s.costLabel, { color: colors.black }]} numberOfLines={2}>{c.label}</Text>
+                <Text style={[s.costVal, { color: c.variable ? Colors.yellow : c.eur > 0 ? colors.black : labelColor }]}>
                   {c.eur > 0 ? `€${c.eur.toFixed(2)}` : 'Gratis'}
                 </Text>
               </View>
             </View>
           ))}
-          <View style={[s.divider, { backgroundColor: colors.gray100 }]} />
-          <View style={s.costRow}>
-            <Text style={[s.costLabel, { color: colors.black }]}>AI + WhatsApp (variabel)</Text>
-            <Text style={[s.costVal, { color: colors.black }]}>
-              €{(stats.est_monthly_eur - stats.fixed_costs.reduce((a, c) => a + c.eur, 0)).toFixed(2)}
-            </Text>
-          </View>
           <View style={[s.divider, { backgroundColor: Colors.yellow + '40' }]} />
           <View style={s.costRow}>
-            <Text style={[s.costLabel, { color: colors.black, fontFamily: 'Inter_700Bold' }]}>Totaal schatting</Text>
-            <Text style={[s.costVal, { color: Colors.yellow, fontFamily: 'Inter_700Bold', fontSize: 16 }]}>€{stats.est_monthly_eur}</Text>
+            <Text style={[s.costLabel, { color: colors.black, fontFamily: 'Inter_700Bold' }]}>Totaal schatting /mnd</Text>
+            <Text style={[s.costVal, { color: Colors.yellow, fontFamily: 'Inter_700Bold', fontSize: 16 }]}>€{totalCost.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -175,7 +173,7 @@ export default function AdminScreen() {
           ))}
         </View>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -197,6 +195,7 @@ function StatCard({ icon, label, value, bg, labelColor, colors, accent }: {
 const s = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { padding: 16, gap: 8 },
+  pageTitle: { fontFamily: 'Inter_700Bold', fontSize: 28, marginBottom: 8, marginTop: 4 },
   row: { flexDirection: 'row', gap: 8, marginBottom: 0 },
   sectionTitle: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 0.8,
@@ -206,7 +205,6 @@ const s = StyleSheet.create({
   divider: { height: 1 },
   errorText: { textAlign: 'center', marginTop: 60, fontFamily: 'Inter_400Regular' },
 
-  // Stat cards
   statCard: {
     flex: 1, borderRadius: Radius.lg, padding: 16,
     alignItems: 'flex-start', justifyContent: 'flex-end', minHeight: 90,
@@ -214,12 +212,10 @@ const s = StyleSheet.create({
   statValue: { fontFamily: 'Inter_700Bold', fontSize: 28, lineHeight: 32, marginBottom: 2 },
   statLabel: { fontFamily: 'Inter_400Regular', fontSize: 12 },
 
-  // Cost rows
-  costRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13 },
-  costLabel: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 14 },
-  costVal: { fontFamily: 'Inter_600SemiBold', fontSize: 14 },
+  costRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 },
+  costLabel: { flex: 1, fontFamily: 'Inter_400Regular', fontSize: 13, lineHeight: 18 },
+  costVal: { fontFamily: 'Inter_600SemiBold', fontSize: 14, flexShrink: 0 },
 
-  // User rows
   userRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
   userAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   userAvatarText: { fontSize: 18 },

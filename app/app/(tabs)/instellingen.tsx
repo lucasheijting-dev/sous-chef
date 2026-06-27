@@ -1777,12 +1777,6 @@ export default function InstellingenTab() {
               <SettingsRow icon="refresh-outline" label="Bekijk onboarding opnieuw" onPress={confirmResetOnboarding} />
               <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
               <SettingsRow icon="download-outline" label="Exporteer mijn data" onPress={handleExportData} />
-              {user?.whatsapp_number === '31630491259' && (
-                <>
-                  <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
-                  <SettingsRow icon="bar-chart-outline" label="Admin dashboard" onPress={() => router.push('/admin' as any)} />
-                </>
-              )}
             </View>
             <View style={[styles.card, styles.dangerCard, { backgroundColor: '#FFF5F5' }]}>
               <SettingsRow icon="log-out-outline" label="Koppeling verwijderen" danger onPress={confirmLogout} />

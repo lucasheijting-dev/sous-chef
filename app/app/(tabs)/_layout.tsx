@@ -55,10 +55,12 @@ function GlassBar() {
 }
 
 export default function TabLayout() {
-  const { prefs } = useUser();
+  const { prefs, user } = useUser();
   const { settings } = useModuleSettings();
   const insets = useSafeAreaInsets();
   const tabBarBottom = (Platform.OS === 'web' ? 16 : 16) + insets.bottom;
+
+  const isLucas = user?.whatsapp_number === '31630491259';
 
   // Grow the pill when more tabs are visible
   const visibleCount = ALL_TABS.filter(({ name }) => {
@@ -66,7 +68,7 @@ export default function TabLayout() {
     if (name === 'timer') return settings?.timer_enabled;
     if (name === 'index') return settings?.lists_enabled !== false;
     return true;
-  }).length;
+  }).length + (isLucas ? 1 : 0);
   const defaultW = SCREEN_W - DEFAULT_MARGIN * 2;
   const tabW = Math.min(SCREEN_W - 24, Math.max(defaultW, visibleCount * MIN_PER_TAB));
   const tabMargin = (SCREEN_W - tabW) / 2;
@@ -110,6 +112,22 @@ export default function TabLayout() {
       })}
       <Tabs.Screen name="notities"   options={{ href: null }} />
       <Tabs.Screen name="bonnetjes"  options={{ href: null }} />
+      <Tabs.Screen
+        name="admin"
+        options={{
+          title: 'Admin',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          href: isLucas ? ('/admin' as any) : null,
+          tabBarItemStyle: styles.tabBarItem,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon
+              name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'}
+              focused={focused}
+              label="Admin"
+            />
+          ),
+        }}
+      />
 
     </Tabs>
   );
