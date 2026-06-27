@@ -5,19 +5,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRef, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@/context/UserContext';
+import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import { Colors } from '@/constants/Design';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const SCREEN_W = Dimensions.get('window').width;
-const TAB_SIDE_MARGIN = 56;
-const TAB_W = SCREEN_W - TAB_SIDE_MARGIN * 2;
+const MIN_PER_TAB = 62; // minimum px per tab icon before bar starts growing
+const DEFAULT_MARGIN = 56;
 
 const ALL_TABS = [
   { name: 'index',        label: 'Lijsten', icon: 'layers',        iconOff: 'layers-outline'        },
   { name: 'agenda',       label: 'Agenda',  icon: 'calendar',      iconOff: 'calendar-outline'      },
   { name: 'habits',       label: 'Habits',  icon: 'trophy',        iconOff: 'trophy-outline'        },
+  { name: 'timer',        label: 'Timer',   icon: 'timer',         iconOff: 'timer-outline'         },
   { name: 'instellingen', label: 'Instellingen', icon: 'settings-sharp', iconOff: 'settings-outline' },
 ] as const;
 
@@ -53,12 +56,26 @@ function GlassBar() {
 
 export default function TabLayout() {
   const { prefs } = useUser();
+  const { settings } = useModuleSettings();
+  const insets = useSafeAreaInsets();
+  const tabBarBottom = (Platform.OS === 'web' ? 16 : 16) + insets.bottom;
+
+  // Grow the pill when more tabs are visible
+  const visibleCount = ALL_TABS.filter(({ name }) => {
+    if (name === 'habits') return prefs === null || prefs.habits_enabled;
+    if (name === 'timer') return settings?.timer_enabled;
+    if (name === 'index') return settings?.lists_enabled !== false;
+    return true;
+  }).length;
+  const defaultW = SCREEN_W - DEFAULT_MARGIN * 2;
+  const tabW = Math.min(SCREEN_W - 24, Math.max(defaultW, visibleCount * MIN_PER_TAB));
+  const tabMargin = (SCREEN_W - tabW) / 2;
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, { bottom: tabBarBottom, width: tabW, marginHorizontal: tabMargin }],
         tabBarShowLabel: false, // labels rendered inside TabIcon
         tabBarItemStyle: styles.tabBarItem,
         tabBarIconStyle: styles.tabBarIcon,
@@ -66,8 +83,12 @@ export default function TabLayout() {
       }}
     >
       {ALL_TABS.map(({ name, label, icon, iconOff }) => {
-        // Show habits tab by default until prefs load (null = still loading → show tab)
-        const href = name === 'habits' ? (prefs === null || prefs.habits_enabled ? '/habits' : null) : undefined;
+        // Habits: hidden when explicitly disabled; Timer: hidden when not enabled
+        const habitsHref = name === 'habits' ? (prefs === null || prefs.habits_enabled ? ('/habits' as const) : null) : undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const timerHref  = name === 'timer'  ? (settings?.timer_enabled ? ('/timer' as any) : null) : undefined;
+        const listsHref  = name === 'index'  ? (settings?.lists_enabled !== false ? ('/' as const) : null) : undefined;
+        const href = habitsHref !== undefined ? habitsHref : timerHref !== undefined ? timerHref : listsHref !== undefined ? listsHref : undefined;
         return (
           <Tabs.Screen
             key={name}
@@ -89,6 +110,7 @@ export default function TabLayout() {
       })}
       <Tabs.Screen name="notities"   options={{ href: null }} />
       <Tabs.Screen name="bonnetjes"  options={{ href: null }} />
+
     </Tabs>
   );
 }
@@ -96,11 +118,8 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
-    bottom: Platform.OS === 'web' ? 16 : 28,
     left: 0,
     right: 0,
-    marginHorizontal: TAB_SIDE_MARGIN,
-    width: TAB_W,
     height: 66,
     borderRadius: 33,
     backgroundColor: 'rgba(10,10,10,0.70)',

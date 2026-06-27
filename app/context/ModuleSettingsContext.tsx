@@ -6,8 +6,12 @@ export type ModuleMode = 'lite' | 'full';
 export type ModuleSettings = {
   calendar_mode: ModuleMode;
   habits_mode: ModuleMode;
+  lists_enabled: boolean;
   notes_enabled: boolean;
   receipts_enabled: boolean;
+  timer_enabled: boolean;
+  timer_break_minutes: number;
+  timer_default_minutes: number;
   onboarding_done: boolean;
   user_name: string;
   habits_onboarding_done: boolean;
@@ -18,8 +22,12 @@ export type ModuleSettings = {
 const DEFAULTS: ModuleSettings = {
   calendar_mode: 'full',
   habits_mode: 'full',
+  lists_enabled: true,
   notes_enabled: true,
   receipts_enabled: false,
+  timer_enabled: false,
+  timer_break_minutes: 5,
+  timer_default_minutes: 25,
   onboarding_done: false,
   user_name: '',
   habits_onboarding_done: false,

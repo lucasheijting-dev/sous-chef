@@ -728,7 +728,7 @@ export default function HabitsTab() {
 
 function HabitsMain() {
   const { user } = useUser();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { settings } = useModuleSettings();
   const insets = useSafeAreaInsets();
   const stripRef = useRef<FlatList>(null);
@@ -751,7 +751,7 @@ function HabitsMain() {
   const [quickAddGood, setQuickAddGood] = useState('');
   const [quickAddElite, setQuickAddElite] = useState('');
   const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'stats'>('day');
   const [detailHabit, setDetailHabit] = useState<Habit | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -975,7 +975,7 @@ function HabitsMain() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
               {habits.length > 0 && (
                 <View style={{ flexDirection: 'row', backgroundColor: colors.gray100, borderRadius: 10, padding: 2 }}>
-                  {(['day', 'week'] as const).map(m => (
+                  {(['day', 'week', 'stats'] as const).map(m => (
                     <TouchableOpacity
                       key={m}
                       onPress={() => { haptic('light'); setViewMode(m); }}
@@ -983,7 +983,7 @@ function HabitsMain() {
                       activeOpacity={0.75}
                     >
                       <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: viewMode === m ? colors.black : colors.gray400 }}>
-                        {m === 'day' ? 'Dag' : 'Week'}
+                        {m === 'day' ? 'Dag' : m === 'week' ? 'Week' : 'Stats'}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -994,7 +994,7 @@ function HabitsMain() {
         </View>
 
         {/* ── Day strip (sc-weekstrip) ── */}
-        {habits.length > 0 && (
+        {habits.length > 0 && viewMode !== 'stats' && (
           <FlatList
             ref={stripRef}
             data={strip}
@@ -1123,6 +1123,10 @@ function HabitsMain() {
             )}
 
           </Animated.View>
+        )}
+
+        {viewMode === 'stats' && (
+          <StatsView habits={habits} logs={logs} colors={colors} isDark={isDark} />
         )}
       </ScrollView>
 
@@ -1303,6 +1307,183 @@ function HabitsMain() {
     </View>
   );
 }
+
+// ── Stats View ────────────────────────────────────────────────────────────────
+
+const LEVEL_ORDER = ['elite', 'good', 'mini', 'skip', 'not_done'] as const;
+const LEVEL_META: Record<string, { color: string; label: string }> = {
+  elite:    { color: Colors.yellow,  label: 'Elite'    },
+  good:     { color: '#A9AFB7',      label: 'Good'     },
+  mini:     { color: '#22C55E',      label: 'Mini'     },
+  skip:     { color: '#3B82F6',      label: 'Skip'     },
+  not_done: { color: '#EF4444',      label: 'Niet'     },
+};
+
+function computeHabitStreak(habitId: string, logs: HabitLog[]): number {
+  let ms = utcMsFromStr(today);
+  let streak = 0;
+  for (let i = 0; i < 365; i++) {
+    const ds = utcDateStr(ms);
+    const log = logs.find(l => l.habit_id === habitId && l.date === ds);
+    if (!log || log.level === 'not_done') break;
+    streak++;
+    ms -= 86400000;
+  }
+  return streak;
+}
+
+function computeBestStreak(habitId: string, logs: HabitLog[]): number {
+  const habitLogs = logs
+    .filter(l => l.habit_id === habitId && l.level !== 'not_done')
+    .map(l => l.date)
+    .sort();
+  let best = 0, cur = 0;
+  let prev: string | null = null;
+  for (const d of habitLogs) {
+    if (prev && utcMsFromStr(d) - utcMsFromStr(prev) === 86400000) {
+      cur++;
+    } else {
+      cur = 1;
+    }
+    best = Math.max(best, cur);
+    prev = d;
+  }
+  return best;
+}
+
+function bestDayOfWeek(habitId: string, logs: HabitLog[]): string {
+  const counts = [0, 0, 0, 0, 0, 0, 0]; // Ma=0..Zo=6
+  logs.filter(l => l.habit_id === habitId && (l.level === 'good' || l.level === 'elite'))
+    .forEach(l => {
+      const dow = (new Date(utcMsFromStr(l.date)).getUTCDay() + 6) % 7;
+      counts[dow]++;
+    });
+  const max = Math.max(...counts);
+  if (max === 0) return '—';
+  return WEEK_DAYS_SHORT[counts.indexOf(max)];
+}
+
+function StatsView({ habits, logs, colors, isDark }: {
+  habits: Habit[]; logs: HabitLog[]; colors: any; isDark: boolean;
+}) {
+  const totalDays = 90;
+
+  const habitStats = habits.map(h => {
+    const hLogs = logs.filter(l => l.habit_id === h.id);
+    const counts: Record<string, number> = { mini: 0, good: 0, elite: 0, skip: 0, not_done: 0 };
+    hLogs.forEach(l => { if (l.level in counts) counts[l.level]++; });
+    const logged = counts.mini + counts.good + counts.elite;
+    const eliteRate = logged > 0 ? Math.round((counts.elite / logged) * 100) : 0;
+    const streak = computeHabitStreak(h.id, logs);
+    const bestStreak = computeBestStreak(h.id, logs);
+    const best = bestDayOfWeek(h.id, logs);
+    const consistency = Math.round((logged / totalDays) * 100);
+    return { habit: h, counts, logged, eliteRate, streak, bestStreak, best, consistency };
+  });
+
+  const totalLogged = habitStats.reduce((s, h) => s + h.logged, 0);
+  const mostConsistent = habitStats.length > 0
+    ? habitStats.reduce((a, b) => a.consistency > b.consistency ? a : b)
+    : null;
+
+  const LIGHT = isDark ? LEVEL_COLOR_LIGHT_DARK : LEVEL_COLOR_LIGHT_LIGHT;
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 160, gap: 12 }} showsVerticalScrollIndicator={false}>
+      {/* ── Overall summary ── */}
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={[st.sumCard, { backgroundColor: colors.surface, flex: 1 }]}>
+          <Text style={[st.sumNum, { color: Colors.yellow }]}>{totalLogged}</Text>
+          <Text style={[st.sumLbl, { color: colors.gray400 }]}>Logs (90d)</Text>
+        </View>
+        <View style={[st.sumCard, { backgroundColor: colors.surface, flex: 1 }]}>
+          <Text style={[st.sumNum, { color: '#22C55E' }]}>{mostConsistent?.consistency ?? 0}%</Text>
+          <Text style={[st.sumLbl, { color: colors.gray400 }]} numberOfLines={1}>
+            {mostConsistent ? mostConsistent.habit.name : '—'}
+          </Text>
+        </View>
+      </View>
+
+      {/* ── Per habit ── */}
+      {habitStats.map(({ habit, counts, logged, eliteRate, streak, bestStreak, best, consistency }) => {
+        const total = counts.mini + counts.good + counts.elite + counts.not_done + counts.skip;
+        return (
+          <View key={habit.id} style={[st.card, { backgroundColor: colors.surface }]}>
+            {/* Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text style={[st.habitName, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
+              <View style={[st.badge, { backgroundColor: streak > 0 ? Colors.yellow + '25' : colors.gray100 }]}>
+                <Text style={[st.badgeText, { color: streak > 0 ? Colors.yellowDark : colors.gray400 }]}>
+                  🔥 {streak}d
+                </Text>
+              </View>
+            </View>
+
+            {/* Level distribution bar */}
+            {total > 0 ? (
+              <View style={{ marginBottom: 10 }}>
+                <View style={st.barTrack}>
+                  {LEVEL_ORDER.filter(k => counts[k] > 0).map(k => (
+                    <View
+                      key={k}
+                      style={[st.barSegment, {
+                        backgroundColor: LEVEL_META[k].color,
+                        flex: counts[k],
+                      }]}
+                    />
+                  ))}
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {LEVEL_ORDER.filter(k => counts[k] > 0).map(k => (
+                    <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: LEVEL_META[k].color }} />
+                      <Text style={[st.legendText, { color: colors.gray400 }]}>{LEVEL_META[k].label} {counts[k]}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : (
+              <Text style={[st.legendText, { color: colors.gray400, marginBottom: 10 }]}>Nog geen logs</Text>
+            )}
+
+            {/* Metrics row */}
+            <View style={[st.metaRow, { borderTopColor: colors.gray100 }]}>
+              <StatItem label="Consistency" value={`${consistency}%`} colors={colors} />
+              <StatItem label="Elite rate" value={`${eliteRate}%`} colors={colors} />
+              <StatItem label="Best streak" value={`${bestStreak}d`} colors={colors} />
+              <StatItem label="Beste dag" value={best} colors={colors} />
+            </View>
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function StatItem({ label, value, colors }: { label: string; value: string; colors: any }) {
+  return (
+    <View style={{ alignItems: 'center', flex: 1 }}>
+      <Text style={[st.metaVal, { color: colors.black }]}>{value}</Text>
+      <Text style={[st.metaLbl, { color: colors.gray400 }]}>{label}</Text>
+    </View>
+  );
+}
+
+const st = StyleSheet.create({
+  sumCard: { borderRadius: Radius.lg, padding: 16, ...Shadow.card },
+  sumNum: { fontFamily: 'Inter_700Bold', fontSize: 28, lineHeight: 32, marginBottom: 2 },
+  sumLbl: { fontFamily: 'Inter_400Regular', fontSize: 12 },
+  card: { borderRadius: Radius.lg, padding: 16, ...Shadow.card },
+  habitName: { fontFamily: 'Inter_700Bold', fontSize: 16, flex: 1, marginRight: 8 },
+  badge: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  badgeText: { fontFamily: 'Inter_700Bold', fontSize: 12 },
+  barTrack: { height: 10, borderRadius: 5, overflow: 'hidden', flexDirection: 'row' },
+  barSegment: { height: '100%' },
+  legendText: { fontFamily: 'Inter_300Light', fontSize: 11 },
+  metaRow: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 12, marginTop: 4 },
+  metaVal: { fontFamily: 'Inter_700Bold', fontSize: 14 },
+  metaLbl: { fontFamily: 'Inter_300Light', fontSize: 10, marginTop: 2 },
+});
 
 // ── Goal Chip ──────────────────────────────────────────────────────────────────
 

@@ -953,6 +953,14 @@ export default function InstellingenTab() {
           />
           <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
           <SettingsRow
+            icon="mail-outline"
+            label="Automatische berichten"
+            subtitle="Wanneer stuurt Sous-Chef berichten?"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => router.push('/automessages' as any)}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          <SettingsRow
             icon="chatbubble-ellipses-outline"
             label="Feedback geven"
             subtitle="Stuur een suggestie of melding"

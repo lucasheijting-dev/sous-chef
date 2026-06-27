@@ -44,6 +44,25 @@ export const DarkColors = {
   hairline: 'rgba(255,255,255,0.08)' as string,
 };
 
+export const PinkColors = {
+  black:       '#3D1A27',
+  white:       '#FFF0F5',
+  yellow:      '#D4547A',
+  yellowDark:  '#B8395F',
+  yellowText:  '#8B2252',
+  yellowLight: '#FADDEB',
+  offWhite:    '#FFF5F8',
+  gray100:     '#F9E0EA',
+  gray200:     '#F2C8D8',
+  gray400:     '#B57A8F',
+  gray600:     '#8A4F66',
+  gray800:     '#5C2C42',
+  surface:     '#FFFFFF',
+  surface2:    '#F9E0EA',
+  surface3:    '#FDF0F5',
+  hairline:    'rgba(180,80,120,0.10)' as string,
+};
+
 export type ThemeColors = typeof LightColors;
 
 export const Colors = LightColors;
