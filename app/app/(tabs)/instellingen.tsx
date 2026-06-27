@@ -918,6 +918,20 @@ export default function InstellingenTab() {
         <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>Info</Text>
         <View style={[styles.card, { backgroundColor: colors.white }]}>
           <SettingsRow
+            icon="person-add-outline"
+            label="Chefje uitnodigen"
+            subtitle="Nodig iemand uit via WhatsApp"
+            right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const message = `Hey! Ik gebruik Sous-Chef als persoonlijke assistent op mijn telefoon 🍳\n\nSuper handig voor boodschappenlijsten, agenda, habits en focus-timer — alles via WhatsApp.\n\nProbeer het zelf: https://apps.apple.com/app/sous-chef/id6745970403`;
+              Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
+                Alert.alert('WhatsApp niet gevonden', 'Zorg dat WhatsApp is geïnstalleerd.');
+              });
+            }}
+          />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          <SettingsRow
             icon="chatbubble-ellipses-outline"
             label="Feedback geven"
             subtitle="Stuur een suggestie of melding"

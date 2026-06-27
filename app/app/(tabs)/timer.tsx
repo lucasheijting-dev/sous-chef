@@ -316,8 +316,9 @@ export default function TimerTab() {
   const [isOvertime, setIsOvertime] = useState(false);
   const isOvertimeRef = useRef(false);
 
-  // ── Notification ─────────────────────────────────────────────────────────────
+  // ── Notifications ────────────────────────────────────────────────────────────
   const scheduledNotifIdRef = useRef<string | null>(null);
+  const activeSessionNotifIdRef = useRef<string | null>(null);
 
   // ── Reflection state ─────────────────────────────────────────────────────────
   const [moodScore, setMoodScore] = useState<MoodScore | null>(null);
@@ -572,6 +573,26 @@ export default function TimerTab() {
     }
   }
 
+  async function postActiveSessionNotif(title: string, body: string) {
+    if (activeSessionNotifIdRef.current) {
+      Notifications.dismissNotificationAsync(activeSessionNotifIdRef.current).catch(() => {});
+    }
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: { title, body, sound: false },
+        trigger: null,
+      });
+      activeSessionNotifIdRef.current = id;
+    } catch {}
+  }
+
+  function cancelActiveSessionNotif() {
+    if (activeSessionNotifIdRef.current) {
+      Notifications.dismissNotificationAsync(activeSessionNotifIdRef.current).catch(() => {});
+      activeSessionNotifIdRef.current = null;
+    }
+  }
+
   async function handleStart() {
     if (!user || user.id === 'dev') { showToast('Geen gebruiker gevonden', 'error'); return; }
     haptic('medium');
@@ -587,10 +608,15 @@ export default function TimerTab() {
     setPhase('running');
     startInterval();
 
-    // Schedule end notification
+    // Schedule end notification + post live session notification
     try {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status === 'granted') {
+        const catName = selectedCategory?.name ?? 'Focus';
+        await postActiveSessionNotif(
+          `⏱️ ${catName}`,
+          `Sessie loopt — ${plannedMins} min gepland`,
+        );
         const notifId = await Notifications.scheduleNotificationAsync({
           content: { title: 'Sous Chef ⏱️', body: "Hey Chef, time's up!", sound: true },
           trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: plannedSecs, repeats: false },
@@ -616,6 +642,7 @@ export default function TimerTab() {
   function handleFinishOvertime() {
     stopInterval();
     cancelScheduledNotif();
+    cancelActiveSessionNotif();
     const elapsed = (Date.now() - startedAtMsRef.current - totalPausedMsRef.current) / 1000;
     setActualDurationSecs(Math.ceil(elapsed));
     setMoodScore(null);
@@ -643,6 +670,7 @@ export default function TimerTab() {
   function handleTakeBreak() {
     stopInterval();
     cancelScheduledNotif();
+    cancelActiveSessionNotif();
     setSessionOptionsVisible(false);
     pausedAtMsRef.current = Date.now();
     breakStartedAtRef.current = Date.now();
@@ -664,6 +692,7 @@ export default function TimerTab() {
 
     setPhase('paused');
     startBreakInterval();
+    postActiveSessionNotif('☕ Pauze', `${settings.timer_break_minutes} min — tik om terug te gaan`);
   }
 
   async function handleResumeFromBreak() {
@@ -697,6 +726,7 @@ export default function TimerTab() {
   function handleAbandon() {
     stopInterval();
     cancelScheduledNotif();
+    cancelActiveSessionNotif();
     setSessionOptionsVisible(false);
     setAbandonReason(null);
     setAbandonNote('');
@@ -742,11 +772,13 @@ export default function TimerTab() {
     setPauseMoodScore(null);
     setPhase('paused');
     startBreakInterval();
+    postActiveSessionNotif('☕ Pauze', `${settings.timer_break_minutes} min — tik om terug te gaan`);
   }
 
   function resetToSetup() {
     stopInterval();
     cancelScheduledNotif();
+    cancelActiveSessionNotif();
     if (breakIntervalRef.current) { clearInterval(breakIntervalRef.current); breakIntervalRef.current = null; }
     isOvertimeRef.current = false;
     setIsOvertime(false);
