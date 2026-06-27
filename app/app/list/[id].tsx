@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import {
   View,
   Text,
@@ -97,6 +98,7 @@ function SwipeableItem({
   tapToEdit,
   onAddPhoto,
   onViewImage,
+  drag,
 }: {
   item: ListItem;
   onToggle: () => void;
@@ -108,6 +110,7 @@ function SwipeableItem({
   tapToEdit?: boolean;
   onAddPhoto?: () => void;
   onViewImage?: (url: string) => void;
+  drag?: () => void;
 }) {
   const { colors } = useTheme();
   const [editText, setEditText] = useState(item.text);
@@ -170,7 +173,15 @@ function SwipeableItem({
             </TouchableOpacity>
           )}
           {!isEditing && (
-            <Ionicons name="reorder-three" size={18} color={item.checked ? colors.gray200 : colors.gray400} />
+            <TouchableOpacity
+              onLongPress={drag}
+              delayLongPress={150}
+              disabled={!drag || item.checked}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.6}
+            >
+              <Ionicons name="reorder-three" size={18} color={drag && !item.checked ? colors.gray400 : colors.gray200} />
+            </TouchableOpacity>
           )}
         </Pressable>
       </SwipeDeleteRow>
@@ -339,6 +350,7 @@ export default function ListDetailScreen() {
       .from('list_items')
       .select('*, list_item_sources(recipe_id, recipes(title))')
       .eq('list_id', id)
+      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
     if (data) {
       if (data.length > prevItemCount.current && prevItemCount.current > 0) {
@@ -424,6 +436,21 @@ export default function ListDetailScreen() {
       return [...without, pendingDelete.item].sort((a, b) => a.created_at.localeCompare(b.created_at));
     });
     setPendingDelete(null);
+  }
+
+  function handleDragEnd({ data }: { data: any[] }) {
+    const realItems = data.filter((d: any) => !d.type && d.id !== '__done_header__');
+    const uncheckedItems = realItems.filter((d: any) => !d.checked);
+    const checkedItems = realItems.filter((d: any) => d.checked);
+    setItems([...uncheckedItems, ...checkedItems]);
+    const updates = uncheckedItems.map((item: any, idx: number) => ({ id: item.id, sort_order: idx }));
+    if (updates.length > 0 && user?.id) {
+      fetch(`${API_BASE}/lists/items/reorder?user_id=${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      }).catch(() => {});
+    }
   }
 
   async function addPhotoToItem(itemId: string) {
@@ -774,11 +801,13 @@ export default function ListDetailScreen() {
         ) : (
           <Animated.View style={{ flex: 1, opacity: contentFade }}>
           <View style={[styles.itemCard, { backgroundColor: colors.surface }, Platform.OS === 'android' && { borderRadius: 0, overflow: 'visible', elevation: 0 }]}>
-          <FlatList
+          <DraggableFlatList
             data={flatItems}
             keyExtractor={(i) => i.id}
             style={{ flex: 1 }}
             contentContainerStyle={styles.list}
+            onDragEnd={handleDragEnd}
+            activationDistance={8}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
             }
@@ -809,7 +838,8 @@ export default function ListDetailScreen() {
                 </View>
               )
             }
-            renderItem={({ item, index }) => {
+            renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<any>) => {
+              const index = getIndex() ?? 0;
               if (item.type === 'recipe_header') {
                 return (
                   <View style={[styles.recipeGroupHeader, { borderBottomColor: colors.gray100 }]}>
@@ -846,19 +876,23 @@ export default function ListDetailScreen() {
               }
               const isLastItem = index === flatItems.length - 1;
               const isTips = listType === 'tips';
+              const isDraggable = !item.checked && !isTips && listType !== 'links';
               const itemView = (
-                <SwipeableItem
-                  item={item}
-                  onToggle={() => toggleItem(item)}
-                  onDelete={() => deleteItem(item.id)}
-                  onLongPress={() => setEditingItemId(item.id)}
-                  editingItemId={editingItemId}
-                  onEditSubmit={saveInlineEdit}
-                  isFirst={index === 0}
-                  tapToEdit={isTips}
-                  onAddPhoto={() => addPhotoToItem(item.id)}
-                  onViewImage={setImageViewUrl}
-                />
+                <ScaleDecorator>
+                  <SwipeableItem
+                    item={item}
+                    onToggle={() => toggleItem(item)}
+                    onDelete={() => deleteItem(item.id)}
+                    onLongPress={() => setEditingItemId(item.id)}
+                    editingItemId={editingItemId}
+                    onEditSubmit={saveInlineEdit}
+                    isFirst={index === 0}
+                    tapToEdit={isTips}
+                    onAddPhoto={() => addPhotoToItem(item.id)}
+                    onViewImage={setImageViewUrl}
+                    drag={isDraggable ? drag : undefined}
+                  />
+                </ScaleDecorator>
               );
               return isLastItem ? (
                 <Animated.View style={{ opacity: newItemAnim, transform: [{ translateX: newItemSlide }] }}>

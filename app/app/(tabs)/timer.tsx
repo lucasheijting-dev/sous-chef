@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -311,6 +312,13 @@ export default function TimerTab() {
   const breakStartedAtRef = useRef<number>(0);
   const breakPlannedSecsRef = useRef<number>(settings.timer_break_minutes * 60);
 
+  // ── Overtime ─────────────────────────────────────────────────────────────────
+  const [isOvertime, setIsOvertime] = useState(false);
+  const isOvertimeRef = useRef(false);
+
+  // ── Notification ─────────────────────────────────────────────────────────────
+  const scheduledNotifIdRef = useRef<string | null>(null);
+
   // ── Reflection state ─────────────────────────────────────────────────────────
   const [moodScore, setMoodScore] = useState<MoodScore | null>(null);
   const [reflectionNote, setReflectionNote] = useState('');
@@ -427,10 +435,14 @@ export default function TimerTab() {
     stopInterval();
     intervalRef.current = setInterval(() => {
       const elapsed = (Date.now() - startedAtMsRef.current - totalPausedMsRef.current) / 1000;
-      const remaining = Math.max(0, plannedSecsRef.current - elapsed);
+      const remaining = plannedSecsRef.current - elapsed;
+      if (remaining <= 0 && !isOvertimeRef.current) {
+        isOvertimeRef.current = true;
+        setIsOvertime(true);
+        haptic('success');
+      }
       setDisplaySecs(remaining);
-      setProgressFraction(Math.min(1, elapsed / plannedSecsRef.current));
-      if (remaining <= 0) handleAutoFinish();
+      setProgressFraction(1);
     }, 500);
   }, [stopInterval]);
 
@@ -553,6 +565,13 @@ export default function TimerTab() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
+  function cancelScheduledNotif() {
+    if (scheduledNotifIdRef.current) {
+      Notifications.cancelScheduledNotificationAsync(scheduledNotifIdRef.current).catch(() => {});
+      scheduledNotifIdRef.current = null;
+    }
+  }
+
   async function handleStart() {
     if (!user || user.id === 'dev') { showToast('Geen gebruiker gevonden', 'error'); return; }
     haptic('medium');
@@ -560,11 +579,25 @@ export default function TimerTab() {
     plannedSecsRef.current = plannedSecs;
     startedAtMsRef.current = Date.now();
     totalPausedMsRef.current = 0;
+    isOvertimeRef.current = false;
+    setIsOvertime(false);
 
     setDisplaySecs(plannedSecs);
     setProgressFraction(0);
     setPhase('running');
     startInterval();
+
+    // Schedule end notification
+    try {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status === 'granted') {
+        const notifId = await Notifications.scheduleNotificationAsync({
+          content: { title: 'Sous Chef ⏱️', body: "Hey Chef, time's up!", sound: true },
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: plannedSecs, repeats: false },
+        });
+        scheduledNotifIdRef.current = notifId;
+      }
+    } catch {}
 
     // Persist session
     try {
@@ -580,19 +613,23 @@ export default function TimerTab() {
     } catch {}
   }
 
-  function handleAutoFinish() {
+  function handleFinishOvertime() {
     stopInterval();
+    cancelScheduledNotif();
     const elapsed = (Date.now() - startedAtMsRef.current - totalPausedMsRef.current) / 1000;
     setActualDurationSecs(Math.ceil(elapsed));
     setMoodScore(null);
     setReflectionNote('');
     setReflectCountdown(60);
+    isOvertimeRef.current = false;
+    setIsOvertime(false);
     setPhase('reflecting');
     haptic('success');
   }
 
   function handleFinishSession() {
     stopInterval();
+    cancelScheduledNotif();
     setSessionOptionsVisible(false);
     const elapsed = (Date.now() - startedAtMsRef.current - totalPausedMsRef.current) / 1000;
     setActualDurationSecs(Math.ceil(elapsed));
@@ -605,6 +642,7 @@ export default function TimerTab() {
 
   function handleTakeBreak() {
     stopInterval();
+    cancelScheduledNotif();
     setSessionOptionsVisible(false);
     pausedAtMsRef.current = Date.now();
     breakStartedAtRef.current = Date.now();
@@ -658,6 +696,7 @@ export default function TimerTab() {
 
   function handleAbandon() {
     stopInterval();
+    cancelScheduledNotif();
     setSessionOptionsVisible(false);
     setAbandonReason(null);
     setAbandonNote('');
@@ -694,14 +733,23 @@ export default function TimerTab() {
     }
     sessionIdRef.current = null;
     haptic('success');
-    showToast('Sessie opgeslagen!', 'success');
-    resetToSetup();
+    showToast('Sessie opgeslagen! Pauze gestart.', 'success');
     fetchRecentSessions();
+    // Auto-start break
+    breakStartedAtRef.current = Date.now();
+    breakPlannedSecsRef.current = settings.timer_break_minutes * 60;
+    setBreakDisplaySecs(settings.timer_break_minutes * 60);
+    setPauseMoodScore(null);
+    setPhase('paused');
+    startBreakInterval();
   }
 
   function resetToSetup() {
     stopInterval();
+    cancelScheduledNotif();
     if (breakIntervalRef.current) { clearInterval(breakIntervalRef.current); breakIntervalRef.current = null; }
+    isOvertimeRef.current = false;
+    setIsOvertime(false);
     setPhase('setup');
     setProgressFraction(0);
     setDisplaySecs(plannedMins * 60);
@@ -904,25 +952,46 @@ export default function TimerTab() {
           <View style={s.timerWrap}>
             <CircularTimer
               fraction={progressFraction}
-              displaySecs={displaySecs}
-              color={Colors.yellow}
+              displaySecs={Math.max(0, displaySecs)}
+              color={isOvertime ? '#EF4444' : Colors.yellow}
               trackColor={colors.gray100}
               centerColor={colors.surface}
             />
+            {isOvertime && (
+              <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 28, color: '#EF4444' }}>
+                    +{formatTime(Math.abs(displaySecs))}
+                  </Text>
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: '#EF444488', marginTop: 2 }}>overtime</Text>
+                </View>
+              </View>
+            )}
           </View>
 
-          {/* Duration adjuster */}
-          <View style={s.durationAdjRow}>
-            <TouchableOpacity onPress={() => adjustPlannedDuration(-5)} style={[s.adjBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.75}>
-              <Text style={[s.adjBtnText, { color: colors.gray400 }]}>−5 min</Text>
+          {/* Duration adjuster — hidden during overtime */}
+          {!isOvertime && (
+            <View style={s.durationAdjRow}>
+              <TouchableOpacity onPress={() => adjustPlannedDuration(-5)} style={[s.adjBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.75}>
+                <Text style={[s.adjBtnText, { color: colors.gray400 }]}>−5 min</Text>
+              </TouchableOpacity>
+              <Text style={[s.adjLabel, { color: colors.gray400 }]}>
+                {formatMins(plannedSecsRef.current)}
+              </Text>
+              <TouchableOpacity onPress={() => adjustPlannedDuration(5)} style={[s.adjBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.75}>
+                <Text style={[s.adjBtnText, { color: colors.gray400 }]}>+5 min</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Afronden button — shown during overtime */}
+          {isOvertime && (
+            <TouchableOpacity onPress={handleFinishOvertime} activeOpacity={0.85} style={[s.startBtnWrap, { marginTop: 16 }]}>
+              <LinearGradient colors={['#EF4444', '#DC2626']} style={s.startBtn}>
+                <Text style={[s.startBtnText, { color: Colors.white }]}>Afronden</Text>
+              </LinearGradient>
             </TouchableOpacity>
-            <Text style={[s.adjLabel, { color: colors.gray400 }]}>
-              {formatMins(plannedSecsRef.current)}
-            </Text>
-            <TouchableOpacity onPress={() => adjustPlannedDuration(5)} style={[s.adjBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.75}>
-              <Text style={[s.adjBtnText, { color: colors.gray400 }]}>+5 min</Text>
-            </TouchableOpacity>
-          </View>
+          )}
 
           {/* Action buttons */}
           <View style={s.actionRow}>
@@ -931,11 +1000,13 @@ export default function TimerTab() {
               label={muted ? 'Aan' : 'Stil'}
               onPress={() => { haptic('light'); setMuted(m => !m); }}
             />
-            <ActionButton
-              icon="cafe-outline"
-              label="Pauze"
-              onPress={handleTakeBreak}
-            />
+            {!isOvertime && (
+              <ActionButton
+                icon="cafe-outline"
+                label="Pauze"
+                onPress={handleTakeBreak}
+              />
+            )}
             <ActionButton
               icon="ellipsis-horizontal"
               label="Meer"
@@ -950,7 +1021,20 @@ export default function TimerTab() {
         <View style={[s.pauseContainer, { paddingBottom: insets.bottom + 32 }]}>
           <Text style={s.pauseLabel}>Taking a break</Text>
           <Text style={s.pauseTimer}>{formatTime(breakDisplaySecs)}</Text>
-          <Text style={s.pauseSub}>Pauze van {settings.timer_break_minutes} min</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 4 }}>
+            <Text style={s.pauseSub}>Pauze van {Math.round(breakPlannedSecsRef.current / 60)} min</Text>
+            <TouchableOpacity
+              onPress={() => {
+                haptic('light');
+                breakPlannedSecsRef.current += 60;
+                setBreakDisplaySecs(prev => prev + 60);
+              }}
+              style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 }}
+              activeOpacity={0.75}
+            >
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: 'rgba(244,239,228,0.8)' }}>+ 1 min</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Quick mid-session mood check */}
           <View style={s.pauseMoodWrap}>

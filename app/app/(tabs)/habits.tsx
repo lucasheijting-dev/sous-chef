@@ -595,10 +595,10 @@ function HabitCard({
 // ── Habit Bar Card (day view) ──────────────────────────────────────────────────
 
 const LEVEL_COLOR: Record<string, string> = {
-  mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444',
+  mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444', skip: '#3B82F6',
 };
 const LEVEL_COLOR_LIGHT: Record<string, string> = {
-  mini: '#22C55E22', good: '#A9AFB722', elite: Colors.yellow + '22', not_done: '#EF444422',
+  mini: '#22C55E22', good: '#A9AFB722', elite: Colors.yellow + '22', not_done: '#EF444422', skip: '#3B82F622',
 };
 
 function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | undefined; isToday: boolean }) {
@@ -652,7 +652,7 @@ function WeekGrid({
     });
   }, [selectedDay]);
 
-  const levelColor: Record<string, string> = { mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444' };
+  const levelColor: Record<string, string> = { mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444', skip: '#3B82F6' };
 
   return (
     <View style={{ paddingHorizontal: 18, paddingBottom: 4 }}>
@@ -1159,32 +1159,62 @@ function HabitsMain() {
             {detailHabit && (() => {
               const currentLog = getLog(detailHabit.id, selectedDay);
               const isNotDone = currentLog?.level === 'not_done';
+              const isSkip = currentLog?.level === 'skip';
               return (
-                <TouchableOpacity
-                  onPress={() => {
-                    if (!detailHabit) return;
-                    if (currentLog && !isNotDone) {
-                      supabase.from('habit_logs').update({ level: 'not_done', logged_at: new Date().toISOString() }).eq('id', currentLog.id).then(() => fetchData());
-                      showToast(`${detailHabit.name} — Niet gedaan`, 'info');
-                    } else if (isNotDone && currentLog) {
-                      fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
-                      showToast(`${detailHabit.name} verwijderd`, 'info');
-                      fetchData();
-                    } else {
-                      supabase.from('habit_logs').upsert(
-                        { habit_id: detailHabit.id, user_id: user?.id, date: selectedDay, level: 'not_done', logged_at: new Date().toISOString() },
-                        { onConflict: 'habit_id,date' }
-                      ).then(() => fetchData());
-                      showToast(`${detailHabit.name} — Niet gedaan`, 'info');
-                    }
-                    setDetailHabit(null);
-                  }}
-                  style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
-                >
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: isNotDone ? colors.gray400 : '#EF4444' }}>
-                    {isNotDone ? 'Verwijderen' : 'Niet gedaan'}
-                  </Text>
-                </TouchableOpacity>
+                <View style={{ gap: 0 }}>
+                  {/* Niet gedaan */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!detailHabit) return;
+                      if (currentLog && !isNotDone) {
+                        supabase.from('habit_logs').update({ level: 'not_done', logged_at: new Date().toISOString() }).eq('id', currentLog.id).then(() => fetchData());
+                        showToast(`${detailHabit.name} — Niet gedaan`, 'info');
+                      } else if (isNotDone && currentLog) {
+                        fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+                        showToast(`${detailHabit.name} verwijderd`, 'info');
+                        fetchData();
+                      } else {
+                        supabase.from('habit_logs').upsert(
+                          { habit_id: detailHabit.id, user_id: user?.id, date: selectedDay, level: 'not_done', logged_at: new Date().toISOString() },
+                          { onConflict: 'habit_id,date' }
+                        ).then(() => fetchData());
+                        showToast(`${detailHabit.name} — Niet gedaan`, 'info');
+                      }
+                      setDetailHabit(null);
+                    }}
+                    style={{ alignItems: 'center', paddingVertical: 10, marginTop: 4 }}
+                  >
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: isNotDone ? colors.gray400 : '#EF4444' }}>
+                      {isNotDone ? 'Verwijderen' : 'Niet gedaan'}
+                    </Text>
+                  </TouchableOpacity>
+                  {/* Overslaan */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!detailHabit) return;
+                      if (isSkip && currentLog) {
+                        fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+                        showToast(`${detailHabit.name} — teruggedraaid`, 'info');
+                        fetchData();
+                      } else if (currentLog) {
+                        supabase.from('habit_logs').update({ level: 'skip', logged_at: new Date().toISOString() }).eq('id', currentLog.id).then(() => fetchData());
+                        showToast(`${detailHabit.name} — Overgeslagen`, 'info');
+                      } else {
+                        supabase.from('habit_logs').upsert(
+                          { habit_id: detailHabit.id, user_id: user?.id, date: selectedDay, level: 'skip', logged_at: new Date().toISOString() },
+                          { onConflict: 'habit_id,date' }
+                        ).then(() => fetchData());
+                        showToast(`${detailHabit.name} — Overgeslagen`, 'info');
+                      }
+                      setDetailHabit(null);
+                    }}
+                    style={{ alignItems: 'center', paddingVertical: 8 }}
+                  >
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: isSkip ? colors.gray400 : '#3B82F6' }}>
+                      {isSkip ? 'Terugdraaien' : 'Overslaan'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               );
             })()}
           </Pressable>

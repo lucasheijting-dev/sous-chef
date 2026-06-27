@@ -62,6 +62,21 @@ router.delete('/recipes/:recipeId', async (req, res) => {
   }
 });
 
+// PATCH /lists/items/reorder?user_id=xxx — body: [{id, sort_order}]
+router.patch('/items/reorder', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const items = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Missing items array' });
+    await db.reorderListItems(items);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Lists] Reorder error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /lists/items/:itemId/image?user_id=xxx
 router.post('/items/:itemId/image', async (req, res) => {
   try {

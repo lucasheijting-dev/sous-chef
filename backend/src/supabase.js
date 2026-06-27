@@ -200,6 +200,12 @@ async function deleteListItem(itemId) {
   if (error) throw new Error(`deleteListItem: ${error.message}`);
 }
 
+async function reorderListItems(items) {
+  await Promise.all(items.map(({ id, sort_order }) =>
+    supabase.from('list_items').update({ sort_order }).eq('id', id)
+  ));
+}
+
 async function deleteRecipeGroup(recipeId) {
   const { data: sources } = await supabase
     .from('list_item_sources').select('list_item_id').eq('recipe_id', recipeId);
@@ -1185,6 +1191,7 @@ module.exports = {
   addListItem,
   getListItems,
   deleteListItem,
+  reorderListItems,
   deleteRecipeGroup,
   createRecurringItem,
   getDueRecurringItems,

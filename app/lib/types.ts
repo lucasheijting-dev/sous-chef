@@ -69,7 +69,7 @@ export type HabitLog = {
   habit_id: string;
   user_id: string;
   date: string;
-  level: 'mini' | 'good' | 'elite' | 'not_done';
+  level: 'mini' | 'good' | 'elite' | 'not_done' | 'skip';
   logged_at: string;
 };
 
