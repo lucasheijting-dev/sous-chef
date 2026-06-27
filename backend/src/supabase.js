@@ -930,6 +930,15 @@ async function getUserById(userId) {
   return data ?? null;
 }
 
+async function getUserByPhone(phone) {
+  const { data } = await supabase
+    .from('users')
+    .select('id, whatsapp_number')
+    .eq('whatsapp_number', phone)
+    .single();
+  return data ?? null;
+}
+
 async function getBoodschappenlijst(userId) {
   const { data } = await supabase
     .from('lists')
@@ -1250,6 +1259,7 @@ module.exports = {
   markCalDAVOperationFailed,
   updateEventCalDAVUid,
   getUserById,
+  getUserByPhone,
   getUserPushToken,
   getBoodschappenlijst,
   canSendGeoAlert,

@@ -78,6 +78,18 @@ function AuthGate() {
     }
   }, [user?.id]);
 
+  // Process pending invite referral
+  useEffect(() => {
+    if (!user || user.id === 'dev') return;
+    AsyncStorage.getItem('pending_invite_from').then(from => {
+      if (!from) return;
+      AsyncStorage.removeItem('pending_invite_from').catch(() => {});
+      const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+      fetch(`${API_BASE}/join/referral?user_id=${user.id}&from=${encodeURIComponent(from)}`, { method: 'POST' })
+        .catch(() => {});
+    }).catch(() => {});
+  }, [user?.id]);
+
   return null;
 }
 
@@ -113,17 +125,32 @@ export default function RootLayout() {
 
   useEffect(() => {
     function handleDeepLink({ url }: { url: string }) {
-      if (!url.includes('calendar-connected')) return;
-      const params = new URLSearchParams(url.split('?')[1] ?? '');
-      if (params.get('error')) {
-        Alert.alert('Koppeling mislukt', 'De agenda-koppeling is niet gelukt. Probeer het opnieuw.');
-      } else {
-        const provider = params.get('provider') ?? '';
-        const name = CALENDAR_PROVIDER_NAMES[provider] ?? 'Agenda';
-        Alert.alert('Gekoppeld!', `${name} is succesvol gekoppeld. Je afspraken worden gesynchroniseerd.`);
+      if (url.includes('calendar-connected')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        if (params.get('error')) {
+          Alert.alert('Koppeling mislukt', 'De agenda-koppeling is niet gelukt. Probeer het opnieuw.');
+        } else {
+          const provider = params.get('provider') ?? '';
+          const name = CALENDAR_PROVIDER_NAMES[provider] ?? 'Agenda';
+          Alert.alert('Gekoppeld!', `${name} is succesvol gekoppeld. Je afspraken worden gesynchroniseerd.`);
+        }
+      } else if (url.includes('invite')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const from = params.get('from');
+        if (from) {
+          AsyncStorage.setItem('pending_invite_from', from).catch(() => {});
+        }
       }
     }
     const sub = Linking.addEventListener('url', handleDeepLink);
+    // Also check the initial URL (app launched via deep link)
+    Linking.getInitialURL().then(url => {
+      if (url?.includes('invite')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const from = params.get('from');
+        if (from) AsyncStorage.setItem('pending_invite_from', from).catch(() => {});
+      }
+    }).catch(() => {});
     return () => sub.remove();
   }, []);
   useEffect(() => { if (error) throw error; }, [error]);

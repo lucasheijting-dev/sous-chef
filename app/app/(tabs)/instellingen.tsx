@@ -924,7 +924,9 @@ export default function InstellingenTab() {
             right={<Ionicons name="chevron-forward" size={16} color={colors.gray400} />}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              const message = `Hey! Ik gebruik De Sous-Chef als persoonlijke assistent op mijn telefoon 🍳\n\nSuper handig voor boodschappenlijsten, agenda, habits en focus-timer — alles via WhatsApp.\n\nProbeer het zelf: https://apps.apple.com/nl/app/de-sous-chef/id6770052207`;
+              const ref = user?.whatsapp_number ?? '';
+              const inviteLink = `https://sous-chef-pckg.onrender.com/join?ref=${encodeURIComponent(ref)}`;
+              const message = `Hey! Ik gebruik De Sous-Chef als persoonlijke assistent op mijn telefoon 🍳\n\nSuper handig voor boodschappenlijsten, agenda, habits en focus-timer — alles via WhatsApp.\n\nProbeer het zelf:\n${inviteLink}`;
               Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`).catch(() => {
                 Alert.alert('WhatsApp niet gevonden', 'Zorg dat WhatsApp is geïnstalleerd.');
               });
