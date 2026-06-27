@@ -30,7 +30,6 @@ import { SkeletonHabitCard } from '@/components/SkeletonCard';
 import { Toast, useToast } from '@/components/Toast';
 import Confetti from '@/components/Confetti';
 import { getCache, setCache } from '@/lib/cache';
-import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
@@ -597,19 +596,31 @@ function HabitCard({
 const LEVEL_COLOR: Record<string, string> = {
   mini: '#22C55E', good: '#A9AFB7', elite: Colors.yellow, not_done: '#EF4444', skip: '#3B82F6',
 };
-const LEVEL_COLOR_LIGHT: Record<string, string> = {
-  mini: '#22C55E22', good: '#A9AFB722', elite: Colors.yellow + '22', not_done: '#EF444422', skip: '#3B82F622',
+const LEVEL_COLOR_LIGHT_DARK: Record<string, string> = {
+  mini: '#0D2E1A', good: '#1E2024', elite: '#2A220D', not_done: '#2A0D0D', skip: '#0E1A2E',
+};
+const LEVEL_COLOR_LIGHT_LIGHT: Record<string, string> = {
+  mini: '#E8F9EF', good: '#ECEDEF', elite: '#FEF6DC', not_done: '#FDECEC', skip: '#EBF1FD',
 };
 
 function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | undefined; isToday: boolean }) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const level = log?.level;
-  const cardBg = level ? LEVEL_COLOR_LIGHT[level] : colors.surface;
-  const dotColor = level ? LEVEL_COLOR[level] : (isToday ? '#FEE2E2' : colors.gray100);
+  const lightMap = isDark ? LEVEL_COLOR_LIGHT_DARK : LEVEL_COLOR_LIGHT_LIGHT;
+  const cardBg = level ? lightMap[level] : colors.surface;
+  const pillColor = level ? LEVEL_COLOR[level] : (isToday ? colors.gray100 : colors.gray100);
   return (
     <View style={[hbar.card, { backgroundColor: cardBg }]}>
       <Text style={[hbar.name, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
-      <View style={[hbar.dot, { backgroundColor: dotColor }]} />
+      {level ? (
+        <View style={[hbar.pill, { backgroundColor: pillColor }]}>
+          <Text style={[hbar.pillText, { color: level === 'elite' ? Colors.black : '#fff' }]}>
+            {level === 'mini' ? 'Mini' : level === 'good' ? 'Good' : level === 'elite' ? 'Elite' : level === 'skip' ? 'Skip' : '✕'}
+          </Text>
+        </View>
+      ) : (
+        <View style={[hbar.pillEmpty, { borderColor: isToday ? colors.gray200 : colors.gray100 }]} />
+      )}
     </View>
   );
 }
@@ -617,7 +628,9 @@ function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | u
 const hbar = StyleSheet.create({
   card: { borderRadius: Radius.lg, ...Shadow.card, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 },
   name: { fontFamily: 'Inter_600SemiBold', fontSize: 15, flex: 1, marginRight: 12 },
-  dot: { width: 64, height: 14, borderRadius: 7 },
+  pill: { borderRadius: Radius.pill, paddingHorizontal: 12, paddingVertical: 5, minWidth: 58, alignItems: 'center' },
+  pillText: { fontFamily: 'Inter_700Bold', fontSize: 12, color: '#fff' },
+  pillEmpty: { width: 58, height: 26, borderRadius: Radius.pill, borderWidth: 1.5 },
 });
 
 // ── Week Grid ──────────────────────────────────────────────────────────────────
@@ -1063,14 +1076,12 @@ function HabitsMain() {
 
             {viewMode === 'day' ? habitData.map(({ habit, log }) => (
               <View key={habit.id} style={{ marginBottom: 10 }}>
-                <SwipeDeleteRow onDelete={() => deleteHabit(habit.id)} borderRadius={Radius.lg}>
-                  <Pressable
-                    onLongPress={() => { haptic('medium'); setDetailHabit(habit); }}
-                    onPress={() => setDetailHabit(habit)}
-                  >
-                    <HabitBarCard habit={habit} log={log} isToday={selectedDay === today} />
-                  </Pressable>
-                </SwipeDeleteRow>
+                <Pressable
+                  onLongPress={() => { haptic('medium'); setDetailHabit(habit); }}
+                  onPress={() => setDetailHabit(habit)}
+                >
+                  <HabitBarCard habit={habit} log={log} isToday={selectedDay === today} />
+                </Pressable>
               </View>
             )) : (
               <>
