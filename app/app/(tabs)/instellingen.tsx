@@ -570,9 +570,28 @@ export default function InstellingenTab() {
 
   const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
-  function openCalendarProfile() {
+  async function openCalendarProfile() {
     if (!user || user.id === 'dev') return;
     const url = `${API_BASE}/calendar-profile?userId=${user.id}`;
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      const ct = res.headers.get('content-type') ?? '';
+      if (!res.ok || !ct.includes('apple-aspen-config')) {
+        Alert.alert(
+          'Agenda koppeling tijdelijk niet beschikbaar',
+          'De CalDAV server is momenteel niet bereikbaar. Probeer het later opnieuw of neem contact op via WhatsApp.',
+          [{ text: 'Oké' }],
+        );
+        return;
+      }
+    } catch {
+      Alert.alert(
+        'Geen verbinding',
+        'Controleer je internetverbinding en probeer het opnieuw.',
+        [{ text: 'Oké' }],
+      );
+      return;
+    }
     Linking.openURL(url);
     setTimeout(() => {
       Alert.alert(

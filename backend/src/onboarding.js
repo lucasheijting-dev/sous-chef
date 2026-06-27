@@ -52,42 +52,14 @@ function getName(userId)        { return state.get(userId)?.name ?? 'je'; }
 // Returns true if the user is still in the onboarding flow and the message was handled.
 async function handleOnboardingMessage({ from, text, userId }) {
   const step = getStep(userId);
-  const lc   = text.toLowerCase().trim();
 
-  // Step 0: hasn't been welcomed yet — send first message
+  // Step 0: first ever message — redirect to app for OTP registration
   if (step === 0) {
-    setStep(userId, 1);
-    await sendMessage(from, STEPS[0].ask);
-    return true;
-  }
-
-  // Step 1: received name
-  if (step === 1) {
-    const name = text.trim().split(' ')[0];
-    setStep(userId, 2);
-    setName(userId, name);
-    await sendMessage(from, STEPS[1].ask(name));
-    return true;
-  }
-
-  // Step 2: received lists (or skip)
-  if (step === 2) {
-    if (lc !== 'overslaan') {
-      const listNames = text.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
-      const EMOJI_MAP = {
-        boodschappen: '🛒', werk: '💼', film: '🎬', sport: '🏃',
-        boeken: '📚', reizen: '✈️', koken: '🍳', cadeau: '🎁',
-      };
-      for (const name of listNames.slice(0, 8)) {
-        const emoji = Object.entries(EMOJI_MAP).find(([k]) => name.toLowerCase().includes(k))?.[1] ?? '📝';
-        try { await db.createList(userId, name, emoji, 'checklist'); } catch {}
-      }
-    }
-
-    const name = getName(userId);
     state.delete(userId);
     await db.markOnboardingComplete(userId);
-    await sendMessage(from, STEPS[2].ask(name));
+    await sendMessage(from,
+      `👋 *Welkom Chefje!*\n\nGa terug naar de *De Sous-Chef app* om je toegangscode aan te vragen. Daarna kun je mij hier alles sturen! 🍳`
+    );
     return true;
   }
 

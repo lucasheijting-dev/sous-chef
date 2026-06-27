@@ -230,15 +230,38 @@ export default function SetupScreen() {
           <Image source={require('@/assets/images/tekstsouschef.png')} style={styles.title} resizeMode="contain" />
           <Text style={styles.subtitle}>Jouw persoonlijke assistent via WhatsApp</Text>
 
-          <View style={styles.botCard}>
-            <Ionicons name="logo-whatsapp" size={18} color="#25D366" />
-            <View style={styles.botCardBody}>
-              <Text style={styles.botCardLabel}>Voeg dit nummer toe als WhatsApp-contact</Text>
-              <TouchableOpacity onPress={() => Linking.openURL(`https://wa.me/${BOT_NUMBER}`)}>
-                <Text style={styles.botNumber}>{BOT_DISPLAY}</Text>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.stepsBox}>
+            <Text style={styles.stepsTitle}>Hoe werkt het?</Text>
+            {[
+              { n: '1', t: 'Stuur Sous-Chef een berichtje via WhatsApp — bijv. "Hoi"' },
+              { n: '2', t: 'Sous-Chef antwoordt en je account wordt aangemaakt' },
+              { n: '3', t: 'Kom terug naar de app, vul je nummer in en log in' },
+            ].map(({ n, t }) => (
+              <View key={n} style={styles.step}>
+                <View style={styles.stepNum}>
+                  <Text style={styles.stepNumText}>{n}</Text>
+                </View>
+                <Text style={styles.stepText}>{t}</Text>
+              </View>
+            ))}
           </View>
+
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`https://wa.me/${BOT_NUMBER}?text=Hoi`)}
+            activeOpacity={0.85}
+            style={{ width: '100%', marginBottom: 16 }}
+          >
+            <LinearGradient
+              colors={['#128C7E', '#075E54']}
+              style={[styles.button, { flexDirection: 'row' }]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name="logo-whatsapp" size={18} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={[styles.buttonText, { color: '#FFF' }]}>Stap 1: Open WhatsApp → Sous-Chef</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <Text style={styles.dividerText}>Al een berichtje gestuurd? Log dan hieronder in:</Text>
 
           <View style={[styles.inputWrapper, valid && styles.inputWrapperValid]}>
             <TextInput
@@ -248,7 +271,6 @@ export default function SetupScreen() {
               placeholder="+31 6 12 34 56 78"
               placeholderTextColor="#555"
               keyboardType="phone-pad"
-              autoFocus
               returnKeyType="done"
               onSubmitEditing={handleRequestOTP}
               selectionColor={Colors.yellow}
@@ -270,26 +292,10 @@ export default function SetupScreen() {
             >
               {loading
                 ? <ActivityIndicator color="#0A0A0A" />
-                : <Text style={[styles.buttonText, !valid && styles.buttonTextDisabled]}>Inlogcode sturen</Text>
+                : <Text style={[styles.buttonText, !valid && styles.buttonTextDisabled]}>Stap 2: Inlogcode sturen</Text>
               }
             </LinearGradient>
           </TouchableOpacity>
-
-          <View style={styles.stepsBox}>
-            <Text style={styles.stepsTitle}>Hoe werkt het?</Text>
-            {[
-              { n: '1', t: 'Vul je WhatsApp-nummer in met landcode (bijv. +31 6 12345678)' },
-              { n: '2', t: 'Je ontvangt een 6-cijferige inlogcode via WhatsApp' },
-              { n: '3', t: 'Voer de code in en je bent verbonden' },
-            ].map(({ n, t }) => (
-              <View key={n} style={styles.step}>
-                <View style={styles.stepNum}>
-                  <Text style={styles.stepNumText}>{n}</Text>
-                </View>
-                <Text style={styles.stepText}>{t}</Text>
-              </View>
-            ))}
-          </View>
         </View>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -325,7 +331,8 @@ const styles = StyleSheet.create({
   button: { width: '100%', borderRadius: Radius.pill, paddingVertical: 17, paddingHorizontal: 40, alignItems: 'center', marginBottom: 16, minWidth: 280 },
   buttonText: { fontFamily: 'Inter_700Bold', fontSize: 16, color: '#0A0A0A', letterSpacing: 0.2 },
   buttonTextDisabled: { color: '#555' },
-  stepsBox: { width: '100%', marginTop: 4, backgroundColor: '#161616', borderRadius: Radius.md, padding: 18, borderWidth: 1, borderColor: '#2A2A2A' },
+  dividerText: { fontFamily: 'Inter_300Light', fontSize: 12, color: '#555', textAlign: 'center', marginBottom: 10 },
+  stepsBox: { width: '100%', marginTop: 4, backgroundColor: '#161616', borderRadius: Radius.md, padding: 18, borderWidth: 1, borderColor: '#2A2A2A', marginBottom: 16 },
   stepsTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#555', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14 },
   step: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12, gap: 12 },
   stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center', marginTop: 1, flexShrink: 0 },

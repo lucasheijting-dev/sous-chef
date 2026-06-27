@@ -470,12 +470,31 @@ function CustomStep({
 }
 
 function CaldavStep({ userId, onNext }: { userId: string | null; onNext: () => void }) {
-  function openProfile() {
+  async function openProfile() {
     if (!userId || userId === 'dev') {
       Alert.alert('Beschikbaar na koppeling', 'Koppel eerst je WhatsApp-nummer.');
       return;
     }
     const url = `${API_BASE}/calendar-profile?userId=${userId}`;
+    try {
+      const res = await fetch(url, { method: 'HEAD' });
+      const ct = res.headers.get('content-type') ?? '';
+      if (!res.ok || !ct.includes('apple-aspen-config')) {
+        Alert.alert(
+          'Agenda koppeling tijdelijk niet beschikbaar',
+          'De agenda server is momenteel niet bereikbaar. Je kunt dit later instellen via Instellingen in de app.',
+          [{ text: 'Overslaan', onPress: onNext }, { text: 'Oké' }],
+        );
+        return;
+      }
+    } catch {
+      Alert.alert(
+        'Geen verbinding',
+        'Controleer je internetverbinding en probeer het opnieuw.',
+        [{ text: 'Overslaan', onPress: onNext }, { text: 'Oké' }],
+      );
+      return;
+    }
     Linking.openURL(url);
     setTimeout(() => {
       Alert.alert(
