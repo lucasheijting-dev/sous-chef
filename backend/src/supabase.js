@@ -1190,6 +1190,27 @@ async function deleteOldListsForUser(userId, days = 30) {
   return data ?? [];
 }
 
+// ── List Invites (link-based) ─────────────────────────────────────────────────
+
+async function createListInvite(userId, listId, listName, listEmoji) {
+  const { data, error } = await supabase
+    .from('list_invites')
+    .insert({ list_id: listId, created_by: userId, list_name: listName, list_emoji: listEmoji })
+    .select('token')
+    .single();
+  if (error) throw new Error(`createListInvite: ${error.message}`);
+  return data.token;
+}
+
+async function getListInvite(token) {
+  const { data } = await supabase
+    .from('list_invites')
+    .select('token, list_id, list_name, list_emoji, created_by, expires_at')
+    .eq('token', token)
+    .single();
+  return data ?? null;
+}
+
 // ── Notification Prefs ────────────────────────────────────────────────────────
 
 async function getNotifPrefs(userId) {
@@ -1372,6 +1393,8 @@ module.exports = {
   addListItemWithImage,
   deleteHabit,
   deleteHabitLog,
+  createListInvite,
+  getListInvite,
   getNotifPrefs,
   saveNotifPrefs,
   getNotifPrefsForUsers,

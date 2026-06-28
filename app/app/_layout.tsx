@@ -91,6 +91,33 @@ function AuthGate() {
     }).catch(() => {});
   }, [user?.id]);
 
+  // Process pending list invite (from deep link)
+  useEffect(() => {
+    if (!user || user.id === 'dev') return;
+    AsyncStorage.getItem('pending_list_invite').then(async token => {
+      if (!token) return;
+      await AsyncStorage.removeItem('pending_list_invite').catch(() => {});
+      const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+      try {
+        const res = await fetch(`${API_BASE}/sharing/accept-invite`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, user_id: user.id }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          Alert.alert('Toegevoegd! 🎉', `Je bent toegevoegd aan ${data.list_emoji ?? '📝'} ${data.list_name ?? 'de lijst'}.`);
+        } else if (res.status === 409) {
+          // already a member — silently ignore
+        } else {
+          Alert.alert('Uitnodiging mislukt', data.error ?? 'Probeer het opnieuw.');
+        }
+      } catch {
+        // silent — network issue
+      }
+    }).catch(() => {});
+  }, [user?.id]);
+
   return null;
 }
 
@@ -135,6 +162,10 @@ export default function RootLayout() {
           const name = CALENDAR_PROVIDER_NAMES[provider] ?? 'Agenda';
           Alert.alert('Gekoppeld!', `${name} is succesvol gekoppeld. Je afspraken worden gesynchroniseerd.`);
         }
+      } else if (url.includes('listInvite')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const token = params.get('listInvite');
+        if (token) AsyncStorage.setItem('pending_list_invite', token).catch(() => {});
       } else if (url.includes('invite')) {
         const params = new URLSearchParams(url.split('?')[1] ?? '');
         const from = params.get('from');
@@ -146,7 +177,12 @@ export default function RootLayout() {
     const sub = Linking.addEventListener('url', handleDeepLink);
     // Also check the initial URL (app launched via deep link)
     Linking.getInitialURL().then(url => {
-      if (url?.includes('invite')) {
+      if (!url) return;
+      if (url.includes('listInvite')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const token = params.get('listInvite');
+        if (token) AsyncStorage.setItem('pending_list_invite', token).catch(() => {});
+      } else if (url.includes('invite')) {
         const params = new URLSearchParams(url.split('?')[1] ?? '');
         const from = params.get('from');
         if (from) AsyncStorage.setItem('pending_invite_from', from).catch(() => {});

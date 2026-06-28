@@ -272,9 +272,8 @@ export default function ListDetailScreen() {
 
   const [members, setMembers] = useState<{ user_id: string; role: string; users: { display_name?: string; whatsapp_number: string } | null }[]>([]);
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
-  const [invitePhone, setInvitePhone] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState('');
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteUrlLoading, setInviteUrlLoading] = useState(false);
 
   const [recipeModalVisible, setRecipeModalVisible] = useState(false);
   const [recipeUrl, setRecipeUrl] = useState('');
@@ -312,7 +311,7 @@ export default function ListDetailScreen() {
       headerTintColor: Colors.yellow,
       headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 4 }}>
-          <TouchableOpacity onPress={() => { setInvitePhone(''); setInviteError(''); setInviteModalVisible(true); }} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+          <TouchableOpacity onPress={openInviteModal} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
             <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
               <Ionicons name="person-add-outline" size={17} color={Colors.black} />
             </View>
@@ -528,29 +527,18 @@ export default function ListDetailScreen() {
     );
   }
 
-  async function sendInvite() {
-    if (!invitePhone.trim() || !user) return;
-    setInviting(true);
-    setInviteError('');
+  async function openInviteModal() {
+    setInviteModalVisible(true);
+    setInviteUrl('');
+    setInviteUrlLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/sharing/invite`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'list', resource_id: id, phone: invitePhone.trim(), user_id: user.id }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setInviteError(json.error ?? 'Er ging iets mis.');
-      } else {
-        setInviteModalVisible(false);
-        showToast('Uitnodiging verstuurd via WhatsApp 👨‍🍳', 'success');
-        fetchMembers();
-      }
-    } catch {
-      setInviteError('Geen verbinding. Probeer het opnieuw.');
-    } finally {
-      setInviting(false);
-    }
+      const res = await fetch(
+        `${API_BASE}/sharing/invite-link?list_id=${id}&user_id=${user!.id}&list_name=${encodeURIComponent(name ?? '')}&list_emoji=${encodeURIComponent(emoji ?? '📝')}`
+      );
+      const data = await res.json();
+      setInviteUrl(data.url ?? '');
+    } catch { /* silent, user can retry */ }
+    finally { setInviteUrlLoading(false); }
   }
 
   async function importRecipeFromApp() {
@@ -1079,79 +1067,68 @@ export default function ListDetailScreen() {
         </Modal>
 
         <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-            <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={() => setInviteModalVisible(false)}>
-              <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, gap: 16 }} onPress={() => {}}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Chefje toevoegen 👨‍🍳</Text>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={() => setInviteModalVisible(false)}>
+            <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, gap: 16 }} onPress={() => {}}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: colors.black }}>
+                Chefje toevoegen 👨‍🍳
+              </Text>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, lineHeight: 20 }}>
+                Stuur de link hieronder. Als ze de app hebben, opent de lijst automatisch en worden ze meteen toegevoegd.
+              </Text>
 
-                {/* ── Stap 1: Kopieer of stuur via WA ── */}
-                <View style={{ backgroundColor: Colors.yellow + '18', borderRadius: 14, padding: 16, gap: 10 }}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black }}>
-                    Stap 1 — Stuur deze uitnodiging
-                  </Text>
-                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, lineHeight: 19 }}>
-                    {`Hey! Ik gebruik De Sous-Chef en wil de lijst "${emoji ?? '📝'} ${name}" met je delen. Download de app en stuur me je WhatsApp-nummer, dan voeg ik je toe! 🍳\n\napp.sous-chef.nl`}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
+              {inviteUrlLoading ? (
+                <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                  <ActivityIndicator color={Colors.yellow} />
+                </View>
+              ) : inviteUrl ? (
+                <>
+                  {/* Link preview */}
+                  <View style={{ backgroundColor: colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Ionicons name="link-outline" size={16} color={colors.gray400} />
+                    <Text style={{ flex: 1, fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400 }} numberOfLines={1}>{inviteUrl}</Text>
+                  </View>
+
+                  {/* Actions */}
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
                     <TouchableOpacity
                       onPress={async () => {
-                        const msg = `Hey! Ik gebruik De Sous-Chef en wil de lijst "${emoji ?? '📝'} ${name}" met je delen. Download de app en stuur me je WhatsApp-nummer, dan voeg ik je toe! 🍳\n\napp.sous-chef.nl`;
-                        await import('expo-clipboard').then(C => C.setStringAsync(msg));
-                        showToast('Gekopieerd!', 'success');
+                        await import('expo-clipboard').then(C => C.setStringAsync(inviteUrl));
+                        showToast('Link gekopieerd!', 'success');
                       }}
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.white, borderRadius: 10, paddingVertical: 11, borderWidth: 1, borderColor: colors.gray100 }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, paddingVertical: 15, borderWidth: 1.5, borderColor: Colors.yellow }}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="copy-outline" size={16} color={colors.black} />
-                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black }}>Kopieer</Text>
+                      <Ionicons name="copy-outline" size={17} color={Colors.yellow} />
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow }}>Kopieer link</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => {
-                        const msg = `Hey! Ik gebruik De Sous-Chef en wil de lijst "${emoji ?? '📝'} ${name}" met je delen. Download de app en stuur me je WhatsApp-nummer, dan voeg ik je toe! 🍳\n\napp.sous-chef.nl`;
+                        const msg = `Hey! Ik wil de lijst "${emoji ?? '📝'} ${name}" met je delen in De Sous-Chef 🍳\n\nKlik op de link om meteen toe te voegen:\n${inviteUrl}`;
                         Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() =>
                           Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`)
                         );
                       }}
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#25D366', borderRadius: 10, paddingVertical: 11 }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, paddingVertical: 15, backgroundColor: '#25D366' }}
                       activeOpacity={0.8}
                     >
-                      <Ionicons name="logo-whatsapp" size={16} color="#fff" />
-                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' }}>WhatsApp</Text>
+                      <Ionicons name="logo-whatsapp" size={17} color="#fff" />
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>WhatsApp</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-
-                {/* ── Stap 2: Nummer invoeren ── */}
-                <View style={{ gap: 8 }}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black }}>
-                    Stap 2 — Voer hun nummer in
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, textAlign: 'center' }}>
+                    Link is 7 dagen geldig
                   </Text>
-                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400 }}>
-                    Zodra ze de app hebben, voer hun WhatsApp-nummer in (bijv. 0612345678 of +31612345678).
-                  </Text>
-                  <TextInput
-                    value={invitePhone}
-                    onChangeText={t => { setInvitePhone(t); setInviteError(''); }}
-                    placeholder="+31612345678"
-                    keyboardType="phone-pad"
-                    style={{ borderWidth: 1, borderColor: inviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black }}
-                  />
-                  {!!inviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444' }}>{inviteError}</Text>}
-                  <TouchableOpacity
-                    onPress={sendInvite}
-                    disabled={inviting || !invitePhone.trim()}
-                    style={{ backgroundColor: inviting || !invitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
-                    activeOpacity={0.85}
-                  >
-                    {inviting
-                      ? <ActivityIndicator size="small" color={Colors.black} />
-                      : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Toevoegen</Text>
-                    }
-                  </TouchableOpacity>
-                </View>
-              </Pressable>
+                </>
+              ) : (
+                <TouchableOpacity
+                  onPress={openInviteModal}
+                  style={{ backgroundColor: Colors.yellow, borderRadius: 14, paddingVertical: 15, alignItems: 'center' }}
+                >
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Probeer opnieuw</Text>
+                </TouchableOpacity>
+              )}
             </Pressable>
-          </KeyboardAvoidingView>
+          </Pressable>
         </Modal>
       </View>
       </KeyboardAvoidingView>

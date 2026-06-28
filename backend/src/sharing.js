@@ -94,4 +94,37 @@ router.delete('/member', async (req, res) => {
   }
 });
 
+// GET /sharing/invite-link?list_id=xxx&user_id=xxx&list_name=xxx&list_emoji=xxx
+router.get('/invite-link', async (req, res) => {
+  try {
+    const { list_id, user_id, list_name, list_emoji } = req.query;
+    if (!list_id || !user_id) return res.status(400).json({ error: 'Missing params' });
+    const token = await db.createListInvite(user_id, list_id, list_name ?? '', list_emoji ?? '📝');
+    const BASE = process.env.RENDER_EXTERNAL_URL ?? 'https://sous-chef-pckg.onrender.com';
+    res.json({ url: `${BASE}/join/list/${token}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /sharing/accept-invite
+// Body: { token, user_id }
+router.post('/accept-invite', async (req, res) => {
+  try {
+    const { token, user_id } = req.body;
+    if (!token || !user_id) return res.status(400).json({ error: 'Missing fields' });
+
+    const invite = await db.getListInvite(token);
+    if (!invite) return res.status(404).json({ error: 'Uitnodiging niet gevonden of verlopen' });
+    if (new Date(invite.expires_at) < new Date()) return res.status(410).json({ error: 'Uitnodiging verlopen' });
+    if (invite.created_by === user_id) return res.status(400).json({ error: 'Je kunt jezelf niet uitnodigen' });
+
+    await db.addListMember(invite.list_id, user_id, invite.created_by);
+    res.json({ ok: true, list_id: invite.list_id, list_name: invite.list_name, list_emoji: invite.list_emoji });
+  } catch (err) {
+    console.error('[Sharing] Accept invite error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
