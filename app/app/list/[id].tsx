@@ -252,7 +252,6 @@ export default function ListDetailScreen() {
   const prevItemCount = useRef(0);
   const newItemAnim = useRef(new Animated.Value(1)).current;
   const newItemSlide = useRef(new Animated.Value(0)).current;
-  const contentFade = useRef(new Animated.Value(0)).current;
 
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
   const batchDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -377,13 +376,7 @@ export default function ListDetailScreen() {
       prevItemCount.current = enriched.length;
       setItems(enriched as any);
     }
-    setLoading(prev => {
-      if (prev) {
-        contentFade.setValue(0);
-        Animated.timing(contentFade, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-      }
-      return false;
-    });
+    setLoading(false);
     setRefreshing(false);
   }, [id]);
 
@@ -801,7 +794,7 @@ export default function ListDetailScreen() {
             {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
           </View>
         ) : (
-          <Animated.View style={{ flex: 1, opacity: contentFade }}>
+          <View style={{ flex: 1 }}>
           <View style={[styles.itemCard, { backgroundColor: colors.surface }, Platform.OS === 'android' && { borderRadius: 0, overflow: 'visible', elevation: 0 }]}>
           <DraggableFlatList
             data={flatItems}
@@ -904,7 +897,7 @@ export default function ListDetailScreen() {
             }}
           />
           </View>
-          </Animated.View>
+          </View>
         )}
 
         <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
