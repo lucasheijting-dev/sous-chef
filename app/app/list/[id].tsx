@@ -347,12 +347,26 @@ export default function ListDetailScreen() {
   const fetchItems = useCallback(async () => {
     const { data } = await supabase
       .from('list_items')
-      .select('*, list_item_sources(recipe_id, recipes(title))')
+      .select('*')
       .eq('list_id', id)
       .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
     if (data) {
-      if (data.length > prevItemCount.current && prevItemCount.current > 0) {
+      // Fetch recipe sources separately so a missing FK doesn't kill the main query
+      const { data: sources } = await supabase
+        .from('list_item_sources')
+        .select('list_item_id, recipe_id, recipes(title)')
+        .in('list_item_id', data.map(i => i.id));
+      const sourceMap = new Map<string, { recipe_id: string; recipes: { title: string } | null }>();
+      for (const src of sources ?? []) {
+        sourceMap.set((src as any).list_item_id, src as any);
+      }
+      const enriched = data.map(item => ({
+        ...item,
+        list_item_sources: sourceMap.has(item.id) ? [sourceMap.get(item.id)] : [],
+      }));
+
+      if (enriched.length > prevItemCount.current && prevItemCount.current > 0) {
         newItemAnim.setValue(0);
         newItemSlide.setValue(40);
         Animated.parallel([
@@ -360,8 +374,8 @@ export default function ListDetailScreen() {
           Animated.timing(newItemSlide, { toValue: 0, duration: 280, useNativeDriver: true }),
         ]).start();
       }
-      prevItemCount.current = data.length;
-      setItems(data);
+      prevItemCount.current = enriched.length;
+      setItems(enriched as any);
     }
     setLoading(prev => {
       if (prev) {

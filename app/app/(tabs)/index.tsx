@@ -130,11 +130,13 @@ function AnimatedCard({
   index,
   onPress,
   onDelete,
+  onEmojiPress,
 }: {
   item: List & { item_count: number; open_count: number; is_shared?: boolean };
   index: number;
   onPress: () => void;
   onDelete: () => void;
+  onEmojiPress: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -179,10 +181,15 @@ function AnimatedCard({
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
         style={[styles.tile, { backgroundColor: colors.surface }]}
       >
-        {/* Tone icon tile */}
-        <View style={[styles.tileIconBox, { backgroundColor: tone.bg }]}>
+        {/* Tappable emoji icon */}
+        <TouchableOpacity
+          onPress={onEmojiPress}
+          activeOpacity={0.75}
+          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          style={[styles.tileIconBox, { backgroundColor: tone.bg }]}
+        >
           <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
-        </View>
+        </TouchableOpacity>
         {item.is_shared && (
           <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 6 }}>
             <Text style={{ fontSize: 11 }}>👥</Text>
@@ -518,6 +525,7 @@ export default function LijstenTab() {
   const reorderDragIndexRef = useRef<number | null>(null);
   const reorderTargetIndexRef = useRef<number | null>(null);
   const REORDER_ROW_H = 56;
+  const [emojiPickerList, setEmojiPickerList] = useState<(typeof lists)[0] | null>(null);
   const [newListModalVisible, setNewListModalVisible] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [newListCreating, setNewListCreating] = useState(false);
@@ -760,6 +768,13 @@ export default function LijstenTab() {
     }
   }
 
+  async function saveEmoji(listId: string, emoji: string) {
+    setLists(prev => prev.map(l => l.id === listId ? { ...l, emoji } : l));
+    setCache('cache_lists', lists.map(l => l.id === listId ? { ...l, emoji } : l));
+    setEmojiPickerList(null);
+    await supabase.from('lists').update({ emoji }).eq('id', listId);
+  }
+
   async function duplicateList(item: (typeof lists)[0]) {
     if (!user || user.id === 'dev') return;
     const { data: newList } = await supabase.from('lists').insert({
@@ -983,6 +998,7 @@ export default function LijstenTab() {
                   <AnimatedCard key={item.id} item={item} index={index}
                     onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                     onDelete={() => deleteList(item.id, item.name)}
+                    onEmojiPress={() => setEmojiPickerList(item)}
                   />
                 ))}
                 {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
@@ -1001,6 +1017,7 @@ export default function LijstenTab() {
                     <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                       onDelete={() => deleteList(item.id, item.name)}
+                      onEmojiPress={() => setEmojiPickerList(item)}
                     />
                   ))}
                   {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
@@ -1600,6 +1617,45 @@ export default function LijstenTab() {
         </Pressable>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Emoji picker modal */}
+      <Modal visible={!!emojiPickerList} transparent animationType="fade" onRequestClose={() => setEmojiPickerList(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 24 }} onPress={() => setEmojiPickerList(null)}>
+          <Pressable style={{ backgroundColor: colors.white, borderRadius: 24, padding: 20, width: '100%', maxWidth: 360 }} onPress={() => {}}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Kies een icoon</Text>
+              <TouchableOpacity onPress={() => setEmojiPickerList(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Ionicons name="close" size={22} color={colors.gray400} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+              {[
+                '📝','✅','🛒','🍳','🍕','🥗','🍰','☕','🍎','🥦',
+                '🏠','🛋️','🧹','🔧','🪴','💡','🔑','📦','🖥️','📱',
+                '💼','📚','✏️','🎯','📊','💰','🧾','💳','📈','🗂️',
+                '❤️','⭐','🎉','🎁','🎵','🎬','📷','✈️','🏖️','⚽',
+                '🐶','🐱','🌸','🌿','🌙','☀️','🌈','❄️','🔥','💎',
+                '🏋️','🧘','🚴','🧠','💪','🩺','💊','🧪','🔬','🎓',
+              ].map(e => (
+                <TouchableOpacity
+                  key={e}
+                  onPress={() => emojiPickerList && saveEmoji(emojiPickerList.id, e)}
+                  style={{
+                    width: 48, height: 48, borderRadius: 12,
+                    backgroundColor: emojiPickerList?.emoji === e ? Colors.yellow + '30' : colors.gray100,
+                    justifyContent: 'center', alignItems: 'center',
+                    borderWidth: emojiPickerList?.emoji === e ? 2 : 0,
+                    borderColor: Colors.yellow,
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 24 }}>{e}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
     </GestureHandlerRootView>
   );
@@ -1649,8 +1705,8 @@ const styles = StyleSheet.create({
   skeletonList: { padding: 20 },
   tileGrid: { paddingHorizontal: 12, paddingTop: 4, paddingBottom: TAB_BAR_CLEARANCE },
   sortSticky: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 14, paddingBottom: 10 },
-  tileRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
-  tileWrap: { width: '50%', paddingHorizontal: 6 },
+  tileRow: { flexDirection: 'row', flexWrap: 'wrap' },
+  tileWrap: { width: '50%', paddingHorizontal: 6, marginBottom: 12 },
 
   // ── List tile card (white surface + tone icon) ──
   tile: { borderRadius: Radius.lg, padding: 16, height: 168, justifyContent: 'space-between' },
