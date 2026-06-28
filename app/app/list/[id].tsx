@@ -1081,26 +1081,74 @@ export default function ListDetailScreen() {
         <Modal visible={inviteModalVisible} transparent animationType="slide" onRequestClose={() => setInviteModalVisible(false)}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
             <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }} onPress={() => setInviteModalVisible(false)}>
-              <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40 }}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black, marginBottom: 6 }}>Chefje toevoegen 👨‍🍳</Text>
-                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, marginBottom: 16 }}>Voer het WhatsApp-nummer in van de persoon die je toegang wilt geven.</Text>
-                <TextInput
-                  value={invitePhone}
-                  onChangeText={t => { setInvitePhone(t); setInviteError(''); }}
-                  placeholder="Voeg een chefje toe"
-                  keyboardType="phone-pad"
-                  style={{ borderWidth: 1, borderColor: inviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black, marginBottom: 8 }}
-                  autoFocus
-                />
-                {!!inviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444', marginBottom: 8 }}>{inviteError}</Text>}
-                <TouchableOpacity
-                  onPress={sendInvite}
-                  disabled={inviting || !invitePhone.trim()}
-                  style={{ backgroundColor: inviting || !invitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
-                  activeOpacity={0.85}
-                >
-                  {inviting ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Uitnodiging sturen</Text>}
-                </TouchableOpacity>
+              <Pressable style={{ backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: 40, gap: 16 }} onPress={() => {}}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Chefje toevoegen 👨‍🍳</Text>
+
+                {/* ── Stap 1: Kopieer of stuur via WA ── */}
+                <View style={{ backgroundColor: Colors.yellow + '18', borderRadius: 14, padding: 16, gap: 10 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black }}>
+                    Stap 1 — Stuur deze uitnodiging
+                  </Text>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400, lineHeight: 19 }}>
+                    {`Hey! Ik gebruik De Sous-Chef en wil de lijst "${emoji ?? '📝'} ${name}" met je delen. Download de app en stuur me je WhatsApp-nummer, dan voeg ik je toe! 🍳\n\napp.sous-chef.nl`}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={async () => {
+                        const msg = `Hey! Ik gebruik De Sous-Chef en wil de lijst "${emoji ?? '📝'} ${name}" met je delen. Download de app en stuur me je WhatsApp-nummer, dan voeg ik je toe! 🍳\n\napp.sous-chef.nl`;
+                        await import('expo-clipboard').then(C => C.setStringAsync(msg));
+                        showToast('Gekopieerd!', 'success');
+                      }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.white, borderRadius: 10, paddingVertical: 11, borderWidth: 1, borderColor: colors.gray100 }}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="copy-outline" size={16} color={colors.black} />
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black }}>Kopieer</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => {
+                        const msg = `Hey! Ik gebruik De Sous-Chef en wil de lijst "${emoji ?? '📝'} ${name}" met je delen. Download de app en stuur me je WhatsApp-nummer, dan voeg ik je toe! 🍳\n\napp.sous-chef.nl`;
+                        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() =>
+                          Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`)
+                        );
+                      }}
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#25D366', borderRadius: 10, paddingVertical: 11 }}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="logo-whatsapp" size={16} color="#fff" />
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' }}>WhatsApp</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* ── Stap 2: Nummer invoeren ── */}
+                <View style={{ gap: 8 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black }}>
+                    Stap 2 — Voer hun nummer in
+                  </Text>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 13, color: colors.gray400 }}>
+                    Zodra ze de app hebben, voer hun WhatsApp-nummer in (bijv. 0612345678 of +31612345678).
+                  </Text>
+                  <TextInput
+                    value={invitePhone}
+                    onChangeText={t => { setInvitePhone(t); setInviteError(''); }}
+                    placeholder="+31612345678"
+                    keyboardType="phone-pad"
+                    style={{ borderWidth: 1, borderColor: inviteError ? '#EF4444' : colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontFamily: 'Inter_400Regular', fontSize: 15, color: colors.black }}
+                  />
+                  {!!inviteError && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: '#EF4444' }}>{inviteError}</Text>}
+                  <TouchableOpacity
+                    onPress={sendInvite}
+                    disabled={inviting || !invitePhone.trim()}
+                    style={{ backgroundColor: inviting || !invitePhone.trim() ? colors.gray100 : Colors.yellow, borderRadius: 12, paddingVertical: 14, alignItems: 'center' }}
+                    activeOpacity={0.85}
+                  >
+                    {inviting
+                      ? <ActivityIndicator size="small" color={Colors.black} />
+                      : <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Toevoegen</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
               </Pressable>
             </Pressable>
           </KeyboardAvoidingView>
