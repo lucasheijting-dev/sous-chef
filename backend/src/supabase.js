@@ -1402,14 +1402,19 @@ module.exports = {
   createHabitGoal,
   deleteHabitGoal,
   getAllUsersAdmin,
+  setUserBlocked,
 };
 
 async function getAllUsersAdmin() {
   const { data } = await supabase
     .from('users')
-    .select('id, whatsapp_number, message_count, onboarding_completed, calendar_provider, created_at, user_context')
+    .select('id, whatsapp_number, message_count, onboarding_completed, calendar_provider, created_at, user_context, is_blocked')
     .order('created_at', { ascending: false });
   return data ?? [];
+}
+
+async function setUserBlocked(userId, blocked) {
+  await supabase.from('users').update({ is_blocked: blocked }).eq('id', userId);
 }
 
 // ── Receipts ────────────────────────────────────────────────────────────────────

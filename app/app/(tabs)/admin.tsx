@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator, TouchableOpacity, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ type AdminUser = {
   onboarded: boolean;
   calendar: string | null;
   joined: string;
+  is_blocked: boolean;
 };
 
 type Stats = {
@@ -76,6 +77,35 @@ export default function AdminScreen() {
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = () => { setRefreshing(true); load(true); };
+
+  async function toggleBlock(u: AdminUser) {
+    const action = u.is_blocked ? 'Deblokkeren' : 'Blokkeren';
+    Alert.alert(
+      `${action}?`,
+      u.is_blocked
+        ? `${u.name ?? u.phone} kan weer berichten sturen.`
+        : `${u.name ?? u.phone} kan geen berichten meer sturen.`,
+      [
+        { text: 'Annuleer', style: 'cancel' },
+        {
+          text: action,
+          style: u.is_blocked ? 'default' : 'destructive',
+          onPress: async () => {
+            const newBlocked = !u.is_blocked;
+            setStats(prev => prev ? {
+              ...prev,
+              users: prev.users.map(x => x.id === u.id ? { ...x, is_blocked: newBlocked } : x),
+            } : prev);
+            await fetch(`${API_BASE}/admin/users/${u.id}/block?userId=${user!.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blocked: newBlocked }),
+            }).catch(() => load(true));
+          },
+        },
+      ],
+    );
+  }
 
   const bg = isDark ? '#0A0A0A' : '#F4F4F0';
   const cardBg = colors.surface;
@@ -163,10 +193,21 @@ export default function AdminScreen() {
                     <Text style={s.userMetaText}>{calIcon(u.calendar)}</Text>
                   </View>
                 </View>
-                <View style={[s.badge, { backgroundColor: u.active ? '#E8F9EF' : colors.gray100 }]}>
-                  <Text style={[s.badgeText, { color: u.active ? '#16A34A' : labelColor }]}>
-                    {u.active ? 'Actief' : 'Nieuw'}
-                  </Text>
+                <View style={{ alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  <View style={[s.badge, { backgroundColor: u.active ? '#E8F9EF' : colors.gray100 }]}>
+                    <Text style={[s.badgeText, { color: u.active ? '#16A34A' : labelColor }]}>
+                      {u.active ? 'Actief' : 'Nieuw'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => toggleBlock(u)}
+                    style={[s.badge, { backgroundColor: u.is_blocked ? '#FEE2E2' : colors.gray100 }]}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.badgeText, { color: u.is_blocked ? '#EF4444' : labelColor }]}>
+                      {u.is_blocked ? '🚫 Geblokkeerd' : 'Blokkeer'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             </View>

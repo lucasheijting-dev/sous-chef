@@ -69,6 +69,7 @@ router.get('/stats', async (req, res) => {
       onboarded:    u.onboarding_completed ?? false,
       calendar:     u.calendar_provider ?? null,
       joined:       u.created_at,
+      is_blocked:   u.is_blocked ?? false,
     }));
 
     res.json({
@@ -81,6 +82,23 @@ router.get('/stats', async (req, res) => {
     });
   } catch (err) {
     console.error('[Admin] stats error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /admin/users/:id/block  { blocked: true|false }
+router.patch('/users/:id/block', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    const me = await db.getUserById(userId);
+    if (!me || me.whatsapp_number !== LUCAS_PHONE) return res.status(403).json({ error: 'forbidden' });
+
+    const { blocked } = req.body;
+    if (typeof blocked !== 'boolean') return res.status(400).json({ error: 'blocked must be boolean' });
+    await db.setUserBlocked(req.params.id, blocked);
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

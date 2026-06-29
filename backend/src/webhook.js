@@ -34,6 +34,14 @@ router.post('/', async (req, res) => {
     const message = value.messages[0];
     const from    = message.from;
 
+    // Block check — look up user and bail early if blocked
+    const { getOrCreateUserFull } = require('./supabase');
+    const incomingUser = await getOrCreateUserFull(from);
+    if (incomingUser.is_blocked) {
+      console.log(`[Webhook] Blocked user ${from} — ignoring message`);
+      return;
+    }
+
     if (message.type === 'audio') {
       const { handleVoiceMessage } = require('./voiceHandler');
       await handleVoiceMessage({ from, mediaId: message.audio.id });
@@ -42,9 +50,7 @@ router.post('/', async (req, res) => {
 
     if (message.type === 'image') {
       const { handleImageMessage } = require('./imageHandler');
-      const { getOrCreateUserFull } = require('./supabase');
-      const user = await getOrCreateUserFull(from);
-      await handleImageMessage({ from, mediaId: message.image.id, userId: user.id, caption: message.image.caption ?? null });
+      await handleImageMessage({ from, mediaId: message.image.id, userId: incomingUser.id, caption: message.image.caption ?? null });
       return;
     }
 
@@ -57,9 +63,7 @@ router.post('/', async (req, res) => {
 
     // If message contains a URL, try to handle as recipe import first
     if (extractUrl(text)) {
-      const { getOrCreateUserFull } = require('./supabase');
-      const user = await getOrCreateUserFull(from);
-      const handled = await handleRecipeMessage({ from, text, userId: user.id });
+      const handled = await handleRecipeMessage({ from, text, userId: incomingUser.id });
       if (handled) return;
     }
 
