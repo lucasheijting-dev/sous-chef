@@ -37,7 +37,7 @@ router.post('/', async (req, res) => {
     // Block check — look up user and bail early if blocked
     const { getOrCreateUserFull } = require('./supabase');
     const incomingUser = await getOrCreateUserFull(from);
-    if (incomingUser.is_blocked) {
+    if (incomingUser.is_blocked === true) {
       console.log(`[Webhook] Blocked user ${from} — ignoring message`);
       return;
     }

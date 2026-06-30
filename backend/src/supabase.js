@@ -1406,10 +1406,18 @@ module.exports = {
 };
 
 async function getAllUsersAdmin() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('users')
     .select('id, whatsapp_number, message_count, onboarding_completed, calendar_provider, created_at, user_context, is_blocked')
     .order('created_at', { ascending: false });
+  if (error) {
+    // Fallback if is_blocked column doesn't exist yet (migration pending)
+    const { data: fallback } = await supabase
+      .from('users')
+      .select('id, whatsapp_number, message_count, onboarding_completed, calendar_provider, created_at, user_context')
+      .order('created_at', { ascending: false });
+    return (fallback ?? []).map(u => ({ ...u, is_blocked: false }));
+  }
   return data ?? [];
 }
 
