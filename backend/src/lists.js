@@ -62,6 +62,22 @@ router.delete('/recipes/:recipeId', async (req, res) => {
   }
 });
 
+// PATCH /lists/:listId/emoji?user_id=xxx — body: { emoji }
+router.patch('/:listId/emoji', async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const { user_id } = req.query;
+    const { emoji } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!emoji) return res.status(400).json({ error: 'Missing emoji' });
+    await db.updateListEmoji(listId, emoji);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Lists] Emoji update error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // PATCH /lists/items/reorder?user_id=xxx — body: [{id, sort_order}]
 router.patch('/items/reorder', async (req, res) => {
   try {

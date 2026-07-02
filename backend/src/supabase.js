@@ -169,6 +169,10 @@ async function renameList(listId, newName) {
   await supabase.from('lists').update({ name: newName }).eq('id', listId);
 }
 
+async function updateListEmoji(listId, emoji) {
+  await supabase.from('lists').update({ emoji }).eq('id', listId);
+}
+
 async function deleteList(listId) {
   const r1 = await supabase.from('list_items').delete().eq('list_id', listId);
   if (r1.error) throw new Error(`deleteList items: ${r1.error.message}`);
@@ -1277,6 +1281,7 @@ module.exports = {
   getLists,
   createList,
   renameList,
+  updateListEmoji,
   deleteList,
   addListItem,
   getListItems,
