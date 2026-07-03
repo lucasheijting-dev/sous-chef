@@ -1451,8 +1451,12 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     // ── Note ─────────────────────────────────────────────────────────────────
 
     case 'note': {
-      const body  = intent.note_body ?? originalText;
-      const title = intent.note_title ?? body.slice(0, 50);
+      const rawBody = intent.note_body ?? originalText;
+      const rawTitle = intent.note_title ?? rawBody.slice(0, 50);
+
+      // Structure the note text with Claude
+      const { structureNote } = require('./claudeParser');
+      const { title, body } = await structureNote(rawTitle, rawBody).catch(() => ({ title: rawTitle, body: rawBody }));
 
       // Check if there's an existing note that matches the topic → append instead of creating new
       const existingNotes = await db.getNotes(userId);

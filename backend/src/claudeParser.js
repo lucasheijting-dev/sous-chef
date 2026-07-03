@@ -582,4 +582,22 @@ async function parseIntent({ text, availableLists, activeHabits, calendarStreams
   }
 }
 
-module.exports = { parseIntent };
+async function structureNote(rawTitle, rawBody) {
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1024,
+    system: `Je structureert ruwe notitie-tekst naar een nette notitie met een titel en duidelijke paragrafen.
+Regels:
+- Geef een korte, beschrijvende titel (max 6 woorden)
+- Deel de inhoud op in logische paragrafen met een vetgedrukte kop (gebruik **Kop:** formaat)
+- Behoud alle informatie, verwijder niets
+- Schrijf in dezelfde taal als de invoer
+- Antwoord ALLEEN als JSON: { "title": "...", "body": "..." }`,
+    messages: [{ role: 'user', content: `Titel: ${rawTitle}\n\nTekst:\n${rawBody}` }],
+  });
+  const raw = response.content[0].text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  const parsed = JSON.parse(raw);
+  return { title: parsed.title ?? rawTitle, body: parsed.body ?? rawBody };
+}
+
+module.exports = { parseIntent, structureNote };
