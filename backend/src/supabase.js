@@ -12,7 +12,7 @@ const supabase = createClient(
 async function getOrCreateUserFull(whatsappNumber) {
   const { data: existing } = await supabase
     .from('users')
-    .select('id, onboarding_completed, message_count, user_context')
+    .select('id, onboarding_completed, message_count, user_context, is_blocked')
     .eq('whatsapp_number', whatsappNumber)
     .single();
 
@@ -21,7 +21,7 @@ async function getOrCreateUserFull(whatsappNumber) {
   const { data: created, error } = await supabase
     .from('users')
     .insert({ whatsapp_number: whatsappNumber })
-    .select('id, onboarding_completed, message_count, user_context')
+    .select('id, onboarding_completed, message_count, user_context, is_blocked')
     .single();
 
   if (error) throw new Error(`Failed to create user: ${error.message}`);

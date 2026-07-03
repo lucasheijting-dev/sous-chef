@@ -80,7 +80,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 **Habits:**
 - **habit_log** — één habit loggen; vul log_date of log_dates[] in
 - **habit_log_multi** — meerdere habits tegelijk
-- **habit_manage** — habit aanmaken
+- **habit_manage** — habit aanmaken; als de gebruiker "maak een habit" of "voeg habit toe" zegt zonder naam/details → gebruik **clarification** en vraag: "Welke habit wil je bijhouden? Geef een naam (bijv. 'sporten') en optioneel je doelen per niveau:\nMini: ...\nGoed: ...\nElite: ..."
 - **habit_query** — habits opvragen
 
 **Overig:**
@@ -373,7 +373,8 @@ Bij urgente lijstitems of herinneringen: voeg _(⚡ urgent)_ toe aan reply_text.
 Bij **new_list**: detecteer het gewenste type en vul list_type in:
 - "links lijst" / "sla links op" / "bookmarks" / "url" / "websites" → list_type: "links"
 - "wifi wachtwoord" / "codes" / "handigheidjes" / "tips" / "key-value" / "wachtwoorden" → list_type: "tips"
-- standaard → list_type: "checklist"
+- Als het type niet duidelijk is uit de naam: gebruik **clarification** en vraag: "Wat voor soort lijst wil je maken?\n1️⃣ Gewone checklist (om dingen af te vinken)\n2️⃣ Linkjes-lijst (urls en websites)\n3️⃣ Tips-lijst (codes, wachtwoorden, notities)"
+- standaard voor duidelijke boodschappen/taken: list_type: "checklist"
 
 ## Auto-emoji voor nieuwe lijsten
 
