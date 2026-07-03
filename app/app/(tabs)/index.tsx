@@ -38,7 +38,6 @@ import { SkeletonListCard } from '@/components/SkeletonCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCache, setCache } from '@/lib/cache';
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
-import { showMorningScreenNow } from '@/components/MorningScreen';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -877,14 +876,7 @@ export default function LijstenTab() {
               {pageTitle}
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={showMorningScreenNow}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ marginBottom: 4 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="sunny-outline" size={22} color={colors.gray400} />
-          </TouchableOpacity>
+
         </View>
       </View>
 
