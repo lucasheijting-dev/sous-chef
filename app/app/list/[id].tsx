@@ -398,15 +398,21 @@ export default function ListDetailScreen() {
     showToast('Lijst teruggezet', 'success');
   }
 
-  async function deleteItem(itemId: string) {
+  function deleteItem(itemId: string) {
     haptic('warning');
-    setItems(prev => prev.filter(i => i.id !== itemId));
+    const itemToDelete = items.find(i => i.id === itemId);
+    if (!itemToDelete) return;
     if (pendingDelete) {
       clearTimeout(pendingDelete.timer);
       fetch(`${API_BASE}/lists/items/${pendingDelete.item.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
       setPendingDelete(null);
     }
-    await fetch(`${API_BASE}/lists/items/${itemId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+    setItems(prev => prev.filter(i => i.id !== itemId));
+    const timer = setTimeout(() => {
+      fetch(`${API_BASE}/lists/items/${itemId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+      setPendingDelete(null);
+    }, 4000);
+    setPendingDelete({ item: itemToDelete, timer });
   }
 
   function undoDelete() {
@@ -660,15 +666,6 @@ export default function ListDetailScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={insets.top + (Platform.OS === 'ios' ? 44 : 24)}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
-        {totalCount > 0 && (
-          <View style={{ height: 3, backgroundColor: colors.gray100, overflow: 'hidden' }}>
-            <View style={{
-              height: 3,
-              width: `${progress * 100}%` as any,
-              backgroundColor: allDone ? '#4CAF50' : Colors.yellow,
-            }} />
-          </View>
-        )}
         {isGroceryList && (
           <View style={[styles.geoBanner, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
             <View style={styles.geoLeft}>

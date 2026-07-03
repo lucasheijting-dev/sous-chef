@@ -38,6 +38,7 @@ export type Note = {
   title: string | null;
   body: string;
   created_at: string;
+  updated_at?: string;
   image_url?: string | null;
 };
 

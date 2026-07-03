@@ -16,6 +16,7 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Image,
+  Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
@@ -141,7 +142,9 @@ function NoteCard({
               {item.body}
             </Text>
             <View style={styles.cardFooter}>
-              <Text style={[styles.cardDate, { color: style.date }]}>{formatDate(item.created_at)}</Text>
+              <Text style={[styles.cardDate, { color: style.date }]}>
+                {item.updated_at && item.updated_at !== item.created_at ? `Bijgewerkt ${formatDate(item.updated_at)}` : `Aangemaakt ${formatDate(item.created_at)}`}
+              </Text>
               <Ionicons name="open-outline" size={12} color={style.date} />
             </View>
           </Animated.View>
@@ -204,7 +207,7 @@ export default function NotitiesTab() {
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     const [notesRes, sharedNoteRes] = await Promise.all([
-      supabase.from('notes').select('id, user_id, title, body, created_at, image_url').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('notes').select('id, user_id, title, body, created_at, updated_at, image_url').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('note_members').select('note_id').eq('user_id', user.id),
     ]);
     if (notesRes.data) { setNotes(notesRes.data); setCache('cache_notes', notesRes.data); }
@@ -306,7 +309,11 @@ export default function NotitiesTab() {
       if (data?.image_url) {
         setNotes(prev => prev.map(n => n.id === note.id ? { ...n, image_url: data.image_url } : n));
         setSelected(prev => prev ? { ...prev, image_url: data.image_url } : null);
+      } else {
+        Alert.alert('Upload mislukt', 'Probeer het opnieuw.');
       }
+    } catch {
+      Alert.alert('Upload mislukt', 'Probeer het opnieuw.');
     } finally {
       setUploadingImage(false);
     }
@@ -383,6 +390,7 @@ export default function NotitiesTab() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           style={{ backgroundColor: colors.offWhite }}
+          keyboardDismissMode="on-drag"
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} />}
           stickySectionHeadersEnabled={false}
           renderSectionHeader={({ section }) => (
@@ -445,7 +453,9 @@ export default function NotitiesTab() {
               <TouchableOpacity onPress={() => { setSelected(null); setEditMode(false); }} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
                 <Ionicons name="close" size={18} color={colors.black} />
               </TouchableOpacity>
-              <Text style={[styles.modalDateHeader, { color: colors.gray400 }]}>{selected ? formatDate(selected.created_at) : ''}</Text>
+              <Text style={[styles.modalDateHeader, { color: colors.gray400 }]}>
+                {selected ? (selected.updated_at && selected.updated_at !== selected.created_at ? `Bijgewerkt ${formatDate(selected.updated_at)}` : `Aangemaakt ${formatDate(selected.created_at)}`) : ''}
+              </Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity
                   onPress={() => selected && Share.share({ message: `${selected.title ? selected.title + '\n\n' : ''}${selected.body}`, title: selected.title || 'Notitie' })}
@@ -468,9 +478,10 @@ export default function NotitiesTab() {
                     onPress={async () => {
                       if (!selected || !editBody.trim() || editSaving) return;
                       setEditSaving(true);
-                      await supabase.from('notes').update({ body: editBody.trim() }).eq('id', selected.id);
-                      setNotes(prev => prev.map(n => n.id === selected.id ? { ...n, body: editBody.trim() } : n));
-                      setSelected(prev => prev ? { ...prev, body: editBody.trim() } : null);
+                      const updatedAt = new Date().toISOString();
+                      await supabase.from('notes').update({ body: editBody.trim(), updated_at: updatedAt }).eq('id', selected.id);
+                      setNotes(prev => prev.map(n => n.id === selected.id ? { ...n, body: editBody.trim(), updated_at: updatedAt } : n));
+                      setSelected(prev => prev ? { ...prev, body: editBody.trim(), updated_at: updatedAt } : null);
                       setEditMode(false);
                       setEditSaving(false);
                     }}

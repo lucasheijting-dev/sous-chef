@@ -19,6 +19,8 @@ import {
   Dimensions,
   TextInput as TextInputRN,
   KeyboardAvoidingView,
+  Alert,
+  Keyboard,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
@@ -734,6 +736,7 @@ function AgendaLite() {
 
   async function saveEditEvent() {
     if (!editEvent || !editTitle.trim() || editSaving) return;
+    Keyboard.dismiss();
     setEditSaving(true);
     const dateStr = toKey(editDate);
     const timeStr = editTime
@@ -763,7 +766,7 @@ function AgendaLite() {
             {([['day', 'Dag'], ['week', 'Week'], ['calendar', 'Maand']] as const).map(([mode, label]) => (
               <TouchableOpacity
                 key={mode}
-                onPress={() => { setViewMode(mode); setDayDetailMode(false); AsyncStorage.setItem('agenda_view_mode', mode); }}
+                onPress={() => { setViewMode(mode); setDayDetailMode(false); setDeletingId(null); AsyncStorage.setItem('agenda_view_mode', mode); }}
                 style={[s.segBtn, viewMode === mode && { backgroundColor: colors.surface, ...Shadow.card }]}
                 activeOpacity={0.75}
               >
@@ -1006,8 +1009,10 @@ function AgendaLite() {
                           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
                           onLongPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            deleteEvent(e);
-                            showToast('Afspraak verwijderd', 'info');
+                            Alert.alert('Afspraak verwijderen?', e.title, [
+                              { text: 'Annuleer', style: 'cancel' },
+                              { text: 'Verwijder', style: 'destructive', onPress: () => { deleteEvent(e); showToast('Afspraak verwijderd', 'info'); } },
+                            ]);
                           }}
                           style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}
                           activeOpacity={0.75}
@@ -1046,8 +1051,10 @@ function AgendaLite() {
                               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
                               onLongPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                deleteEvent(e);
-                                showToast('Afspraak verwijderd', 'info');
+                                Alert.alert('Afspraak verwijderen?', e.title, [
+                                  { text: 'Annuleer', style: 'cancel' },
+                                  { text: 'Verwijder', style: 'destructive', onPress: () => { deleteEvent(e); showToast('Afspraak verwijderd', 'info'); } },
+                                ]);
                               }}
                               style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
                               activeOpacity={0.75}

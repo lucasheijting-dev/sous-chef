@@ -16,6 +16,7 @@ import {
   KeyboardAvoidingView,
   ActivityIndicator,
   Alert,
+  AppState,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -68,9 +69,9 @@ function utcMsFromStr(dateStr: string): number {
   return Date.UTC(y, m - 1, d);
 }
 
-// today is UTC calendar date — resets at UTC midnight (= 2am Amsterdam summer).
-// This prevents the common "just past midnight local, but still same habit day" issue.
-const today = new Date().toISOString().split('T')[0];
+function getTodayStr(): string {
+  return new Date().toISOString().split('T')[0];
+}
 
 const MONTH_START = (() => {
   const d = new Date();
@@ -82,7 +83,7 @@ const NINETY_DAYS_AGO = utcDateStr(Date.now() - 90 * 86400000);
 const STRIP_DAYS = Math.max(7, new Date().getUTCDate());
 
 function getDayStrip(count: number) {
-  const todayMs = utcMsFromStr(today);
+  const todayMs = utcMsFromStr(getTodayStr());
   return Array.from({ length: count }, (_, i) => {
     const ms = todayMs - (count - 1 - i) * 86400000;
     const d = new Date(ms);
@@ -100,7 +101,7 @@ const WEEK_DAYS_SHORT = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function dayLabel(dateKey: string): string {
-  const diff = Math.round((utcMsFromStr(today) - utcMsFromStr(dateKey)) / 86400000);
+  const diff = Math.round((utcMsFromStr(getTodayStr()) - utcMsFromStr(dateKey)) / 86400000);
   if (diff === 0) return 'Vandaag';
   if (diff === 1) return 'Gisteren';
   return new Date(utcMsFromStr(dateKey)).toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
@@ -118,10 +119,10 @@ function computeStreak(habitId: string, logs: HabitLog[], endDate: string): numb
   return streak;
 }
 
-function computeWeekScore(logs: HabitLog[]): number {
-  const weekStart = utcDateStr(utcMsFromStr(today) - 6 * 86400000);
+function computeWeekScore(logs: HabitLog[], todayStr: string): number {
+  const weekStart = utcDateStr(utcMsFromStr(todayStr) - 6 * 86400000);
   return logs
-    .filter(l => l.date >= weekStart && l.date <= today)
+    .filter(l => l.date >= weekStart && l.date <= todayStr)
     .reduce((s, l) => s + (LEVELS.find(lv => lv.key === l.level)?.pts ?? 0), 0);
 }
 
@@ -153,10 +154,10 @@ function computePerfectDays(habits: Habit[], monthLogs: HabitLog[]): number {
   return count;
 }
 
-function computeOverallStreak(habits: Habit[], logs: HabitLog[]): number {
+function computeOverallStreak(habits: Habit[], logs: HabitLog[], todayStr: string): number {
   if (habits.length === 0) return 0;
   let streak = 0;
-  let ms = utcMsFromStr(today);
+  let ms = utcMsFromStr(todayStr);
   for (let i = 0; i < 90; i++) {
     const ds = utcDateStr(ms);
     const dayLogs = logs.filter(l => l.date === ds);
@@ -205,8 +206,8 @@ function SparkLine({ habitId, logs }: { habitId: string; logs: HabitLog[] }) {
     <View style={spark.wrap}>
       {last7.map(day => {
         const log = logs.find(l => l.habit_id === habitId && l.date === day.date);
-        const isFuture = day.date > today;
-        const isToday = day.date === today;
+        const isFuture = day.date > getTodayStr();
+        const isToday = day.date === getTodayStr();
         const filled = !isFuture && !!log;
         const bg = isFuture ? 'transparent'
           : log?.level === 'elite' ? Colors.yellow
@@ -286,7 +287,7 @@ function AllDoneCard({ day }: { day: string }) {
       <LinearGradient colors={['#FCC10C', '#E5A800']} style={s.allDoneGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
         <Text style={s.allDoneEmoji}>🏆</Text>
         <Text style={s.allDoneTitle}>Perfect!</Text>
-        <Text style={s.allDoneSub}>Alle habits voltooid{day === today ? ' vandaag' : ` op ${label.toLowerCase()}`}</Text>
+        <Text style={s.allDoneSub}>Alle habits voltooid{day === getTodayStr() ? ' vandaag' : ` op ${label.toLowerCase()}`}</Text>
       </LinearGradient>
     </Animated.View>
   );
@@ -325,7 +326,7 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
   }
 
   const perfectDays = computePerfectDays(habits, monthLogs);
-  const overallStreak = computeOverallStreak(habits, monthLogs);
+  const overallStreak = computeOverallStreak(habits, monthLogs, getTodayStr());
   const daysElapsed = Math.min(todayNum, daysInMonth);
   const loggedDays = Array.from({ length: daysElapsed }, (_, i) => i + 1).filter(d => status(d) !== 'none').length;
   const completionPct = daysElapsed > 0 ? Math.round((loggedDays / daysElapsed) * 100) : 0;
@@ -369,7 +370,7 @@ function MonthOverview({ habits, monthLogs, onDayPress }: {
               style={[m.cell, day === todayNum && { backgroundColor: colors.gray100, borderRadius: 8 }]}
               onPress={() => {
                 const ds = toDateStr(day);
-                if (ds <= today) onDayPress(ds);
+                if (ds <= getTodayStr()) onDayPress(ds);
               }}
               activeOpacity={day > todayNum ? 1 : 0.7}
             >
@@ -424,13 +425,15 @@ function HabitsLite() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { toastProps, show: showToast } = useToast();
+  const [today, setToday] = useState(getTodayStr);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
-    if (!user || user.id === 'dev') { setLoading(false); return; }
+    if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     const [{ data: h }, { data: l }] = await Promise.all([
       supabase.from('habits').select('*').eq('user_id', user.id).eq('is_active', true).order('sort_order'),
       supabase.from('habit_logs').select('*').eq('user_id', user.id).eq('date', today),
@@ -439,7 +442,8 @@ function HabitsLite() {
     if (l) setLogs(l);
     if (h && l) setCache('cache_habits_lite', { habits: h, logs: l });
     setLoading(false);
-  }, [user]);
+    setRefreshing(false);
+  }, [user, today]);
 
   useEffect(() => {
     getCache<{ habits: Habit[]; logs: HabitLog[] }>('cache_habits_lite').then(d => {
@@ -447,7 +451,23 @@ function HabitsLite() {
     });
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [fetchData])
+  );
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setToday(getTodayStr());
+    });
+    return () => sub.remove();
+  }, []);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchData();
+  }
 
   async function logHabit(habit: Habit, level: 'mini' | 'good' | 'elite') {
     if (!user) return;
@@ -473,7 +493,7 @@ function HabitsLite() {
         <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14.5, color: colors.gray400, marginBottom: 3 }}>{todayLabel[0].toUpperCase() + todayLabel.slice(1)}</Text>
         <Text style={{ fontFamily: 'TitanOne_400Regular', fontSize: 27, color: colors.black, textTransform: 'uppercase', letterSpacing: 0.4 }}>Habits</Text>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }}>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: TAB_BAR_CLEARANCE }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.yellow} />}>
         {loading ? (
           <SkeletonHabitCard />
         ) : habits.length === 0 ? (
@@ -661,8 +681,8 @@ function WeekGrid({
         date: dateStr,
         dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i],
         num: new Date(dayMs).getUTCDate(),
-        isToday: dateStr === today,
-        isFuture: dateStr > today,
+        isToday: dateStr === getTodayStr(),
+        isFuture: dateStr > getTodayStr(),
       };
     });
   }, [selectedDay]);
@@ -735,12 +755,13 @@ function HabitsMain() {
   const insets = useSafeAreaInsets();
   const stripRef = useRef<FlatList>(null);
 
+  const [today, setToday] = useState(getTodayStr);
   const [habits, setHabits] = useState<Habit[]>([]);
   const [logs, setLogs] = useState<HabitLog[]>([]);
   const [monthLogs, setMonthLogs] = useState<HabitLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(today);
+  const [selectedDay, setSelectedDay] = useState(getTodayStr);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const { toastProps, show: showToast } = useToast();
 
@@ -784,10 +805,18 @@ function HabitsMain() {
 
   // Re-snap selectedDay to UTC today whenever the habits tab is focused (handles overnight app sessions)
   useFocusEffect(useCallback(() => {
-    const realToday = new Date().toISOString().split('T')[0];
+    const realToday = getTodayStr();
+    setToday(realToday);
     setSelectedDay(prev => (prev > realToday ? realToday : prev));
     fetchData();
   }, [fetchData]));
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setToday(getTodayStr());
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     setTimeout(() => stripRef.current?.scrollToEnd({ animated: false }), 100);
@@ -907,7 +936,7 @@ function HabitsMain() {
 
   // ── Derived data ─────────────────────────────────────────────────────────────
 
-  const weekScore = useMemo(() => computeWeekScore(logs), [logs]);
+  const weekScore = useMemo(() => computeWeekScore(logs, today), [logs, today]);
 
   const habitData = useMemo(() => habits.map(habit => ({
     habit,
@@ -929,7 +958,7 @@ function HabitsMain() {
   const isFutureDay = selectedDay > today;
 
   const bannerSubtitle = useMemo(() => {
-    const overallStreak = computeOverallStreak(habits, logs);
+    const overallStreak = computeOverallStreak(habits, logs, today);
     if (allDoneToday && overallStreak >= 3) return `🔥 ${overallStreak} dagen op rij!`;
     if (allDoneToday) return 'Alle habits voltooid!';
     if (overallStreak >= 7) return `🔥 ${overallStreak} days — fantastisch!`;

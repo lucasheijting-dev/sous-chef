@@ -670,8 +670,13 @@ export default function LijstenTab() {
   const activeLists = filteredSortedLists.filter(l => !(l.item_count > 0 && l.open_count === 0));
   const doneLists   = filteredSortedLists.filter(l => l.item_count > 0 && l.open_count === 0);
 
+  const [receiptError, setReceiptError] = useState(false);
+  const [pendingReceiptDelete, setPendingReceiptDelete] = useState<Receipt | null>(null);
+  const pendingReceiptDeleteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const fetchReceipts = useCallback(async () => {
     if (!user || user.id === 'dev') return;
+    setReceiptError(false);
     try {
       const [rRes, cRes] = await Promise.all([
         fetch(`${API_BASE}/receipts/${user.id}`),
@@ -680,7 +685,9 @@ export default function LijstenTab() {
       const [rData, cData] = await Promise.all([rRes.json(), cRes.json()]);
       if (Array.isArray(rData)) setReceipts(rData);
       if (Array.isArray(cData)) setReceiptCats(cData);
-    } catch {}
+    } catch {
+      setReceiptError(true);
+    }
   }, [user]);
 
   async function createReceiptCat() {
@@ -1171,7 +1178,14 @@ export default function LijstenTab() {
               )}
             </View>
 
-            {filteredReceipts.length === 0 ? (
+            {receiptError ? (
+              <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: '#EF4444' }}>Kon bonnetjes niet laden.</Text>
+                <TouchableOpacity onPress={fetchReceipts} style={{ paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.yellow, borderRadius: 20 }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: colors.black }}>Opnieuw proberen</Text>
+                </TouchableOpacity>
+              </View>
+            ) : filteredReceipts.length === 0 ? (
               <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
                 <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
                   <Ionicons name="receipt-outline" size={32} color={colors.gray400} />
@@ -1200,9 +1214,18 @@ export default function LijstenTab() {
                       onPress={() => setDetailReceipt(item)}
                       onLongPress={() => Alert.alert(item.store ?? 'Bonnetje', 'Wat wil je doen?', [
                         { text: 'Categorie wijzigen', onPress: () => setAssignModalReceipt(item) },
-                        { text: 'Verwijderen', style: 'destructive', onPress: async () => {
-                          await fetch(`${API_BASE}/receipts/${user?.id}/${item.id}`, { method: 'DELETE' });
+                        { text: 'Verwijderen', style: 'destructive', onPress: () => {
+                          if (pendingReceiptDelete) {
+                            if (pendingReceiptDeleteTimer.current) clearTimeout(pendingReceiptDeleteTimer.current);
+                            fetch(`${API_BASE}/receipts/${user?.id}/${pendingReceiptDelete.id}`, { method: 'DELETE' }).catch(() => {});
+                            setPendingReceiptDelete(null);
+                          }
                           setReceipts(prev => prev.filter(r => r.id !== item.id));
+                          setPendingReceiptDelete(item);
+                          pendingReceiptDeleteTimer.current = setTimeout(() => {
+                            fetch(`${API_BASE}/receipts/${user?.id}/${item.id}`, { method: 'DELETE' }).catch(() => {});
+                            setPendingReceiptDelete(null);
+                          }, 4000);
                         }},
                         { text: 'Annuleer', style: 'cancel' },
                       ])}
@@ -1482,6 +1505,22 @@ export default function LijstenTab() {
         <Animated.View style={[undoStyles.snackbar, { bottom: insets.bottom + 90, opacity: undoOpacity, transform: [{ translateY: undoSlide }] }]}>
           <Text style={undoStyles.snackbarText}>"{pendingListDelete?.listName}" verwijderd</Text>
           <TouchableOpacity onPress={undoListDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={undoStyles.undoBtn}>Ongedaan maken</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {pendingReceiptDelete && (
+        <Animated.View style={[undoStyles.snackbar, { bottom: insets.bottom + 90 }]}>
+          <Text style={undoStyles.snackbarText}>"{pendingReceiptDelete.store ?? 'Bonnetje'}" verwijderd</Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (pendingReceiptDeleteTimer.current) clearTimeout(pendingReceiptDeleteTimer.current);
+              setReceipts(prev => [pendingReceiptDelete, ...prev]);
+              setPendingReceiptDelete(null);
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <Text style={undoStyles.undoBtn}>Ongedaan maken</Text>
           </TouchableOpacity>
         </Animated.View>
