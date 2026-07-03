@@ -276,7 +276,7 @@ async function deleteRecurringItem(itemId) {
 async function createNote(userId, title, body) {
   const { data, error } = await supabase
     .from('notes')
-    .insert({ user_id: userId, title: title ?? body.slice(0, 50), body })
+    .insert({ user_id: userId, title: title ?? body.slice(0, 50), body, updated_at: new Date().toISOString() })
     .select('id, title')
     .single();
 
@@ -780,6 +780,7 @@ async function updateNote(noteId, title, body) {
   const update = {};
   if (title !== undefined) update.title = title;
   if (body !== undefined) update.body = body;
+  update.updated_at = new Date().toISOString();
   if (Object.keys(update).length) await supabase.from('notes').update(update).eq('id', noteId);
 }
 

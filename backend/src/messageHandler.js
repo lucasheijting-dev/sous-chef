@@ -93,18 +93,22 @@ const DAYS_NL = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijd
 
 async function sendPush(token, { title, body, data = {}, silent = false }) {
   if (!token || !token.startsWith('ExponentPushToken[')) return;
-  await fetch('https://exp.host/--/api/v2/push/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      to: token,
-      title,
-      body,
-      data,
-      priority: silent ? 'normal' : 'high',
-      ...(silent ? { _contentAvailable: true } : {}),
-    }),
-  });
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        to: token,
+        title,
+        body,
+        data,
+        priority: silent ? 'normal' : 'high',
+        ...(silent ? { _contentAvailable: true } : {}),
+      }),
+    });
+  } catch (err) {
+    console.error('[push] Failed to send push notification:', err?.message ?? err);
+  }
 }
 
 async function sendCalendarPush(userId, event) {
@@ -200,17 +204,20 @@ async function handleMessage({ from, text }) {
 
   // Greeting shortcut — smart morning summary
   if (GREETING_TRIGGERS.some(t => lc === t || lc === t + '!' || lc === t + '!!' )) {
-    if (user.onboarding_completed) {
-      const [greetLists, greetHabits, greetEvents, greetUnchecked] = await Promise.all([
-        db.getLists(userId),
-        db.getActiveHabits(userId),
-        db.getTodayEvents(userId),
-        db.getAllUncheckedItems(userId),
-      ]);
-      const reply = buildGreetingReply(greetLists, greetHabits, greetEvents, greetUnchecked);
-      session.addExchange(userId, text, reply);
-      await sendSplit(from, reply);
+    if (!user.onboarding_completed) {
+      await sendMessage(from, 'Hoi! 👋 Laten we eerst je account instellen. Wat is je naam?');
+      await db.incrementMessageCount(userId);
+      return;
     }
+    const [greetLists, greetHabits, greetEvents, greetUnchecked] = await Promise.all([
+      db.getLists(userId),
+      db.getActiveHabits(userId),
+      db.getTodayEvents(userId),
+      db.getAllUncheckedItems(userId),
+    ]);
+    const reply = buildGreetingReply(greetLists, greetHabits, greetEvents, greetUnchecked);
+    session.addExchange(userId, text, reply);
+    await sendSplit(from, reply);
     await db.incrementMessageCount(userId);
     return;
   }
