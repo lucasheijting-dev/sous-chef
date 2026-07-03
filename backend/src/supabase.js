@@ -776,8 +776,11 @@ async function appendToNote(noteId, appendText) {
   await supabase.from('notes').update({ body: newBody }).eq('id', noteId);
 }
 
-async function updateNote(noteId, newBody) {
-  await supabase.from('notes').update({ body: newBody }).eq('id', noteId);
+async function updateNote(noteId, title, body) {
+  const update = {};
+  if (title !== undefined) update.title = title;
+  if (body !== undefined) update.body = body;
+  if (Object.keys(update).length) await supabase.from('notes').update(update).eq('id', noteId);
 }
 
 // ── Extended Habit Operations ──────────────────────────────────────────────────

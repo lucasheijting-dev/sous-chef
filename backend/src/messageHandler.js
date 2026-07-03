@@ -1454,21 +1454,28 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const rawBody = intent.note_body ?? originalText;
       const rawTitle = intent.note_title ?? rawBody.slice(0, 50);
 
-      // Structure the note text with Claude
-      const { structureNote } = require('./claudeParser');
-      const { title, body } = await structureNote(rawTitle, rawBody).catch(() => ({ title: rawTitle, body: rawBody }));
-
-      // Check if there's an existing note that matches the topic → append instead of creating new
+      // Save immediately with raw text, then structure async in background
       const existingNotes = await db.getNotes(userId);
-      const matchingNote = fuzzyFindByTitle(existingNotes, title);
+      const matchingNote = fuzzyFindByTitle(existingNotes, rawTitle);
       if (matchingNote) {
-        await db.appendToNote(matchingNote.id, body);
-        return `📝 Toegevoegd aan *${matchingNote.title}*:\n\n${body}`;
+        await db.appendToNote(matchingNote.id, rawBody);
+        // Structure the updated note in background
+        const { structureNote } = require('./claudeParser');
+        const fullBody = matchingNote.body + '\n\n' + rawBody;
+        structureNote(matchingNote.title, fullBody)
+          .then(({ title, body }) => db.updateNote(matchingNote.id, title, body))
+          .catch(() => {});
+        return `📝 Toegevoegd aan *${matchingNote.title}*`;
       }
 
-      const note  = await db.createNote(userId, title, body);
+      const note = await db.createNote(userId, rawTitle, rawBody);
       undo.record(userId, 'add_note', { noteId: note.id, title: note.title });
-      return `📝 *${note.title}*\n\n${body}`;
+      // Structure in background — update note once done
+      const { structureNote } = require('./claudeParser');
+      structureNote(rawTitle, rawBody)
+        .then(({ title, body }) => db.updateNote(note.id, title, body))
+        .catch(() => {});
+      return `📝 *${note.title}* opgeslagen`;
     }
 
     // ── Update (replace) note body ───────────────────────────────────────────
