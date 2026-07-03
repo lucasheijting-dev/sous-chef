@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+// DraggableFlatList temporarily replaced with FlatList to diagnose rendering issue
 import {
   View,
   Text,
@@ -24,7 +24,7 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+// GestureHandlerRootView removed with DraggableFlatList
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -98,7 +98,6 @@ function SwipeableItem({
   tapToEdit,
   onAddPhoto,
   onViewImage,
-  drag,
 }: {
   item: ListItem;
   onToggle: () => void;
@@ -110,7 +109,6 @@ function SwipeableItem({
   tapToEdit?: boolean;
   onAddPhoto?: () => void;
   onViewImage?: (url: string) => void;
-  drag?: () => void;
 }) {
   const { colors } = useTheme();
   const [editText, setEditText] = useState(item.text);
@@ -170,17 +168,6 @@ function SwipeableItem({
                 ? <Image source={{ uri: item.image_url }} style={{ width: 26, height: 26, borderRadius: 5 }} />
                 : <Ionicons name="camera-outline" size={16} color={colors.gray400} />
               }
-            </TouchableOpacity>
-          )}
-          {!isEditing && (
-            <TouchableOpacity
-              onLongPress={drag}
-              delayLongPress={150}
-              disabled={!drag || item.checked}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.6}
-            >
-              <Ionicons name="reorder-three" size={18} color={drag && !item.checked ? colors.gray400 : colors.gray200} />
             </TouchableOpacity>
           )}
         </Pressable>
@@ -249,9 +236,6 @@ export default function ListDetailScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [doneExpanded, setDoneExpanded] = useState(true);
 
-  const prevItemCount = useRef(0);
-  const newItemAnim = useRef(new Animated.Value(1)).current;
-  const newItemSlide = useRef(new Animated.Value(0)).current;
 
   const [batchDeleteVisible, setBatchDeleteVisible] = useState(false);
   const batchDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -273,6 +257,7 @@ export default function ListDetailScreen() {
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [inviteUrlLoading, setInviteUrlLoading] = useState(false);
+  const [inviteError, setInviteError] = useState(false);
 
   const [recipeModalVisible, setRecipeModalVisible] = useState(false);
   const [recipeUrl, setRecipeUrl] = useState('');
@@ -348,7 +333,6 @@ export default function ListDetailScreen() {
       .from('list_items')
       .select('*')
       .eq('list_id', id)
-      .order('sort_order', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: true });
     if (data) {
       // Fetch recipe sources separately so a missing FK doesn't kill the main query
@@ -365,15 +349,6 @@ export default function ListDetailScreen() {
         list_item_sources: sourceMap.has(item.id) ? [sourceMap.get(item.id)] : [],
       }));
 
-      if (enriched.length > prevItemCount.current && prevItemCount.current > 0) {
-        newItemAnim.setValue(0);
-        newItemSlide.setValue(40);
-        Animated.parallel([
-          Animated.timing(newItemAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-          Animated.timing(newItemSlide, { toValue: 0, duration: 280, useNativeDriver: true }),
-        ]).start();
-      }
-      prevItemCount.current = enriched.length;
       setItems(enriched as any);
     }
     setLoading(false);
@@ -444,20 +419,7 @@ export default function ListDetailScreen() {
     setPendingDelete(null);
   }
 
-  function handleDragEnd({ data }: { data: any[] }) {
-    const realItems = data.filter((d: any) => !d.type && d.id !== '__done_header__');
-    const uncheckedItems = realItems.filter((d: any) => !d.checked);
-    const checkedItems = realItems.filter((d: any) => d.checked);
-    setItems([...uncheckedItems, ...checkedItems]);
-    const updates = uncheckedItems.map((item: any, idx: number) => ({ id: item.id, sort_order: idx }));
-    if (updates.length > 0 && user?.id) {
-      fetch(`${API_BASE}/lists/items/reorder?user_id=${user.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      }).catch(() => {});
-    }
-  }
+
 
   async function addPhotoToItem(itemId: string) {
     if (!user || uploadingImageItemId) return;
@@ -537,14 +499,21 @@ export default function ListDetailScreen() {
   async function openInviteModal() {
     setInviteModalVisible(true);
     setInviteUrl('');
+    setInviteError(false);
     setInviteUrlLoading(true);
     try {
       const res = await fetch(
         `${API_BASE}/sharing/invite-link?list_id=${id}&user_id=${user!.id}&list_name=${encodeURIComponent(name ?? '')}&list_emoji=${encodeURIComponent(emoji ?? '📝')}`
       );
       const data = await res.json();
-      setInviteUrl(data.url ?? '');
-    } catch { /* silent, user can retry */ }
+      if (data.url) {
+        setInviteUrl(data.url);
+      } else {
+        setInviteError(true);
+      }
+    } catch {
+      setInviteError(true);
+    }
     finally { setInviteUrlLoading(false); }
   }
 
@@ -687,7 +656,7 @@ export default function ListDetailScreen() {
   if (doneExpanded) flatItems.push(...filteredChecked);
 
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <View style={styles.root}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={insets.top + (Platform.OS === 'ios' ? 44 : 24)}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
@@ -779,11 +748,12 @@ export default function ListDetailScreen() {
             <Ionicons name="people-outline" size={13} color={colors.gray400} />
             {members.map(m => {
               const memberName = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
+              const memberPhone = m.users?.whatsapp_number;
               const initials = memberName.slice(0, 2).toUpperCase();
               return (
-                <View key={m.user_id} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}>
+                <TouchableOpacity key={m.user_id} onLongPress={() => Alert.alert(memberName, memberPhone ?? '')} activeOpacity={0.8} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -796,13 +766,11 @@ export default function ListDetailScreen() {
         ) : (
           <View style={{ flex: 1 }}>
           <View style={[styles.itemCard, { backgroundColor: colors.surface }, Platform.OS === 'android' && { borderRadius: 0, overflow: 'visible', elevation: 0 }]}>
-          <DraggableFlatList
+          <FlatList
             data={flatItems}
             keyExtractor={(i) => i.id}
             style={{ flex: 1 }}
             contentContainerStyle={styles.list}
-            onDragEnd={handleDragEnd}
-            activationDistance={8}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
             }
@@ -833,8 +801,7 @@ export default function ListDetailScreen() {
                 </View>
               )
             }
-            renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<any>) => {
-              const index = getIndex() ?? 0;
+            renderItem={({ item, index }: { item: any; index: number }) => {
               if (item.type === 'recipe_header') {
                 return (
                   <View style={[styles.recipeGroupHeader, { borderBottomColor: colors.gray100 }]}>
@@ -869,31 +836,22 @@ export default function ListDetailScreen() {
               if (listType === 'links') {
                 return <LinkItemRow item={item} colors={colors} />;
               }
-              const isLastItem = index === flatItems.length - 1;
               const isTips = listType === 'tips';
-              const isDraggable = !item.checked && !isTips && listType !== 'links';
-              const itemView = (
-                <ScaleDecorator>
-                  <SwipeableItem
-                    item={item}
-                    onToggle={() => toggleItem(item)}
-                    onDelete={() => deleteItem(item.id)}
-                    onLongPress={() => setEditingItemId(item.id)}
-                    editingItemId={editingItemId}
-                    onEditSubmit={saveInlineEdit}
-                    isFirst={index === 0}
-                    tapToEdit={isTips}
-                    onAddPhoto={() => addPhotoToItem(item.id)}
-                    onViewImage={setImageViewUrl}
-                    drag={isDraggable ? drag : undefined}
-                  />
-                </ScaleDecorator>
+              return (
+                <SwipeableItem
+                  item={item}
+                  onToggle={() => toggleItem(item)}
+                  onDelete={() => deleteItem(item.id)}
+                  onLongPress={() => setEditingItemId(item.id)}
+                  editingItemId={editingItemId}
+                  onEditSubmit={saveInlineEdit}
+                  isFirst={index === 0}
+                  tapToEdit={isTips}
+                  onAddPhoto={() => addPhotoToItem(item.id)}
+                  onViewImage={setImageViewUrl}
+                />
               );
-              return isLastItem ? (
-                <Animated.View style={{ opacity: newItemAnim, transform: [{ translateX: newItemSlide }] }}>
-                  {itemView}
-                </Animated.View>
-              ) : itemView;
+
             }}
           />
           </View>
@@ -901,9 +859,11 @@ export default function ListDetailScreen() {
         )}
 
         <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-          <TouchableOpacity onPress={() => setRecipeModalVisible(true)} style={[styles.recipeImportBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.7}>
-            <Text style={{ fontSize: 20 }}>🍽️</Text>
-          </TouchableOpacity>
+          {isGroceryList && (
+            <TouchableOpacity onPress={() => setRecipeModalVisible(true)} style={[styles.recipeImportBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.7}>
+              <Text style={{ fontSize: 20 }}>🍽️</Text>
+            </TouchableOpacity>
+          )}
           <View style={[styles.addPill, { backgroundColor: colors.gray100, flex: 1 }]}>
             <TextInput
               style={[styles.addInput, { color: colors.black }]}
@@ -1087,6 +1047,13 @@ export default function ListDetailScreen() {
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
                   <ActivityIndicator color={Colors.yellow} />
                 </View>
+              ) : inviteError ? (
+                <View style={{ alignItems: 'center', gap: 12, paddingVertical: 8 }}>
+                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: '#EF4444', textAlign: 'center' }}>Kon geen uitnodigingslink genereren.</Text>
+                  <TouchableOpacity onPress={openInviteModal} style={{ paddingHorizontal: 20, paddingVertical: 10, backgroundColor: Colors.yellow, borderRadius: 20 }} activeOpacity={0.8}>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.black }}>Opnieuw proberen</Text>
+                  </TouchableOpacity>
+                </View>
               ) : inviteUrl ? (
                 <>
                   {/* Link preview */}
@@ -1126,20 +1093,13 @@ export default function ListDetailScreen() {
                     Link is 7 dagen geldig
                   </Text>
                 </>
-              ) : (
-                <TouchableOpacity
-                  onPress={openInviteModal}
-                  style={{ backgroundColor: Colors.yellow, borderRadius: 14, paddingVertical: 15, alignItems: 'center' }}
-                >
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black }}>Probeer opnieuw</Text>
-                </TouchableOpacity>
-              )}
+              ) : null}
             </Pressable>
           </Pressable>
         </Modal>
       </View>
       </KeyboardAvoidingView>
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
@@ -1175,7 +1135,7 @@ const styles = StyleSheet.create({
   geoTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 14, marginBottom: 2 },
   geoSub: { fontFamily: 'Inter_300Light', fontSize: 12 },
   skeletonList: { padding: 20 },
-  list: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 20 },
+  list: { paddingHorizontal: 10, paddingTop: 16, paddingBottom: 32 },
   sectionLabel: {
     fontFamily: 'Inter_600SemiBold', fontSize: 11,
     color: Colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12,
@@ -1212,7 +1172,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90D8', borderRadius: 0, width: 72,
     justifyContent: 'center', alignItems: 'center', marginBottom: 8, marginRight: 4,
   },
-  itemCard: { flex: 1, marginHorizontal: 18, marginTop: 14, marginBottom: 8, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
+  itemCard: { flex: 1, marginHorizontal: 16, marginTop: 16, marginBottom: 10, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
   emptyContainer: { alignItems: 'center', paddingVertical: 60, gap: 12, paddingHorizontal: 32 },
   emptyIconBox: {
     width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.gray100,

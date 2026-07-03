@@ -15,6 +15,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,7 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
-import { Habit, HabitLog, HabitGoal } from '@/lib/types';
+import { Habit, HabitLog } from '@/lib/types';
 import { Colors, Radius, Shadow, TAB_BAR_CLEARANCE } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
@@ -30,6 +31,7 @@ import { SkeletonHabitCard } from '@/components/SkeletonCard';
 import { Toast, useToast } from '@/components/Toast';
 import Confetti from '@/components/Confetti';
 import { getCache, setCache } from '@/lib/cache';
+import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
@@ -751,7 +753,7 @@ function HabitsMain() {
   const [quickAddGood, setQuickAddGood] = useState('');
   const [quickAddElite, setQuickAddElite] = useState('');
   const [quickAddSaving, setQuickAddSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'stats' | 'goals'>('day');
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [detailHabit, setDetailHabit] = useState<Habit | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -975,7 +977,7 @@ function HabitsMain() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }}>
               {habits.length > 0 && (
                 <View style={{ flexDirection: 'row', backgroundColor: colors.gray100, borderRadius: 10, padding: 2 }}>
-                  {(['day', 'week', 'stats', 'goals'] as const).map(m => (
+                  {(['day', 'week'] as const).map(m => (
                     <TouchableOpacity
                       key={m}
                       onPress={() => { haptic('light'); setViewMode(m); }}
@@ -983,7 +985,7 @@ function HabitsMain() {
                       activeOpacity={0.75}
                     >
                       <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: viewMode === m ? colors.black : colors.gray400 }}>
-                        {m === 'day' ? 'Dag' : m === 'week' ? 'Week' : m === 'stats' ? 'Stats' : 'Doelen'}
+                        {m === 'day' ? 'Dag' : 'Week'}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -994,7 +996,7 @@ function HabitsMain() {
         </View>
 
         {/* ── Day strip (sc-weekstrip) ── */}
-        {habits.length > 0 && viewMode !== 'stats' && viewMode !== 'goals' && (
+        {habits.length > 0 && (
           <FlatList
             ref={stripRef}
             data={strip}
@@ -1036,32 +1038,14 @@ function HabitsMain() {
         )}
 
         {habits.length === 0 ? (
-          <View style={s.emptyContainer}>
-            <View style={[s.emptyIcon, { backgroundColor: colors.gray100 }]}>
-              <BreathingEmoji emoji="🏋️" size={36} />
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80, gap: 12 }}>
+            <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 32 }}>⚡</Text>
             </View>
-            <Text style={[s.emptyTitle, { color: colors.black }]}>Begin met habits</Text>
-            <Text style={[s.emptyText, { color: colors.gray400 }]}>
-              Voeg een habit toe via de + knop of via WhatsApp.
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Nog geen habits</Text>
+            <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.gray400, textAlign: 'center', paddingHorizontal: 40 }}>
+              Stuur een bericht via WhatsApp om je eerste habit toe te voegen.
             </Text>
-            <View style={[s.emptyStep, { backgroundColor: colors.white }]}>
-              <Text style={s.emptyStepNum}>+</Text>
-              <Text style={[s.emptyStepText, { color: colors.black }]}>
-                Tik op de gele + knop rechtsonder
-              </Text>
-            </View>
-            <View style={[s.emptyStep, { backgroundColor: colors.white }]}>
-              <Text style={s.emptyStepNum}>💬</Text>
-              <Text style={[s.emptyStepText, { color: colors.black }]}>
-                Of stuur "voeg habit toe: mediteren" via WhatsApp
-              </Text>
-            </View>
-            <View style={[s.emptyStep, { backgroundColor: colors.white }]}>
-              <Text style={s.emptyStepNum}>🔥</Text>
-              <Text style={[s.emptyStepText, { color: colors.black }]}>
-                Log dagelijks en bouw je streak op
-              </Text>
-            </View>
           </View>
         ) : (
           <Animated.View style={[s.habitsList, { opacity: fadeAnim }]}>
@@ -1076,12 +1060,21 @@ function HabitsMain() {
 
             {viewMode === 'day' ? habitData.map(({ habit, log }) => (
               <View key={habit.id} style={{ marginBottom: 10 }}>
-                <Pressable
-                  onLongPress={() => { haptic('medium'); setDetailHabit(habit); }}
-                  onPress={() => setDetailHabit(habit)}
+                <SwipeDeleteRow
+                  borderRadius={Radius.lg}
+                  deleteWidth={80}
+                  onDelete={() => Alert.alert('Habit verwijderen?', `"${habit.name}" wordt permanent verwijderd.`, [
+                    { text: 'Annuleer', style: 'cancel' },
+                    { text: 'Verwijder', style: 'destructive', onPress: () => deleteHabit(habit.id) },
+                  ])}
                 >
-                  <HabitBarCard habit={habit} log={log} isToday={selectedDay === today} />
-                </Pressable>
+                  <Pressable
+                    onLongPress={() => { haptic('medium'); setDetailHabit(habit); }}
+                    onPress={() => setDetailHabit(habit)}
+                  >
+                    <HabitBarCard habit={habit} log={log} isToday={selectedDay === today} />
+                  </Pressable>
+                </SwipeDeleteRow>
               </View>
             )) : (
               <>
@@ -1125,13 +1118,6 @@ function HabitsMain() {
           </Animated.View>
         )}
 
-        {viewMode === 'stats' && (
-          <StatsView habits={habits} logs={logs} colors={colors} isDark={isDark} />
-        )}
-
-        {viewMode === 'goals' && user && (
-          <GoalsView habits={habits} userId={user.id} colors={colors} isDark={isDark} insets={insets} />
-        )}
       </ScrollView>
 
       <Toast {...toastProps} />
@@ -1311,459 +1297,6 @@ function HabitsMain() {
     </View>
   );
 }
-
-// ── Goals View ────────────────────────────────────────────────────────────────
-
-const MONTH_LABEL = new Date().toLocaleDateString('nl-NL', { month: 'long' });
-const YEAR_LABEL  = String(new Date().getUTCFullYear());
-const YEAR_START  = `${new Date().getUTCFullYear()}-01-01`;
-
-function GoalsView({ habits, userId, colors, isDark, insets }: {
-  habits: Habit[];
-  userId: string;
-  colors: any;
-  isDark: boolean;
-  insets: { bottom: number };
-}) {
-  const [goals, setGoals]       = useState<HabitGoal[]>([]);
-  const [goalLogs, setGoalLogs] = useState<HabitLog[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-
-  // create form
-  const [selHabitId, setSelHabitId]   = useState('');
-  const [period, setPeriod]           = useState<'month' | 'year'>('month');
-  const [goalType, setGoalType]       = useState<'frequency' | 'elite_count'>('frequency');
-  const [targetStr, setTargetStr]     = useState('');
-  const [saving, setSaving]           = useState(false);
-
-  useFocusEffect(useCallback(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const [goalsRes, logsRes] = await Promise.all([
-          fetch(`${API_BASE}/habits/goals?user_id=${userId}`).then(r => r.json()),
-          supabase
-            .from('habit_logs')
-            .select('habit_id, date, level')
-            .eq('user_id', userId)
-            .gte('date', YEAR_START),
-        ]);
-        if (!alive) return;
-        setGoals(Array.isArray(goalsRes) ? goalsRes : []);
-        setGoalLogs((logsRes.data ?? []) as HabitLog[]);
-      } catch { /* silent */ }
-      finally { if (alive) setLoading(false); }
-    })();
-    return () => { alive = false; };
-  }, [userId]));
-
-  function getProgress(goal: HabitGoal): { current: number } {
-    const periodStart = goal.period === 'month' ? MONTH_START : YEAR_START;
-    const relevant = goalLogs.filter(l =>
-      l.habit_id === goal.habit_id && l.date >= periodStart && l.date <= today
-    );
-    const current = goal.goal_type === 'frequency'
-      ? relevant.filter(l => l.level === 'mini' || l.level === 'good' || l.level === 'elite').length
-      : relevant.filter(l => l.level === 'elite').length;
-    return { current };
-  }
-
-  async function saveGoal() {
-    const t = parseInt(targetStr, 10);
-    if (!selHabitId || !t || t < 1) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/habits/goals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, habit_id: selHabitId, period, goal_type: goalType, target: t }),
-      });
-      const newGoal = await res.json();
-      setGoals(prev => [newGoal, ...prev]);
-      setShowCreate(false);
-      setSelHabitId(''); setPeriod('month'); setGoalType('frequency'); setTargetStr('');
-    } finally { setSaving(false); }
-  }
-
-  async function removeGoal(id: string) {
-    haptic('light');
-    setGoals(prev => prev.filter(g => g.id !== id));
-    await fetch(`${API_BASE}/habits/goals/${id}?user_id=${userId}`, { method: 'DELETE' }).catch(() => {});
-  }
-
-  const bg = isDark ? '#0A0A0A' : '#F4F4F0';
-
-  if (loading) {
-    return <ActivityIndicator color={Colors.yellow} style={{ marginTop: 40 }} />;
-  }
-
-  return (
-    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12 }}>
-      {goals.length === 0 && (
-        <View style={[g.emptyBox, { backgroundColor: colors.surface }]}>
-          <Text style={g.emptyEmoji}>🎯</Text>
-          <Text style={[g.emptyTitle, { color: colors.black }]}>Nog geen doelen</Text>
-          <Text style={[g.emptyText, { color: colors.gray400 }]}>
-            Stel een maand- of jaardoel in voor een habit.
-          </Text>
-        </View>
-      )}
-
-      {goals.map(goal => {
-        const { current } = getProgress(goal);
-        const pct = Math.min(current / goal.target, 1);
-        const done = pct >= 1;
-        const periodLabel = goal.period === 'month' ? MONTH_LABEL : YEAR_LABEL;
-        const typeLabel   = goal.goal_type === 'frequency' ? 'keer gedaan' : 'keer elite 🏆';
-        const habitName   = goal.habits?.name ?? '—';
-
-        return (
-          <View key={goal.id} style={[g.card, { backgroundColor: colors.surface }]}>
-            <View style={g.cardHeader}>
-              <View style={g.cardTitles}>
-                <Text style={[g.habitName, { color: colors.black }]} numberOfLines={1}>{habitName}</Text>
-                <Text style={[g.goalDesc, { color: colors.gray400 }]}>
-                  {`${current} / ${goal.target} ${typeLabel} · ${periodLabel}`}
-                </Text>
-              </View>
-              <View style={[g.periodBadge, { backgroundColor: done ? Colors.yellow + '30' : isDark ? '#1A1A1A' : '#F0F0EC' }]}>
-                <Text style={[g.periodText, { color: done ? Colors.yellow : colors.gray400 }]}>
-                  {done ? '✓ Gehaald' : goal.period === 'month' ? 'Maand' : 'Jaar'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={[g.bar, { backgroundColor: isDark ? '#1A1A1A' : '#EBEBEB' }]}>
-              <View style={[g.barFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: done ? Colors.yellow : '#22C55E' }]} />
-            </View>
-            <View style={g.barFooter}>
-              <Text style={[g.barPct, { color: colors.gray400 }]}>{Math.round(pct * 100)}%</Text>
-              <TouchableOpacity onPress={() => removeGoal(goal.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Ionicons name="trash-outline" size={16} color={colors.gray400} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        );
-      })}
-
-      {/* Add button */}
-      <TouchableOpacity
-        style={[g.addBtn, { backgroundColor: Colors.yellow }]}
-        onPress={() => setShowCreate(true)}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="add" size={20} color={Colors.black} />
-        <Text style={g.addBtnText}>Doel toevoegen</Text>
-      </TouchableOpacity>
-
-      <View style={{ height: insets.bottom + 80 }} />
-
-      {/* Create modal */}
-      <Modal visible={showCreate} transparent animationType="slide" onRequestClose={() => setShowCreate(false)}>
-        <Pressable style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }} onPress={() => setShowCreate(false)}>
-          <Pressable style={[g.sheet, { backgroundColor: colors.white, paddingBottom: insets.bottom + 16 }]} onPress={() => {}}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-              <Text style={[g.sheetTitle, { color: colors.black }]}>Nieuw doel</Text>
-
-              {/* Habit picker */}
-              <Text style={[g.label, { color: colors.gray400 }]}>HABIT</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {habits.map(h => (
-                    <TouchableOpacity
-                      key={h.id}
-                      onPress={() => setSelHabitId(h.id)}
-                      style={[g.habitChip, {
-                        backgroundColor: selHabitId === h.id ? Colors.yellow : isDark ? '#1A1A1A' : '#F0F0EC',
-                        borderColor: selHabitId === h.id ? Colors.yellow : 'transparent',
-                      }]}
-                    >
-                      <Text style={[g.habitChipText, { color: selHabitId === h.id ? Colors.black : colors.black }]}>{h.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </ScrollView>
-
-              {/* Period */}
-              <Text style={[g.label, { color: colors.gray400 }]}>PERIODE</Text>
-              <View style={[g.segmented, { backgroundColor: isDark ? '#1A1A1A' : '#F0F0EC', marginBottom: 16 }]}>
-                {(['month', 'year'] as const).map(p => (
-                  <TouchableOpacity
-                    key={p}
-                    onPress={() => setPeriod(p)}
-                    style={[g.seg, { backgroundColor: period === p ? colors.surface : 'transparent' }]}
-                  >
-                    <Text style={[g.segText, { color: period === p ? colors.black : colors.gray400 }]}>
-                      {p === 'month' ? 'Deze maand' : 'Dit jaar'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Goal type */}
-              <Text style={[g.label, { color: colors.gray400 }]}>TYPE</Text>
-              <View style={[g.segmented, { backgroundColor: isDark ? '#1A1A1A' : '#F0F0EC', marginBottom: 16 }]}>
-                {([
-                  { key: 'frequency', label: 'Frequentie' },
-                  { key: 'elite_count', label: 'Elite tellen' },
-                ] as const).map(t => (
-                  <TouchableOpacity
-                    key={t.key}
-                    onPress={() => setGoalType(t.key)}
-                    style={[g.seg, { backgroundColor: goalType === t.key ? colors.surface : 'transparent' }]}
-                  >
-                    <Text style={[g.segText, { color: goalType === t.key ? colors.black : colors.gray400 }]}>{t.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              {/* Target number */}
-              <Text style={[g.label, { color: colors.gray400 }]}>DOEL (AANTAL)</Text>
-              <TextInput
-                style={[g.targetInput, { backgroundColor: isDark ? '#1A1A1A' : '#F0F0EC', color: colors.black }]}
-                value={targetStr}
-                onChangeText={setTargetStr}
-                keyboardType="number-pad"
-                placeholder="bijv. 20"
-                placeholderTextColor={colors.gray400}
-                returnKeyType="done"
-              />
-
-              <TouchableOpacity
-                style={[g.saveBtn, { backgroundColor: selHabitId && targetStr ? Colors.yellow : colors.gray100, marginTop: 20 }]}
-                onPress={saveGoal}
-                disabled={!selHabitId || !targetStr || saving}
-                activeOpacity={0.8}
-              >
-                {saving
-                  ? <ActivityIndicator color={Colors.black} />
-                  : <Text style={[g.saveBtnText, { color: selHabitId && targetStr ? Colors.black : colors.gray400 }]}>Opslaan</Text>
-                }
-              </TouchableOpacity>
-            </KeyboardAvoidingView>
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </View>
-  );
-}
-
-const g = StyleSheet.create({
-  emptyBox: { borderRadius: Radius.lg, padding: 32, alignItems: 'center', marginBottom: 16 },
-  emptyEmoji: { fontSize: 40, marginBottom: 12 },
-  emptyTitle: { fontFamily: 'Inter_700Bold', fontSize: 18, marginBottom: 6 },
-  emptyText: { fontFamily: 'Inter_300Light', fontSize: 14, textAlign: 'center', lineHeight: 20 },
-
-  card: { borderRadius: Radius.lg, padding: 16, marginBottom: 10 },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12, gap: 8 },
-  cardTitles: { flex: 1 },
-  habitName: { fontFamily: 'Inter_700Bold', fontSize: 15, marginBottom: 2 },
-  goalDesc: { fontFamily: 'Inter_300Light', fontSize: 12, lineHeight: 17 },
-  periodBadge: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4, flexShrink: 0 },
-  periodText: { fontFamily: 'Inter_600SemiBold', fontSize: 11 },
-
-  bar: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 6 },
-  barFill: { height: '100%', borderRadius: 4 },
-  barFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  barPct: { fontFamily: 'Inter_600SemiBold', fontSize: 12 },
-
-  addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: Radius.pill, paddingVertical: 14, marginTop: 4 },
-  addBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },
-
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, gap: 0 },
-  sheetTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, marginBottom: 20 },
-  label: { fontFamily: 'Inter_600SemiBold', fontSize: 11, letterSpacing: 0.8, marginBottom: 8 },
-
-  habitChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: Radius.pill, borderWidth: 1.5 },
-  habitChipText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-
-  segmented: { flexDirection: 'row', borderRadius: 10, padding: 3 },
-  seg: { flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
-  segText: { fontFamily: 'Inter_600SemiBold', fontSize: 13 },
-
-  targetInput: { borderRadius: Radius.md, paddingHorizontal: 16, paddingVertical: 14, fontFamily: 'Inter_400Regular', fontSize: 16 },
-  saveBtn: { borderRadius: Radius.pill, paddingVertical: 16, alignItems: 'center' },
-  saveBtnText: { fontFamily: 'Inter_700Bold', fontSize: 16 },
-});
-
-// ── Stats View ────────────────────────────────────────────────────────────────
-
-const LEVEL_ORDER = ['elite', 'good', 'mini', 'skip', 'not_done'] as const;
-const LEVEL_META: Record<string, { color: string; label: string }> = {
-  elite:    { color: Colors.yellow,  label: 'Elite'    },
-  good:     { color: '#A9AFB7',      label: 'Good'     },
-  mini:     { color: '#22C55E',      label: 'Mini'     },
-  skip:     { color: '#3B82F6',      label: 'Skip'     },
-  not_done: { color: '#EF4444',      label: 'Niet'     },
-};
-
-function computeHabitStreak(habitId: string, logs: HabitLog[]): number {
-  let ms = utcMsFromStr(today);
-  let streak = 0;
-  for (let i = 0; i < 365; i++) {
-    const ds = utcDateStr(ms);
-    const log = logs.find(l => l.habit_id === habitId && l.date === ds);
-    if (!log || log.level === 'not_done') break;
-    streak++;
-    ms -= 86400000;
-  }
-  return streak;
-}
-
-function computeBestStreak(habitId: string, logs: HabitLog[]): number {
-  const habitLogs = logs
-    .filter(l => l.habit_id === habitId && l.level !== 'not_done')
-    .map(l => l.date)
-    .sort();
-  let best = 0, cur = 0;
-  let prev: string | null = null;
-  for (const d of habitLogs) {
-    if (prev && utcMsFromStr(d) - utcMsFromStr(prev) === 86400000) {
-      cur++;
-    } else {
-      cur = 1;
-    }
-    best = Math.max(best, cur);
-    prev = d;
-  }
-  return best;
-}
-
-function bestDayOfWeek(habitId: string, logs: HabitLog[]): string {
-  const counts = [0, 0, 0, 0, 0, 0, 0]; // Ma=0..Zo=6
-  logs.filter(l => l.habit_id === habitId && (l.level === 'good' || l.level === 'elite'))
-    .forEach(l => {
-      const dow = (new Date(utcMsFromStr(l.date)).getUTCDay() + 6) % 7;
-      counts[dow]++;
-    });
-  const max = Math.max(...counts);
-  if (max === 0) return '—';
-  return WEEK_DAYS_SHORT[counts.indexOf(max)];
-}
-
-function StatsView({ habits, logs, colors, isDark }: {
-  habits: Habit[]; logs: HabitLog[]; colors: any; isDark: boolean;
-}) {
-  const totalDays = 90;
-
-  const habitStats = habits.map(h => {
-    const hLogs = logs.filter(l => l.habit_id === h.id);
-    const counts: Record<string, number> = { mini: 0, good: 0, elite: 0, skip: 0, not_done: 0 };
-    hLogs.forEach(l => { if (l.level in counts) counts[l.level]++; });
-    const logged = counts.mini + counts.good + counts.elite;
-    const eliteRate = logged > 0 ? Math.round((counts.elite / logged) * 100) : 0;
-    const streak = computeHabitStreak(h.id, logs);
-    const bestStreak = computeBestStreak(h.id, logs);
-    const best = bestDayOfWeek(h.id, logs);
-    const consistency = Math.round((logged / totalDays) * 100);
-    return { habit: h, counts, logged, eliteRate, streak, bestStreak, best, consistency };
-  });
-
-  const totalLogged = habitStats.reduce((s, h) => s + h.logged, 0);
-  const mostConsistent = habitStats.length > 0
-    ? habitStats.reduce((a, b) => a.consistency > b.consistency ? a : b)
-    : null;
-
-  const LIGHT = isDark ? LEVEL_COLOR_LIGHT_DARK : LEVEL_COLOR_LIGHT_LIGHT;
-
-  return (
-    <ScrollView contentContainerStyle={{ padding: 18, paddingBottom: 160, gap: 12 }} showsVerticalScrollIndicator={false}>
-      {/* ── Overall summary ── */}
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={[st.sumCard, { backgroundColor: colors.surface, flex: 1 }]}>
-          <Text style={[st.sumNum, { color: Colors.yellow }]}>{totalLogged}</Text>
-          <Text style={[st.sumLbl, { color: colors.gray400 }]}>Logs (90d)</Text>
-        </View>
-        <View style={[st.sumCard, { backgroundColor: colors.surface, flex: 1 }]}>
-          <Text style={[st.sumNum, { color: '#22C55E' }]}>{mostConsistent?.consistency ?? 0}%</Text>
-          <Text style={[st.sumLbl, { color: colors.gray400 }]} numberOfLines={1}>
-            {mostConsistent ? mostConsistent.habit.name : '—'}
-          </Text>
-        </View>
-      </View>
-
-      {/* ── Per habit ── */}
-      {habitStats.map(({ habit, counts, logged, eliteRate, streak, bestStreak, best, consistency }) => {
-        const total = counts.mini + counts.good + counts.elite + counts.not_done + counts.skip;
-        return (
-          <View key={habit.id} style={[st.card, { backgroundColor: colors.surface }]}>
-            {/* Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <Text style={[st.habitName, { color: colors.black }]} numberOfLines={1}>{habit.name}</Text>
-              <View style={[st.badge, { backgroundColor: streak > 0 ? Colors.yellow + '25' : colors.gray100 }]}>
-                <Text style={[st.badgeText, { color: streak > 0 ? Colors.yellowDark : colors.gray400 }]}>
-                  🔥 {streak}d
-                </Text>
-              </View>
-            </View>
-
-            {/* Level distribution bar */}
-            {total > 0 ? (
-              <View style={{ marginBottom: 10 }}>
-                <View style={st.barTrack}>
-                  {LEVEL_ORDER.filter(k => counts[k] > 0).map(k => (
-                    <View
-                      key={k}
-                      style={[st.barSegment, {
-                        backgroundColor: LEVEL_META[k].color,
-                        flex: counts[k],
-                      }]}
-                    />
-                  ))}
-                </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-                  {LEVEL_ORDER.filter(k => counts[k] > 0).map(k => (
-                    <View key={k} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: LEVEL_META[k].color }} />
-                      <Text style={[st.legendText, { color: colors.gray400 }]}>{LEVEL_META[k].label} {counts[k]}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ) : (
-              <Text style={[st.legendText, { color: colors.gray400, marginBottom: 10 }]}>Nog geen logs</Text>
-            )}
-
-            {/* Metrics row */}
-            <View style={[st.metaRow, { borderTopColor: colors.gray100 }]}>
-              <StatItem label="Consistency" value={`${consistency}%`} colors={colors} />
-              <StatItem label="Elite rate" value={`${eliteRate}%`} colors={colors} />
-              <StatItem label="Best streak" value={`${bestStreak}d`} colors={colors} />
-              <StatItem label="Beste dag" value={best} colors={colors} />
-            </View>
-          </View>
-        );
-      })}
-    </ScrollView>
-  );
-}
-
-function StatItem({ label, value, colors }: { label: string; value: string; colors: any }) {
-  return (
-    <View style={{ alignItems: 'center', flex: 1 }}>
-      <Text style={[st.metaVal, { color: colors.black }]}>{value}</Text>
-      <Text style={[st.metaLbl, { color: colors.gray400 }]}>{label}</Text>
-    </View>
-  );
-}
-
-const st = StyleSheet.create({
-  sumCard: { borderRadius: Radius.lg, padding: 16, ...Shadow.card },
-  sumNum: { fontFamily: 'Inter_700Bold', fontSize: 28, lineHeight: 32, marginBottom: 2 },
-  sumLbl: { fontFamily: 'Inter_400Regular', fontSize: 12 },
-  card: { borderRadius: Radius.lg, padding: 16, ...Shadow.card },
-  habitName: { fontFamily: 'Inter_700Bold', fontSize: 16, flex: 1, marginRight: 8 },
-  badge: { borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeText: { fontFamily: 'Inter_700Bold', fontSize: 12 },
-  barTrack: { height: 10, borderRadius: 5, overflow: 'hidden', flexDirection: 'row' },
-  barSegment: { height: '100%' },
-  legendText: { fontFamily: 'Inter_300Light', fontSize: 11 },
-  metaRow: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 12, marginTop: 4 },
-  metaVal: { fontFamily: 'Inter_700Bold', fontSize: 14 },
-  metaLbl: { fontFamily: 'Inter_300Light', fontSize: 10, marginTop: 2 },
-});
 
 // ── Goal Chip ──────────────────────────────────────────────────────────────────
 

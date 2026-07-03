@@ -20,6 +20,7 @@ import {
   Alert,
   ActivityIndicator,
   Share,
+  AppState,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -37,6 +38,7 @@ import { SkeletonListCard } from '@/components/SkeletonCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCache, setCache } from '@/lib/cache';
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
+import { showMorningScreenNow } from '@/components/MorningScreen';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -190,12 +192,6 @@ function AnimatedCard({
         >
           <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
         </TouchableOpacity>
-        {item.is_shared && (
-          <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 6 }}>
-            <Text style={{ fontSize: 11 }}>👥</Text>
-          </View>
-        )}
-
         <View style={styles.tileBottom}>
           <Text style={[styles.tileName, { color: colors.black }]}>{item.name}</Text>
           <View style={styles.tileCountRow}>
@@ -211,6 +207,12 @@ function AnimatedCard({
             {typeLabel && (
               <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>
                 <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
+              </View>
+            )}
+            {item.is_shared && (
+              <View style={[styles.typeBadge, { backgroundColor: colors.gray100, flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+                <Ionicons name="people-outline" size={10} color={colors.gray400} />
+                <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>Gedeeld</Text>
               </View>
             )}
           </View>
@@ -554,18 +556,21 @@ export default function LijstenTab() {
           .order('sort_order', { ascending: true }),
         supabase
           .from('list_members')
-          .select('list_id, lists(id, name, emoji, sort_order, list_type, list_items(checked))')
-          .eq('user_id', user.id),
+          .select('list_id, user_id, lists(id, name, emoji, sort_order, list_type, list_items(checked))'),
       ]);
       if (listsRes.data) {
         const ownedProcessed = listsRes.data.map((l: any) => {
           const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
           const totalCount = items.length;
           const openCount = items.filter((li: any) => !li.checked).length;
-          return { ...l, item_count: totalCount, open_count: openCount, is_shared: false };
+          // is_shared_with_others = someone else is a member of this owned list
+          const isSharedWithOthers = (sharedRes.data ?? []).some(
+            (r: any) => r.list_id === l.id && r.user_id !== user.id
+          );
+          return { ...l, item_count: totalCount, open_count: openCount, is_shared: isSharedWithOthers };
         });
         const sharedProcessed = (sharedRes.data ?? [])
-          .filter((r: any) => r.lists)
+          .filter((r: any) => r.lists && r.user_id === user.id)
           .map((r: any) => {
             const l = r.lists as any;
             const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
@@ -770,9 +775,12 @@ export default function LijstenTab() {
 
   async function saveEmoji(listId: string, emoji: string) {
     setLists(prev => prev.map(l => l.id === listId ? { ...l, emoji } : l));
-    setCache('cache_lists', lists.map(l => l.id === listId ? { ...l, emoji } : l));
     setEmojiPickerList(null);
-    await supabase.from('lists').update({ emoji }).eq('id', listId);
+    await fetch(`${API_BASE}/lists/${listId}/emoji?user_id=${user?.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji }),
+    });
   }
 
   async function duplicateList(item: (typeof lists)[0]) {
@@ -821,6 +829,15 @@ export default function LijstenTab() {
   useEffect(() => { if (settings.receipts_enabled) fetchReceipts(); }, [fetchReceipts, settings.receipts_enabled]);
 
   useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' && editingNote) {
+        saveNoteEdit();
+      }
+    });
+    return () => sub.remove();
+  }, [editingNote, selectedNote, editNoteBody, editNoteTitle]);
+
+  useEffect(() => {
     if (lists.length === 0 && !loading) {
       breathLoopRef.current = Animated.loop(
         Animated.sequence([
@@ -860,6 +877,14 @@ export default function LijstenTab() {
               {pageTitle}
             </Text>
           </View>
+          <TouchableOpacity
+            onPress={showMorningScreenNow}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginBottom: 4 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="sunny-outline" size={22} color={colors.gray400} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -943,17 +968,11 @@ export default function LijstenTab() {
           </ScrollView>
         ) : (
           <>
-            {/* Sort pills + search sticky above scroll */}
-            <View style={[styles.sortSticky, { backgroundColor: colors.offWhite, zIndex: 2 }]}>
-              <SortToggle value={sortMode} onChange={setSortMode} />
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <TouchableOpacity onPress={() => setListSearch(s => s ? '' : ' ')} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
-                  <Ionicons name={listSearch.trim() ? 'close-circle' : 'search-outline'} size={18} color={listSearch.trim() ? Colors.yellow : colors.gray400} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={openReorder} hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }} style={{ paddingRight: 4 }}>
-                  <Ionicons name="swap-vertical-outline" size={20} color={colors.gray400} />
-                </TouchableOpacity>
-              </View>
+            {/* Search sticky above scroll */}
+            <View style={[styles.sortSticky, { backgroundColor: colors.offWhite, zIndex: 2, justifyContent: 'flex-end' }]}>
+              <TouchableOpacity onPress={() => setListSearch(s => s ? '' : ' ')} hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}>
+                <Ionicons name={listSearch.trim() ? 'close-circle' : 'search-outline'} size={18} color={listSearch.trim() ? Colors.yellow : colors.gray400} />
+              </TouchableOpacity>
             </View>
             {listSearch.trim().length > 0 && (
               <View style={[styles.searchBar, { marginHorizontal: 16, marginBottom: 4, backgroundColor: colors.gray100, borderColor: colors.gray200 }]}>

@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   Pressable,
   Linking,
-  Alert,
   PanResponder,
   Animated,
   Modal,
@@ -35,6 +34,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCache, setCache } from '@/lib/cache';
+import { Toast, useToast } from '@/components/Toast';
 
 type CalendarStream = { id: string; claude_key: string; color: string; name: string; emoji: string };
 
@@ -47,7 +47,7 @@ type MergedEvent = {
 };
 type Section  = { dateKey: string; label: string; isToday: boolean; isPast: boolean; data: MergedEvent[] };
 type FlatItem = { type: 'header'; section: Section } | { type: 'item'; item: MergedEvent; section: Section; isLast: boolean };
-type ViewMode   = 'list' | 'week' | 'calendar';
+type ViewMode   = 'day' | 'week' | 'calendar';
 type TimePeriod = 'today' | 'tomorrow' | 'thisweek' | 'nextweek';
 
 const TODAY              = new Date().toISOString().split('T')[0];
@@ -315,6 +315,7 @@ function AgendaLite() {
   const [deletingId, setDeletingId]       = useState<string | null>(null);
   const liteScrollRef                     = useRef<ScrollView>(null);
   const chipScrollRef                     = useRef<ScrollView>(null);
+  const dayStripRef                       = useRef<ScrollView>(null);
   const breatheAnim                       = useRef(new Animated.Value(1)).current;
   const scrollYAnim                       = useRef(new Animated.Value(0)).current;
 
@@ -340,13 +341,14 @@ function AgendaLite() {
 
   const [detailStream, setDetailStream]       = useState<string | null>(null);
   const [detailSaving, setDetailSaving]       = useState(false);
+  const { toastProps, show: showToast }       = useToast();
 
   // drag state for timeline
   const [dragEvent, setDragEvent]             = useState<MergedEvent | null>(null);
   const [dragY, setDragY]                     = useState(0);
   const dragTimeRef                           = useRef<string | null>(null);
 
-  const [viewMode, setViewMode]           = useState<'list' | 'week' | 'calendar'>('list');
+  const [viewMode, setViewMode]           = useState<'day' | 'week' | 'calendar'>('day');
   const [weekOffset, setWeekOffset]       = useState(0);
   const [weekFocusDay, setWeekFocusDay]   = useState<string | null>(null);
   const [selectedDate, setSelectedDate]   = useState(TODAY);
@@ -354,7 +356,8 @@ function AgendaLite() {
 
   useEffect(() => {
     AsyncStorage.getItem('agenda_view_mode').then(v => {
-      if (v === 'list' || v === 'week' || v === 'calendar') setViewMode(v);
+      if (v === 'list') setViewMode('day');
+      else if (v === 'day' || v === 'week' || v === 'calendar') setViewMode(v);
     });
   }, []);
   const [dayDetailMode, setDayDetailMode] = useState(false);
@@ -755,9 +758,9 @@ function AgendaLite() {
             </Text>
             <Text style={[s.headerTitle, { color: colors.black }]}>Agenda</Text>
           </View>
-          {/* Lijst / Week / Maand segmented control */}
+          {/* Dag / Week / Maand segmented control */}
           <View style={[s.segControl, { backgroundColor: colors.gray100 }]}>
-            {([['list', 'Lijst'], ['week', 'Week'], ['calendar', 'Maand']] as const).map(([mode, label]) => (
+            {([['day', 'Dag'], ['week', 'Week'], ['calendar', 'Maand']] as const).map(([mode, label]) => (
               <TouchableOpacity
                 key={mode}
                 onPress={() => { setViewMode(mode); setDayDetailMode(false); AsyncStorage.setItem('agenda_view_mode', mode); }}
@@ -771,176 +774,141 @@ function AgendaLite() {
         </View>
       </View>
 
-      {/* ── List view ──────────────────────────────────────────────────── */}
-      {viewMode === 'list' && <>
+      {/* ── Day view ──────────────────────────────────────────────────── */}
+      {viewMode === 'day' && (() => {
+        const DAY_STRIP_COUNT = 14;
+        const todayMs = new Date(TODAY + 'T00:00:00').getTime();
+        const dayStrip = Array.from({ length: DAY_STRIP_COUNT }, (_, i) => {
+          const ms = todayMs + (i - Math.floor(DAY_STRIP_COUNT / 2)) * 86400000;
+          const d = new Date(ms);
+          const key = toKey(d);
+          return {
+            key,
+            dow: d.toLocaleDateString('nl-NL', { weekday: 'short' }).slice(0, 2).toUpperCase(),
+            num: String(d.getDate()),
+            isToday: key === TODAY,
+          };
+        });
 
-      {/* ── Period chips ── */}
-      <View style={{ flexGrow: 0, flexShrink: 0, paddingTop: 14, paddingBottom: 6, flexDirection: 'row', alignItems: 'center' }}>
-        <ScrollView ref={chipScrollRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }} style={{ flex: 1 }}>
-          {PERIOD_LABELS.map(([p, label]) => {
-            const count = periodCounts[p];
-            const active = timePeriod === p;
-            return (
-              <TouchableOpacity
-                key={p}
-                onPress={() => selectPeriod(p)}
-                style={{ height: 34, paddingHorizontal: 15, borderRadius: Radius.pill, justifyContent: 'center', alignItems: 'center', backgroundColor: active ? colors.black : colors.gray100 }}
-                activeOpacity={0.75}
-              >
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13.5, color: active ? colors.offWhite : colors.gray400 }}>
-                  {label}
-                  {count > 0 && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: active ? colors.surface2 : colors.gray400 }}> ({count})</Text>}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-        <TouchableOpacity
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowStreamFilter(v => !v); if (showStreamFilter) setStreamFilter(null); }}
-          style={{ marginRight: 14, width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: (showStreamFilter || streamFilter) ? Colors.yellow + '33' : colors.gray100 }}
-          activeOpacity={0.75}
-        >
-          <Ionicons name="options-outline" size={17} color={(showStreamFilter || streamFilter) ? Colors.yellow : colors.gray400} />
-        </TouchableOpacity>
-      </View>
+        const dayEvents = allEvents
+          .filter(e => {
+            if (!e.date) return false;
+            if (e.date === selectedDate) return true;
+            return !!(e.endDate && e.date < selectedDate && e.endDate >= selectedDate);
+          })
+          .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'));
 
-      {/* ── Period chips + filter toggle ── */}
-      {showStreamFilter && (() => {
-        const userKeys = new Set(streams.map(s => s.claude_key));
-        const mergedStreams = [...streams, ...DEFAULT_STREAMS.filter(d => !userKeys.has(d.claude_key))];
         return (
-          <View style={{ flexGrow: 0, flexShrink: 0, paddingBottom: 10 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 18, gap: 8 }}>
-              <TouchableOpacity
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(null); }}
-                style={{ height: 32, paddingHorizontal: 13, borderRadius: Radius.pill, justifyContent: 'center', backgroundColor: streamFilter === null ? colors.black : colors.gray100 }}
-                activeOpacity={0.75}
-              >
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: streamFilter === null ? colors.offWhite : colors.gray400 }}>Alles</Text>
-              </TouchableOpacity>
-              {mergedStreams.map(st => {
-                const active = streamFilter === st.claude_key;
+          <View style={{ flex: 1 }}>
+            {/* Day strip */}
+            <ScrollView
+              ref={dayStripRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flexShrink: 0, flexGrow: 0 }}
+              contentContainerStyle={{ paddingHorizontal: 18, gap: 6, paddingVertical: 10 }}
+              onLayout={() => {
+                const todayIndex = Math.floor(DAY_STRIP_COUNT / 2);
+                const itemWidth = 44 + 6;
+                const offset = 18 + todayIndex * itemWidth - (screenWidth / 2) + 22;
+                dayStripRef.current?.scrollTo({ x: Math.max(0, offset), animated: false });
+              }}
+            >
+              {dayStrip.map(day => {
+                const isSelected = day.key === selectedDate;
                 return (
                   <TouchableOpacity
-                    key={st.id}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setStreamFilter(active ? null : st.claude_key); }}
-                    style={{ height: 32, paddingHorizontal: 13, borderRadius: Radius.pill, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: active ? st.color + '22' : colors.gray100, borderWidth: active ? 1.5 : 0, borderColor: st.color }}
+                    key={day.key}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedDate(day.key); }}
+                    style={{ minWidth: 44, alignItems: 'center', paddingVertical: 9, paddingHorizontal: 5, borderRadius: 15, backgroundColor: day.isToday && !isSelected ? Colors.yellow : isSelected && !day.isToday ? colors.gray100 : 'transparent' }}
                     activeOpacity={0.75}
                   >
-                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: active ? st.color : colors.gray400 }}>{st.emoji} {st.name}</Text>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, textTransform: 'uppercase', color: day.isToday && !isSelected ? 'rgba(0,0,0,0.55)' : colors.gray400 }}>{day.dow}</Text>
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 16, marginTop: 4, color: colors.black }}>{day.num}</Text>
+                    {(eventsByDate.get(day.key) ?? []).length > 0
+                      ? <View style={{ width: 5, height: 5, borderRadius: 3, marginTop: 5, backgroundColor: day.isToday && !isSelected ? 'rgba(0,0,0,0.45)' : Colors.yellow }} />
+                      : <View style={{ height: 10, marginTop: 5 }} />}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
+
+            {/* Events for selected day */}
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: TAB_BAR_CLEARANCE }}
+            >
+              {loading ? (
+                <View style={{ paddingTop: 8, gap: 10 }}>
+                  {[0.9, 0.7, 0.85].map((w, i) => (
+                    <View key={i} style={{ borderRadius: Radius.lg, backgroundColor: colors.gray100, height: 72, width: `${w * 100}%` as any, opacity: 1 - i * 0.12 }} />
+                  ))}
+                </View>
+              ) : dayEvents.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingTop: 48, gap: 10 }}>
+                  <Animated.View style={[s.emptyIconBox, { backgroundColor: colors.gray100, transform: [{ scale: breatheAnim }] }]}>
+                    <Text style={{ fontSize: 32 }}>📅</Text>
+                  </Animated.View>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Vrije dag</Text>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken</Text>
+                </View>
+              ) : dayEvents.map(e => {
+                const evColor = getEventColor(e, streams);
+                const stream = streams.find(st => st.claude_key === e.calendar_stream);
+                return (
+                  <View key={e.id} style={{ position: 'relative', marginBottom: 10 }}>
+                    <Pressable
+                      onPress={() => { if (deletingId) { setDeletingId(null); return; } Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+                      onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }}
+                      style={({ pressed }) => [
+                        { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: Radius.lg, padding: 16, gap: 14, overflow: 'hidden', transform: [{ scale: pressed ? 0.975 : 1 }] },
+                        Shadow.card,
+                      ]}
+                    >
+                      <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3.5, backgroundColor: evColor }} />
+                      <View style={{ marginLeft: 6, flex: 1 }}>
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15.5, color: colors.black, letterSpacing: -0.2 }}>{e.title}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                          <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400 }}>
+                            {e.time ? e.time.slice(0, 5) : 'Geen tijd'}
+                          </Text>
+                          {e.date !== selectedDate && e.endDate && (
+                            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400 }}>meerdaags</Text>
+                          )}
+                        </View>
+                      </View>
+                      {stream && (
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: stream.color }} />
+                      )}
+                    </Pressable>
+                    {deletingId === e.id && (
+                      <TouchableOpacity
+                        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
+                        onPress={() => { deleteEvent(e); showToast('Afspraak verwijderd', 'info'); }}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#fff" />
+                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* QuickAdd FAB */}
+            <TouchableOpacity
+              onPress={() => openQuickAdd(selectedDate)}
+              style={{ position: 'absolute', right: 20, bottom: insets.bottom + TAB_BAR_CLEARANCE, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="add" size={26} color={Colors.black} />
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         );
       })()}
-
-      {/* Events */}
-      <Animated.ScrollView
-        ref={liteScrollRef}
-        style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: TAB_BAR_CLEARANCE }}
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollYAnim } } }], { useNativeDriver: true })}
-        scrollEventThrottle={16}
-        {...swipePanResponder.panHandlers}
-      >
-        {loading ? (
-          <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 10 }}>
-            {[0.9, 0.7, 0.85, 0.6, 0.75].map((w, i) => (
-              <View key={i} style={{ borderRadius: Radius.lg, backgroundColor: colors.gray100, height: 72, width: `${w * 100}%` as any, opacity: 1 - i * 0.12 }} />
-            ))}
-          </View>
-        ) : visibleEvents.length === 0 ? (
-          (() => {
-            const es = EMPTY_STATE[timePeriod];
-            return (
-              <View style={{ alignItems: 'center', paddingTop: 60, gap: 12 }}>
-                <Animated.View style={[s.emptyIconBox, { backgroundColor: colors.gray100, transform: [{ scale: breatheAnim }] }]}>
-                  <Text style={{ fontSize: 32 }}>{es.emoji}</Text>
-                </Animated.View>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>{es.title}</Text>
-                <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, textAlign: 'center' }}>{es.sub}</Text>
-              </View>
-            );
-          })()
-        ) : visibleEvents.map(e => {
-          const stream = streams.find(st => st.claude_key === e.calendar_stream);
-          const eventPast = e.date ? isPast(e.date) : false;
-
-          const evColor = getEventColor(e, streams);
-          const cardContent = (
-            <Pressable
-              onPress={() => { if (deletingId) { setDeletingId(null); return; } Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
-              onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setDeletingId(e.id); }}
-              style={({ pressed }) => [
-                { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: Radius.lg, padding: 16, marginBottom: 12, gap: 14, overflow: 'hidden', opacity: eventPast ? 0.45 : 1, transform: [{ scale: pressed ? 0.975 : 1 }] },
-                Shadow.card,
-              ]}
-            >
-              <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3.5, backgroundColor: evColor }} />
-              <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: evColor + '18', justifyContent: 'center', alignItems: 'center', marginLeft: 6 }}>
-                <Text style={{ fontSize: 20 }}>{eventEmoji(e.title)}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 15.5, color: colors.black, letterSpacing: -0.2 }}>{e.title}</Text>
-                {(timePeriod === 'thisweek' || timePeriod === 'nextweek') && e.date && (
-                  <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400, marginTop: 2 }}>
-                    {sectionLabel(e.date)}
-                  </Text>
-                )}
-                {e.time && <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400, marginTop: 2 }}>{e.time}</Text>}
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                {e.recurrence && (
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11, color: colors.gray400 }}>↺</Text>
-                  </View>
-                )}
-                {e.source === 'sous-chef' && (
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: Colors.yellow + '33', justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 11 }}>👨‍🍳</Text>
-                  </View>
-                )}
-                {stream && (
-                  <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: stream.color + '22' }}>
-                    <Text style={{ fontSize: 11, color: stream.color, fontFamily: 'Inter_600SemiBold' }}>{stream.emoji}</Text>
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          );
-
-          return (
-            <View key={e.id} style={{ position: 'relative' }}>
-              {cardContent}
-              {deletingId === e.id && (
-                <TouchableOpacity
-                  style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 12, backgroundColor: '#EF4444', borderRadius: Radius.lg, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', gap: 8 }}
-                  onPress={() => deleteEvent(e)}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>Verwijder</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          );
-        })}
-      </Animated.ScrollView>
-
-      {/* QuickAdd FAB */}
-      <TouchableOpacity
-        onPress={() => openQuickAdd()}
-        style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: '#FCC10C', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}
-        activeOpacity={0.85}
-      >
-        <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <Ionicons name="add" size={26} color={Colors.black} />
-        </LinearGradient>
-      </TouchableOpacity>
-
-      </> /* end list view */}
 
       {/* ── Week view ────────────────────────────────────────────────── */}
       {viewMode === 'week' && (() => {
@@ -1036,6 +1004,11 @@ function AgendaLite() {
                         <TouchableOpacity
                           key={e.id}
                           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+                          onLongPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            deleteEvent(e);
+                            showToast('Afspraak verwijderd', 'info');
+                          }}
                           style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}
                           activeOpacity={0.75}
                         >
@@ -1071,6 +1044,11 @@ function AgendaLite() {
                             <TouchableOpacity
                               key={e.id}
                               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
+                              onLongPress={() => {
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                                deleteEvent(e);
+                                showToast('Afspraak verwijderd', 'info');
+                              }}
                               style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
                               activeOpacity={0.75}
                             >
@@ -1088,7 +1066,7 @@ function AgendaLite() {
             </ScrollView>
 
             {/* FAB */}
-            <TouchableOpacity onPress={() => openQuickAdd(weekFocusDay ?? undefined)} style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }} activeOpacity={0.85}>
+            <TouchableOpacity onPress={() => openQuickAdd(weekFocusDay ?? undefined)} style={{ position: 'absolute', right: 20, bottom: insets.bottom + TAB_BAR_CLEARANCE, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }} activeOpacity={0.85}>
               <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="add" size={26} color={Colors.black} />
               </LinearGradient>
@@ -1145,7 +1123,7 @@ function AgendaLite() {
           {/* FAB — add event from month view */}
           <TouchableOpacity
             onPress={() => openQuickAdd(selectedDate)}
-            style={{ position: 'absolute', right: 20, bottom: insets.bottom + 90, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}
+            style={{ position: 'absolute', right: 20, bottom: insets.bottom + TAB_BAR_CLEARANCE, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}
             activeOpacity={0.85}
           >
             <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -1586,6 +1564,7 @@ function AgendaLite() {
         colors={[`${colors.offWhite}00`, colors.offWhite]}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, pointerEvents: 'none' }}
       />
+      <Toast {...toastProps} />
     </View>
   );
 }

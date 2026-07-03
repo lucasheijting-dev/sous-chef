@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Animated, Pressable,
-  SafeAreaView, StatusBar, Platform,
+  SafeAreaView, StatusBar, Platform, AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -107,6 +107,11 @@ function formatTime(time: string | null | undefined) {
 
 // ── MorningScreen ──────────────────────────────────────────────────────────────
 
+let _showMorningScreen: (() => void) | null = null;
+export function showMorningScreenNow() {
+  _showMorningScreen?.();
+}
+
 export function MorningScreen() {
   const { user } = useUser();
   const insets = useSafeAreaInsets();
@@ -120,6 +125,7 @@ export function MorningScreen() {
 
   const masterOpacity = useRef(new Animated.Value(1)).current;
   const screenOpacity = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(40)).current;
 
   const load = useCallback(async () => {
     if (!user || user.id === 'dev') return;
@@ -225,20 +231,51 @@ export function MorningScreen() {
     setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
   }, [user]);
 
-  useEffect(() => {
+  const checkAndShow = useCallback(async () => {
     if (!user || user.id === 'dev') return;
-
     const now = new Date();
     const today = now.toISOString().split('T')[0];
+    const lastShown = await AsyncStorage.getItem(MORNING_KEY);
+    const hour = now.getHours();
+    if (lastShown === today) return;
+    if (hour < 6 || hour >= 12) return;
+    await load();
+    masterOpacity.setValue(1);
+    translateY.setValue(40);
+    Animated.parallel([
+      Animated.timing(masterOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 350, useNativeDriver: true }),
+    ]).start();
+    setVisible(true);
+    await AsyncStorage.setItem(MORNING_KEY, today);
+  }, [user, load, masterOpacity, translateY]);
 
-    AsyncStorage.getItem(MORNING_KEY).then(async (lastShown) => {
-      const hour = now.getHours();
-      if (lastShown === today) return;
-      if (hour < 6 || hour >= 12) return;
+  useEffect(() => {
+    checkAndShow();
+  }, [user, load]);
+
+  useEffect(() => {
+    _showMorningScreen = async () => {
       await load();
+      masterOpacity.setValue(0);
+      translateY.setValue(40);
       setVisible(true);
-      await AsyncStorage.setItem(MORNING_KEY, today);
+      await AsyncStorage.setItem(MORNING_KEY, new Date().toISOString().split('T')[0]);
+      Animated.parallel([
+        Animated.timing(masterOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 350, useNativeDriver: true }),
+      ]).start();
+    };
+    return () => { _showMorningScreen = null; };
+  }, [load, masterOpacity, translateY]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkAndShow();
+      }
     });
+    return () => sub.remove();
   }, [user, load]);
 
   // How many screens to show
@@ -278,7 +315,7 @@ export function MorningScreen() {
   ) : null;
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: masterOpacity, zIndex: 999 }]}>
+    <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: masterOpacity, transform: [{ translateY }], zIndex: 999 }]}>
       <StatusBar barStyle="dark-content" />
       <LinearGradient
         colors={['#FFFBEF', '#FFF3C4', '#FFE57A']}
