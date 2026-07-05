@@ -275,7 +275,16 @@ cron.schedule('30 8 * * *', async () => {
       const prefs = notifMap[e.user_id] ?? {};
       if ((prefs.verjaardag_herinnering?.enabled ?? true) === false) continue;
       const personName = e.title.replace(/verjaardag\s*/i, '').trim();
-      await sendMessage(e.whatsapp_number, `🎂 *Vandaag is het de verjaardag van ${personName}!* Vergeet niet te feliciteren 🎉`);
+
+      // D2 — Include age if birth_year is known
+      let ageSuffix = '';
+      if (e.birth_year) {
+        const age = new Date().getFullYear() - e.birth_year;
+        // Guess gender from name is not possible, use neutral phrasing
+        ageSuffix = ` — ${personName} wordt ${age}`;
+      }
+
+      await sendMessage(e.whatsapp_number, `🎂 *Vandaag is het de verjaardag van ${personName}${ageSuffix}!* Vergeet niet te feliciteren 🎉`);
       await db.markEventReminderSent(e.id);
       console.log(`[Birthdays] Sent reminder for "${e.title}" to ${e.whatsapp_number}`);
     }

@@ -170,6 +170,9 @@ async function handleRecurringAnswer(text, userId, from, pending) {
 const UNDO_TRIGGERS     = ['ongedaan', 'undo', 'terugdraaien', 'verwijder laatste', 'annuleer laatste'];
 const HELP_TRIGGERS     = ['wat kun je', 'wat kan je', 'wat kan ik', 'help', 'hoe werkt'];
 const GREETING_TRIGGERS = ['hoi', 'hallo', 'hey', 'hi', 'dag', 'goedemorgen', 'goedemiddag', 'goedenavond', 'hello', 'yo'];
+const FEEDBACK_TRIGGERS = ['feedback:', 'bug:', 'suggestie:'];
+const LUCAS_WHATSAPP    = '31630491259';
+const FRUSTRATION_WORDS = ['werkt niet', 'irritant', 'fout', 'kapot', 'klopt niet', 'gaat mis', 'buggy'];
 
 const PERSONALITY_LINES = [
   '_(Sous-chef goedgekeurd! 👨‍🍳)_',
@@ -323,6 +326,21 @@ async function handleMessage({ from, text }) {
     return;
   }
 
+  // E5 — Feedback command
+  if (FEEDBACK_TRIGGERS.some(t => lc.startsWith(t))) {
+    const feedbackText = text.trim();
+    try {
+      await db.saveFeedback(userId, feedbackText);
+      // Forward to Lucas's WhatsApp
+      await sendMessage(LUCAS_WHATSAPP, `📮 Feedback van ${from}:\n\n${feedbackText}`).catch(() => {});
+    } catch (err) {
+      console.error('[Feedback] Failed to save:', err.message);
+    }
+    await sendMessage(from, '📮 Doorgestuurd naar de maker. Dank je!');
+    await db.incrementMessageCount(userId);
+    return;
+  }
+
   // Check for pending recurring event — user is answering "tot wanneer?" question
   const pendingRec = session.getPendingRecurring(userId);
   if (pendingRec) {
@@ -349,7 +367,23 @@ async function handleMessage({ from, text }) {
   ]);
   const timezone = userPrefs?.timezone ?? 'Europe/Amsterdam';
 
-  const intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, notes: noteTitles, conversationHistory, userContext, timezone });
+  // B1 — Verbosity: compact mode for experienced users (≥100 messages) or explicit pref
+  const verbosityPref = userPrefs?.reply_verbosity ?? null; // 'verbose' | 'compact' | null
+  const isCompact = verbosityPref === 'compact' || (verbosityPref !== 'verbose' && user.message_count >= 100);
+
+  // Note the message_count BEFORE incrementing, for B8 onboarding tips
+  const messageCountBeforeIncrement = user.message_count ?? 0;
+
+  let intent;
+  try {
+    intent = await parseIntent({ text, availableLists: lists, activeHabits, calendarStreams, notes: noteTitles, conversationHistory, userContext, timezone });
+  } catch (err) {
+    // B7 — Human-readable Claude API error
+    console.error('[parseIntent] Claude API failure:', err.message);
+    await sendMessage(from, 'Ik kan even niet nadenken 🤯 Probeer het over een minuutje nog eens.');
+    await db.incrementMessageCount(userId).catch(() => {});
+    return;
+  }
 
   Promise.all([
     db.logMessage(userId, text, intent.category),
@@ -364,11 +398,19 @@ async function handleMessage({ from, text }) {
     return;
   }
 
+  // E5 — Frustration detection: nudge unknown angry messages toward feedback
+  if (intent.category === 'unknown' && FRUSTRATION_WORDS.some(w => lc.includes(w))) {
+    const reply = "Dat klinkt als feedback. Zal ik dit doorsturen naar de maker? Stuur 'feedback: [jouw bericht]' om het te doen.";
+    session.addExchange(userId, text, reply);
+    await sendSplit(from, reply);
+    return;
+  }
+
   // Multi-action: process each sub-action and combine replies
   if (intent.category === 'multi_action' && Array.isArray(intent.actions) && intent.actions.length > 0) {
     const replies = [];
     for (const action of intent.actions) {
-      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from, calendarStreams, timezone);
+      const r = await processIntent({ ...action, confidence: intent.confidence }, userId, lists, activeHabits, text, from, calendarStreams, timezone, isCompact);
       if (r) replies.push(r);
     }
     const combined = replies.join('\n');
@@ -387,14 +429,24 @@ async function handleMessage({ from, text }) {
     }
   }
 
-  const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from, calendarStreams, timezone);
+  const baseReply = await processIntent(intent, userId, lists, activeHabits, text, from, calendarStreams, timezone, isCompact);
   if (!baseReply) return;
 
   const confidenceSuffix = intent.confidence === 'medium'
     ? '\n\n_Klopt dit? Zo niet, laat het me weten._'
     : '';
 
-  const reply = baseReply + confidenceSuffix + maybePersonality();
+  // B8 — Onboarding tips for first 3 messages
+  let onboardingTip = '';
+  if (messageCountBeforeIncrement === 0) {
+    onboardingTip = '\n\n_Tip: je kunt me ook afspraken en taken sturen._';
+  } else if (messageCountBeforeIncrement === 1) {
+    onboardingTip = "\n\n_Tip: Vraag me gerust 'wat staat er op mijn lijstjes?'_";
+  } else if (messageCountBeforeIncrement === 2) {
+    onboardingTip = "\n\n_Laatste tip: stuur 'help' als je wilt zien wat ik allemaal kan._";
+  }
+
+  const reply = baseReply + confidenceSuffix + onboardingTip + maybePersonality();
   session.addExchange(userId, text, reply);
   await sendSplit(from, reply);
 }
@@ -546,7 +598,7 @@ async function handleUndo(userId) {
 
 // ── Intent processing ──────────────────────────────────────────────────────────
 
-async function processIntent(intent, userId, lists, activeHabits, originalText, from, calendarStreams = [], timezone = 'Europe/Amsterdam') {
+async function processIntent(intent, userId, lists, activeHabits, originalText, from, calendarStreams = [], timezone = 'Europe/Amsterdam', isCompact = false) {
   const fmtDate = (d) => formatDate(d, timezone);
   const { category } = intent;
 
@@ -555,30 +607,33 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     // ── Single list item ─────────────────────────────────────────────────────
 
     case 'list': {
-      if (!intent.list_id) return intent.clarification_question ?? 'Welke lijst bedoel je?';
+      if (!intent.list_id) return intent.clarification_question ?? 'Ik kan die lijst niet vinden. Welke bedoel je?';
       const list = lists.find(l => l.id === intent.list_id);
-      if (!list) return 'Die lijst kon ik niet vinden.';
+      if (!list) return 'Ik kan die lijst niet vinden. Welke bedoel je?';
 
       const itemText = intent.item_text ?? originalText;
+      const quantity  = intent.item_quantity ?? null;
 
       // Duplicate detection
       const existing = await db.getListItems(intent.list_id);
       const isDupe = existing.some(i => i.text.toLowerCase() === itemText.toLowerCase());
       if (isDupe) return `_${itemText}_ staat al op ${list.emoji ?? '📝'} ${list.name}.`;
 
-      const added = await db.addListItem(intent.list_id, itemText);
+      const added = await db.addListItem(intent.list_id, itemText, quantity);
       undo.record(userId, 'add_item', {
         itemId: added.id, text: added.text, listName: list.name, listEmoji: list.emoji ?? '📝',
       });
+
+      if (isCompact) return `✓ ${list.emoji ?? '📝'} ${list.name}`;
       return `✅ *${itemText}* toegevoegd aan ${list.emoji ?? '📝'} ${list.name}.`;
     }
 
     // ── Multiple list items ──────────────────────────────────────────────────
 
     case 'list_items': {
-      if (!intent.list_id) return intent.clarification_question ?? 'Welke lijst bedoel je?';
+      if (!intent.list_id) return intent.clarification_question ?? 'Ik kan die lijst niet vinden. Welke bedoel je?';
       const list = lists.find(l => l.id === intent.list_id);
-      if (!list) return 'Die lijst kon ik niet vinden.';
+      if (!list) return 'Ik kan die lijst niet vinden. Welke bedoel je?';
 
       const texts = Array.isArray(intent.item_texts) ? intent.item_texts.filter(Boolean) : [];
       if (texts.length === 0) return 'Geen items gevonden om toe te voegen.';
@@ -593,11 +648,15 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         return `Al op de lijst: ${dupeTexts.map(t => `_${t}_`).join(', ')}.`;
       }
 
-      const added = await Promise.all(newTexts.map(t => db.addListItem(intent.list_id, t)));
+      // For single-item list_items, pass quantity; for multi-item, quantity is per-item (not supported in Claude output for arrays)
+      const singleQty = newTexts.length === 1 ? (intent.item_quantity ?? null) : null;
+      const added = await Promise.all(newTexts.map(t => db.addListItem(intent.list_id, t, singleQty)));
       undo.record(userId, 'add_items', {
         itemIds: added.map(a => a.id), count: added.length,
         listName: list.name, listEmoji: list.emoji ?? '📝',
       });
+
+      if (isCompact) return `✓ ${list.emoji ?? '📝'} ${list.name} (+${newTexts.length})`;
 
       const addedLine = newTexts.map(t => `• ${t}`).join('\n');
       const dupeLine  = dupeTexts.length ? `\n_Al aanwezig: ${dupeTexts.join(', ')}_` : '';
@@ -914,12 +973,20 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
         const location           = ev.location ?? null;
         const recurrenceUntil    = intent.recurrence_until ?? null;
 
-        // Conflict check: warn if another timed event exists at same time
+        // D3 — Conflict check: warn if another timed event is within 30 minutes
         if (ev.time && ev.date) {
           const existing = await db.getEventsForDate(userId, ev.date);
-          const conflict = existing.find(e => e.time === ev.time && e.title !== evTitle);
+          const [newH, newM] = ev.time.split(':').map(Number);
+          const newTotalMins = newH * 60 + newM;
+          const conflict = existing.find(e => {
+            if (e.title === evTitle) return false;
+            const [eH, eM] = (e.time ?? '').split(':').map(Number);
+            if (isNaN(eH)) return false;
+            const eTotalMins = eH * 60 + eM;
+            return Math.abs(newTotalMins - eTotalMins) <= 30;
+          });
           if (conflict) {
-            lines.push(`⚠️ Let op: *${conflict.title}* staat ook op ${fmtDate(ev.date)} om ${ev.time}.`);
+            lines.push(`⚠️ Let op: *${conflict.title}* staat ook op ${fmtDate(ev.date)} om ${conflict.time} (binnen 30 min).`);
           }
         }
 
@@ -958,7 +1025,9 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           continue;
         }
 
-        const saved = await db.createEvent(userId, {
+        // D2 — Store birth_year if provided (for birthday age display in reminders)
+        const birthYear = (stream === 'birthdays' && intent.birth_year) ? intent.birth_year : null;
+        const saved = await db.createEventWithBirthYear(userId, {
           title: evTitle,
           date: ev.date,
           time: ev.time ?? null,
@@ -966,6 +1035,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
           reminderDaysBefore: reminderDays,
           caldavUid,
           calendarStream: stream,
+          birth_year: birthYear,
         });
 
         lastSavedEvent = { id: saved.id, title: evTitle, date: ev.date, time: ev.time ?? null, caldavUid, calendarStream: stream };
@@ -1798,7 +1868,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
     case 'unknown':
     default:
-      return intent.reply_text ?? 'Dat snap ik niet helemaal — probeer het anders te omschrijven.';
+      return intent.reply_text ?? 'Dat snap ik niet helemaal. Bedoel je een boodschap, taak of afspraak?';
   }
 }
 

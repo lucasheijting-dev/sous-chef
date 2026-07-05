@@ -252,9 +252,12 @@ async function deleteList(listId) {
   if (r3.error) throw new Error(`deleteList: ${r3.error.message}`);
 }
 
-async function addListItem(listId, text) {
+async function addListItem(listId, text, quantity = null) {
+  const insertData = { list_id: listId, text, checked: false };
+  if (quantity != null) insertData.quantity = quantity;
+
   const [{ data, error }] = await Promise.all([
-    supabase.from('list_items').insert({ list_id: listId, text, checked: false }).select('id, text').single(),
+    supabase.from('list_items').insert(insertData).select('id, text, quantity').single(),
     supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', listId),
   ]);
 
@@ -888,11 +891,18 @@ async function getHabitStreak(userId, habitId) {
   if (!data?.length) return 0;
 
   const dates = new Set(data.map(r => r.date));
-  const today = new Date();
+  const now = new Date();
+  const currentHour = now.getHours();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
 
   let streak = 0;
   const check = new Date(today);
+
+  // C1 grace period: before 12:00, don't count yesterday as missed yet
+  // We achieve this by starting streak check from yesterday if today not logged
+  // and it's before noon (yesterday is still "in grace").
+  const gracePeriodActive = currentHour < 12;
 
   for (let i = 0; i < 365; i++) {
     const dateStr = check.toISOString().split('T')[0];
@@ -901,6 +911,9 @@ async function getHabitStreak(userId, habitId) {
       check.setDate(check.getDate() - 1);
     } else if (i === 0) {
       check.setDate(check.getDate() - 1); // today not yet logged, check from yesterday
+    } else if (i === 1 && gracePeriodActive) {
+      // Grace period: it's before 12:00 and yesterday not yet logged — don't break streak yet
+      check.setDate(check.getDate() - 1);
     } else {
       break;
     }
@@ -917,7 +930,7 @@ async function getTodayBirthdayEvents() {
 
   const { data } = await supabase
     .from('events')
-    .select('id, user_id, title, date, reminder_sent_at, users(whatsapp_number)')
+    .select('id, user_id, title, date, reminder_sent_at, birth_year, users(whatsapp_number)')
     .eq('calendar_stream', 'birthdays')
     .eq('recurrence', 'yearly')
     .like('date', `%-${mm}-${dd}`);
@@ -1405,6 +1418,39 @@ async function deleteHabitGoal(id, userId) {
   await supabase.from('habit_goals').delete().eq('id', id).eq('user_id', userId);
 }
 
+// ── Feedback ──────────────────────────────────────────────────────────────────────
+
+async function saveFeedback(userId, text) {
+  await supabase.from('feedback').insert({ user_id: userId, text, created_at: new Date().toISOString() });
+}
+
+// ── Create event with birth_year support ─────────────────────────────────────────
+
+async function createEventWithBirthYear(userId, { title, date, time, recurrence, reminderDaysBefore, caldavUid, calendarStream, duration_minutes, is_deep_work, birth_year }) {
+  const insertData = {
+    user_id: userId,
+    title,
+    date,
+    time: time ?? null,
+    recurrence: recurrence ?? null,
+    reminder_days_before: reminderDaysBefore ?? null,
+    caldav_uid: caldavUid ?? null,
+    calendar_stream: calendarStream ?? 'personal',
+    ...(duration_minutes != null ? { duration_minutes } : {}),
+    ...(is_deep_work ? { is_deep_work: true } : {}),
+    ...(birth_year != null ? { birth_year } : {}),
+  };
+
+  const { data, error } = await supabase
+    .from('events')
+    .insert(insertData)
+    .select('id')
+    .single();
+
+  if (error) throw new Error(`Failed to create event: ${error.message}`);
+  return data;
+}
+
 module.exports = {
   getOrCreateUserFull,
   markOnboardingComplete,
@@ -1556,6 +1602,8 @@ module.exports = {
   createDefaultLists,
   getTodoReminderUsers,
   markTodoReminderSent,
+  saveFeedback,
+  createEventWithBirthYear,
 };
 
 async function getAllUsersAdmin() {
