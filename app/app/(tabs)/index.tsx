@@ -1105,7 +1105,7 @@ export default function LijstenTab() {
           )}
           {/* Category filter chips */}
           {noteCats.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}>
               <TouchableOpacity
                 onPress={() => setSelectedNoteCatId(null)}
                 style={[rStyles.chip, { backgroundColor: !selectedNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
@@ -1488,8 +1488,8 @@ export default function LijstenTab() {
 
       {/* Note detail modal */}
       <Modal visible={!!selectedNote} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSelectedNote(null); setEditingNote(false); }}>
-        <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <SafeAreaView style={[styles.modal, { backgroundColor: colors.white }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
             <TouchableOpacity onPress={() => { setSelectedNote(null); setEditingNote(false); }} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
               <Ionicons name="close" size={18} color={colors.black} />
@@ -1523,29 +1523,10 @@ export default function LijstenTab() {
             )}
           </View>
           {editingNote ? (
-            <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-              <TextInput
-                style={[styles.modalTitle, { color: colors.black, borderBottomWidth: 1, borderBottomColor: colors.gray100, marginBottom: 16, padding: 0 }]}
-                value={editNoteTitle}
-                onChangeText={setEditNoteTitle}
-                placeholder="Titel (optioneel)"
-                placeholderTextColor={colors.gray400}
-                selectionColor={Colors.yellow}
-                multiline={false}
-              />
-              <TextInput
-                style={[styles.modalBody, { color: colors.gray800, minHeight: 120, textAlignVertical: 'top', padding: 0 }]}
-                value={editNoteBody}
-                onChangeText={setEditNoteBody}
-                placeholder="Notitie..."
-                placeholderTextColor={colors.gray400}
-                selectionColor={Colors.yellow}
-                multiline
-                autoFocus
-              />
-              <View style={{ marginTop: 24 }}>
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400, marginBottom: 10 }}>CATEGORIE</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <>
+              {/* Category picker — above keyboard so always reachable */}
+              <View style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }} keyboardShouldPersistTaps="always">
                   <TouchableOpacity
                     onPress={() => setEditNoteCatId(null)}
                     style={[rStyles.chip, { backgroundColor: !editNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
@@ -1571,7 +1552,28 @@ export default function LijstenTab() {
                   </TouchableOpacity>
                 </ScrollView>
               </View>
-            </ScrollView>
+              <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
+                <TextInput
+                  style={[styles.modalTitle, { color: colors.black, borderBottomWidth: 1, borderBottomColor: colors.gray100, marginBottom: 16, padding: 0 }]}
+                  value={editNoteTitle}
+                  onChangeText={setEditNoteTitle}
+                  placeholder="Titel (optioneel)"
+                  placeholderTextColor={colors.gray400}
+                  selectionColor={Colors.yellow}
+                  multiline={false}
+                />
+                <TextInput
+                  style={[styles.modalBody, { color: colors.gray800, minHeight: 120, textAlignVertical: 'top', padding: 0 }]}
+                  value={editNoteBody}
+                  onChangeText={setEditNoteBody}
+                  placeholder="Notitie..."
+                  placeholderTextColor={colors.gray400}
+                  selectionColor={Colors.yellow}
+                  multiline
+                  autoFocus
+                />
+              </ScrollView>
+            </>
           ) : (
             <ScrollView contentContainerStyle={styles.modalContent}>
               {selectedNote?.title && <Text style={[styles.modalTitle, { color: colors.black }]}>{selectedNote.title}</Text>}
@@ -1593,8 +1595,8 @@ export default function LijstenTab() {
               </TouchableOpacity>
             </View>
           )}
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Undo snackbar */}
