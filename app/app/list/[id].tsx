@@ -730,7 +730,7 @@ export default function ListDetailScreen() {
 
   return (
     <View style={styles.root}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={insets.top + (Platform.OS === 'ios' ? 44 : 24)}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
         {isGroceryList && (
@@ -872,6 +872,8 @@ export default function ListDetailScreen() {
             keyExtractor={(i) => i.id}
             style={{ flex: 1 }}
             contentContainerStyle={styles.list}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
             }
