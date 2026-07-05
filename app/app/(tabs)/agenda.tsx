@@ -299,6 +299,235 @@ const DEFAULT_STREAMS: CalendarStream[] = [
   { id: '__gezondheid',  claude_key: 'gezondheid',  color: '#8E5151', name: 'Gezondheid',  emoji: '🏥' },
 ];
 
+// ── WeekView ──────────────────────────────────────────────────────────────────
+
+const WEEK_PAGES = 104; // -52 to +51 weeks
+const WEEK_CENTER = 52; // index of offset=0
+
+function getWeekDays(offset: number) {
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday); d.setDate(monday.getDate() + i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return { key, num: d.getDate(), dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i], isToday: key === TODAY, isWeekend: i >= 5 };
+  });
+}
+
+function WeekPage({
+  offset, weekFocusDay, allEvents, streams, colors,
+  onFocusDayChange, onOpenEvent, onDeleteEvent,
+}: {
+  offset: number; weekFocusDay: string | null; allEvents: MergedEvent[]; streams: CalendarStream[];
+  colors: ThemeColors; onFocusDayChange: (day: string | null) => void;
+  onOpenEvent: (e: MergedEvent) => void; onDeleteEvent: (e: MergedEvent) => void;
+}) {
+  const weekDays = getWeekDays(offset);
+  const weekStart = weekDays[0].key;
+  const weekEnd = weekDays[6].key;
+  const weekEvents = allEvents.filter(e => e.date && e.date >= weekStart && e.date <= weekEnd);
+  const focusEvts = weekFocusDay
+    ? weekEvents.filter(e => e.date === weekFocusDay).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
+    : [];
+
+  return (
+    <View style={{ width: screenWidth, flex: 1 }}>
+      {/* Day strip */}
+      <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+        {weekDays.map(d => {
+          const isFocus = weekFocusDay === d.key;
+          const hasEvents = weekEvents.some(e => e.date === d.key);
+          return (
+            <TouchableOpacity
+              key={d.key}
+              style={{ flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: isFocus ? Colors.yellow + '18' : d.isWeekend ? colors.offWhite : 'transparent' }}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onFocusDayChange(isFocus ? null : d.key); }}
+              activeOpacity={0.7}
+            >
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : d.isWeekend ? colors.gray200 : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: d.isToday ? Colors.yellow : isFocus ? Colors.yellow + '33' : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.black : d.isWeekend ? colors.gray400 : colors.black }}>{d.num}</Text>
+              </View>
+              {hasEvents && <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: isFocus ? Colors.yellow : colors.gray200, marginTop: 3 }} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Events */}
+      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + 70, flexGrow: 1 }}>
+        {weekFocusDay ? (
+          focusEvts.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
+              <Text style={{ fontSize: 32 }}>☀️</Text>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Vrije dag</Text>
+              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken</Text>
+            </View>
+          ) : (
+            <View style={{ paddingTop: 12, paddingHorizontal: 16, gap: 8 }}>
+              {focusEvts.map(e => {
+                const color = getEventColor(e, streams);
+                return (
+                  <TouchableOpacity
+                    key={e.id}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onOpenEvent(e); }}
+                    onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Afspraak verwijderen?', e.title, [{ text: 'Annuleer', style: 'cancel' }, { text: 'Verwijder', style: 'destructive', onPress: () => onDeleteEvent(e) }]); }}
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}
+                    activeOpacity={0.75}
+                  >
+                    {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color, width: 38 }}>{e.time.slice(0, 5)}</Text>}
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.black, flex: 1 }}>{e.title}</Text>
+                    {e.source === 'sous-chef' && <Text style={{ fontSize: 13 }}>👨‍🍳</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        ) : weekEvents.length === 0 ? (
+          <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
+            <Text style={{ fontSize: 32 }}>🌤️</Text>
+            <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Rustige week</Text>
+            <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken gepland</Text>
+          </View>
+        ) : (
+          weekDays.map(d => {
+            const dayEvts = weekEvents.filter(e => e.date === d.key).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+            if (dayEvts.length === 0) return null;
+            return (
+              <View key={d.key} style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, paddingVertical: 10 }}>
+                <View style={{ width: 48, alignItems: 'center', paddingTop: 2 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.yellow : colors.black }}>{d.num}</Text>
+                </View>
+                <View style={{ flex: 1, gap: 6, paddingRight: 14 }}>
+                  {dayEvts.map(e => {
+                    const color = getEventColor(e, streams);
+                    return (
+                      <TouchableOpacity
+                        key={e.id}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onOpenEvent(e); }}
+                        onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Alert.alert('Afspraak verwijderen?', e.title, [{ text: 'Annuleer', style: 'cancel' }, { text: 'Verwijder', style: 'destructive', onPress: () => onDeleteEvent(e) }]); }}
+                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
+                        activeOpacity={0.75}
+                      >
+                        {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color, width: 34 }}>{e.time.slice(0, 5)}</Text>}
+                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, flex: 1 }} numberOfLines={1}>{e.title}</Text>
+                        {e.source === 'sous-chef' && <Text style={{ fontSize: 11 }}>👨‍🍳</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+function WeekView({
+  weekOffset, weekFocusDay, allEvents, streams, colors, insets,
+  onWeekOffsetChange, onFocusDayChange, onOpenEvent, onDeleteEvent, onQuickAdd,
+}: {
+  weekOffset: number; weekFocusDay: string | null; allEvents: MergedEvent[]; streams: CalendarStream[];
+  colors: ThemeColors; insets: { bottom: number };
+  onWeekOffsetChange: (offset: number) => void;
+  onFocusDayChange: (day: string | null) => void;
+  onOpenEvent: (e: MergedEvent) => void;
+  onDeleteEvent: (e: MergedEvent) => void;
+  onQuickAdd: (day: string | null) => void;
+}) {
+  const listRef = useRef<FlatList>(null);
+  const isScrollingProgrammatically = useRef(false);
+
+  // Clamp weekOffset to valid page range
+  const clampedOffset = Math.max(-(WEEK_CENTER), Math.min(WEEK_PAGES - WEEK_CENTER - 1, weekOffset));
+  const currentIndex = WEEK_CENTER + clampedOffset;
+
+  // Scroll to current page when weekOffset changes via nav buttons
+  useEffect(() => {
+    const idx = WEEK_CENTER + clampedOffset;
+    isScrollingProgrammatically.current = true;
+    listRef.current?.scrollToIndex({ index: idx, animated: true });
+    const t = setTimeout(() => { isScrollingProgrammatically.current = false; }, 400);
+    return () => clearTimeout(t);
+  }, [clampedOffset]);
+
+  const weekDays = getWeekDays(clampedOffset);
+  const weekStart = weekDays[0].key;
+  const weekEnd = weekDays[6].key;
+  const weekLabel = (() => {
+    const s = new Date(weekStart + 'T00:00:00');
+    const e = new Date(weekEnd + 'T00:00:00');
+    return `${s.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}`;
+  })();
+
+  const offsets = useMemo(() => Array.from({ length: WEEK_PAGES }, (_, i) => i - WEEK_CENTER), []);
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.offWhite }}>
+      {/* Nav header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
+        <TouchableOpacity onPress={() => onWeekOffsetChange(clampedOffset - 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={22} color={colors.black} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onWeekOffsetChange(0)} activeOpacity={0.8}>
+          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: clampedOffset === 0 ? Colors.yellow : colors.black }}>{weekLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => onWeekOffsetChange(clampedOffset + 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Ionicons name="chevron-forward" size={22} color={colors.black} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Paging FlatList — one page per week */}
+      <FlatList
+        ref={listRef}
+        data={offsets}
+        keyExtractor={(item) => String(item)}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={currentIndex}
+        getItemLayout={(_, index) => ({ length: screenWidth, offset: screenWidth * index, index })}
+        onMomentumScrollEnd={(e) => {
+          if (isScrollingProgrammatically.current) return;
+          const page = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
+          const newOffset = page - WEEK_CENTER;
+          if (newOffset !== clampedOffset) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            onWeekOffsetChange(newOffset);
+          }
+        }}
+        renderItem={({ item: pageOffset }) => (
+          <WeekPage
+            offset={pageOffset}
+            weekFocusDay={pageOffset === clampedOffset ? weekFocusDay : null}
+            allEvents={allEvents}
+            streams={streams}
+            colors={colors}
+            onFocusDayChange={onFocusDayChange}
+            onOpenEvent={onOpenEvent}
+            onDeleteEvent={onDeleteEvent}
+          />
+        )}
+      />
+
+      {/* FAB */}
+      <TouchableOpacity
+        onPress={() => onQuickAdd(weekFocusDay)}
+        style={{ position: 'absolute', right: 20, bottom: insets.bottom + TAB_BAR_CLEARANCE, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }}
+        activeOpacity={0.85}
+      >
+        <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <Ionicons name="add" size={26} color={Colors.black} />
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 // ── AgendaLite (period pills + stream chips) ──────────────────────────────────
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -914,173 +1143,21 @@ function AgendaLite() {
       })()}
 
       {/* ── Week view ────────────────────────────────────────────────── */}
-      {viewMode === 'week' && (() => {
-        const now = new Date(); now.setHours(0, 0, 0, 0);
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
-
-        const weekDays = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date(monday); d.setDate(monday.getDate() + i);
-          const key = toKey(d);
-          return {
-            key, num: d.getDate(),
-            dow: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'][i],
-            isToday: key === TODAY, isWeekend: i >= 5,
-          };
-        });
-
-        const weekStart = weekDays[0].key;
-        const weekEnd   = weekDays[6].key;
-        const weekLabel = (() => {
-          const s = new Date(weekStart + 'T00:00:00');
-          const e = new Date(weekEnd + 'T00:00:00');
-          const sm = s.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
-          const em = e.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
-          return `${sm} – ${em}`;
-        })();
-
-        const weekEvents = allEvents.filter(e => e.date && e.date >= weekStart && e.date <= weekEnd);
-        const focusEvts  = weekFocusDay ? weekEvents.filter(e => e.date === weekFocusDay).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? '')) : [];
-
-        const weekSwipe = PanResponder.create({
-          onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 16 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-          onPanResponderRelease: (_, g) => {
-            if (Math.abs(g.dx) < 50) return;
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setWeekFocusDay(null);
-            setWeekOffset(prev => g.dx < 0 ? prev + 1 : prev - 1);
-          },
-        });
-
-        return (
-          <View style={{ flex: 1, backgroundColor: colors.offWhite }} {...weekSwipe.panHandlers}>
-            {/* Week nav header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
-              <TouchableOpacity onPress={() => { setWeekOffset(p => p - 1); setWeekFocusDay(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                <Ionicons name="chevron-back" size={22} color={colors.black} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setWeekOffset(0); setWeekFocusDay(null); }} activeOpacity={0.8}>
-                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: weekOffset === 0 ? Colors.yellow : colors.black }}>{weekLabel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setWeekOffset(p => p + 1); setWeekFocusDay(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                <Ionicons name="chevron-forward" size={22} color={colors.black} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Day columns header */}
-            <View style={{ flexDirection: 'row', backgroundColor: colors.white, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100 }}>
-              {weekDays.map(d => {
-                const isFocus   = weekFocusDay === d.key;
-                const hasEvents = weekEvents.some(e => e.date === d.key);
-                return (
-                  <TouchableOpacity
-                    key={d.key}
-                    style={{ flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: isFocus ? Colors.yellow + '18' : d.isWeekend ? colors.offWhite : 'transparent' }}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setWeekFocusDay(isFocus ? null : d.key); }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : d.isWeekend ? colors.gray200 : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
-                    <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: d.isToday ? Colors.yellow : isFocus ? Colors.yellow + '33' : 'transparent', justifyContent: 'center', alignItems: 'center', marginTop: 2 }}>
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.black : d.isWeekend ? colors.gray400 : colors.black }}>{d.num}</Text>
-                    </View>
-                    {hasEvents && <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: isFocus ? Colors.yellow : colors.gray200, marginTop: 3 }} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Event area: focused day or full week */}
-            <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE, flexGrow: 1 }}>
-              {weekFocusDay ? (
-                /* ── Focused day detail ── */
-                focusEvts.length === 0 ? (
-                  <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
-                    <Text style={{ fontSize: 32 }}>☀️</Text>
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Vrije dag</Text>
-                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken</Text>
-                  </View>
-                ) : (
-                  <View style={{ paddingTop: 12, paddingHorizontal: 16, gap: 8 }}>
-                    {focusEvts.map(e => {
-                      const color = getEventColor(e, streams);
-                      return (
-                        <TouchableOpacity
-                          key={e.id}
-                          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
-                          onLongPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            Alert.alert('Afspraak verwijderen?', e.title, [
-                              { text: 'Annuleer', style: 'cancel' },
-                              { text: 'Verwijder', style: 'destructive', onPress: () => { deleteEvent(e); showToast('Afspraak verwijderd', 'info'); } },
-                            ]);
-                          }}
-                          style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}
-                          activeOpacity={0.75}
-                        >
-                          {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: color, width: 38 }}>{e.time.slice(0, 5)}</Text>}
-                          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.black, flex: 1 }}>{e.title}</Text>
-                          {e.source === 'sous-chef' && <Text style={{ fontSize: 13 }}>👨‍🍳</Text>}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                )
-              ) : (
-                /* ── Full week overview ── */
-                weekEvents.length === 0 ? (
-                  <View style={{ flex: 1, alignItems: 'center', paddingTop: 60, gap: 10 }}>
-                    <Text style={{ fontSize: 32 }}>🌤️</Text>
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>Rustige week</Text>
-                    <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400 }}>Geen afspraken gepland</Text>
-                  </View>
-                ) : weekDays.map(d => {
-                  const dayEvts = weekEvents.filter(e => e.date === d.key).sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
-                  if (dayEvts.length === 0) return null;
-                  return (
-                    <View key={d.key} style={{ flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.gray100, paddingVertical: 10 }}>
-                      <View style={{ width: 48, alignItems: 'center', paddingTop: 2 }}>
-                        <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 10, color: d.isToday ? Colors.yellow : colors.gray400, textTransform: 'uppercase' }}>{d.dow}</Text>
-                        <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: d.isToday ? Colors.yellow : colors.black }}>{d.num}</Text>
-                      </View>
-                      <View style={{ flex: 1, gap: 6, paddingRight: 14 }}>
-                        {dayEvts.map(e => {
-                          const color = getEventColor(e, streams);
-                          return (
-                            <TouchableOpacity
-                              key={e.id}
-                              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openDetailEvent(e); }}
-                              onLongPress={() => {
-                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                                Alert.alert('Afspraak verwijderen?', e.title, [
-                                  { text: 'Annuleer', style: 'cancel' },
-                                  { text: 'Verwijder', style: 'destructive', onPress: () => { deleteEvent(e); showToast('Afspraak verwijderd', 'info'); } },
-                                ]);
-                              }}
-                              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: color + '14', borderLeftWidth: 3, borderLeftColor: color, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, gap: 8 }}
-                              activeOpacity={0.75}
-                            >
-                              {e.time && <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: color, width: 34 }}>{e.time.slice(0, 5)}</Text>}
-                              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.black, flex: 1 }} numberOfLines={1}>{e.title}</Text>
-                              {e.source === 'sous-chef' && <Text style={{ fontSize: 11 }}>👨‍🍳</Text>}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </ScrollView>
-
-            {/* FAB */}
-            <TouchableOpacity onPress={() => openQuickAdd(weekFocusDay ?? undefined)} style={{ position: 'absolute', right: 20, bottom: insets.bottom + TAB_BAR_CLEARANCE, width: 56, height: 56, borderRadius: 28, overflow: 'hidden', shadowColor: Colors.yellow, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 8 }} activeOpacity={0.85}>
-              <LinearGradient colors={['#FCC10C', '#E5A800']} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="add" size={26} color={Colors.black} />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        );
-      })()}
+      {viewMode === 'week' && (
+        <WeekView
+          weekOffset={weekOffset}
+          weekFocusDay={weekFocusDay}
+          allEvents={allEvents}
+          streams={streams}
+          colors={colors}
+          insets={insets}
+          onWeekOffsetChange={(offset) => { setWeekOffset(offset); setWeekFocusDay(null); }}
+          onFocusDayChange={setWeekFocusDay}
+          onOpenEvent={openDetailEvent}
+          onDeleteEvent={(e) => { deleteEvent(e); showToast('Afspraak verwijderd', 'info'); }}
+          onQuickAdd={(day) => openQuickAdd(day ?? undefined)}
+        />
+      )}
 
       {/* ── Calendar: month grid ─────────────────────────────────────── */}
       {viewMode === 'calendar' && !dayDetailMode && (
