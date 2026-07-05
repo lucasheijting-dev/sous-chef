@@ -143,7 +143,7 @@ async function getUsersForDigest() {
 async function getLists(userId) {
   const { data, error } = await supabase
     .from('lists')
-    .select('id, name, emoji, sort_order, last_activity_at')
+    .select('id, name, emoji, sort_order, last_activity_at, is_default, default_type')
     .eq('user_id', userId)
     .order('last_activity_at', { ascending: false, nullsFirst: false });
 
@@ -151,14 +151,84 @@ async function getLists(userId) {
   return data ?? [];
 }
 
-async function createList(userId, name, emoji = '📝', listType = 'checklist') {
+async function getTodoList(userId) {
+  const { data } = await supabase
+    .from('lists')
+    .select('id, name, emoji')
+    .eq('user_id', userId)
+    .eq('default_type', 'todo')
+    .single();
+  return data ?? null;
+}
+
+async function createDefaultLists(userId) {
+  const existing = await getLists(userId);
+  const hasGroceries = existing.some(l => l.default_type === 'groceries');
+  const hasTodo     = existing.some(l => l.default_type === 'todo');
+
+  const toInsert = [];
+  if (!hasGroceries) toInsert.push({ user_id: userId, name: 'Boodschappen', emoji: '🛒', sort_order: 0, is_default: true, default_type: 'groceries', last_activity_at: new Date().toISOString() });
+  if (!hasTodo)      toInsert.push({ user_id: userId, name: 'To-do',         emoji: '📋', sort_order: 1, is_default: true, default_type: 'todo',      last_activity_at: new Date().toISOString() });
+
+  if (toInsert.length) {
+    const { error } = await supabase.from('lists').insert(toInsert);
+    if (error) throw new Error(`createDefaultLists: ${error.message}`);
+  }
+}
+
+async function getTodoReminderUsers() {
+  const now   = new Date();
+  const today = now.toISOString().split('T')[0];
+  const hour  = now.getHours();
+
+  const { data: prefs } = await supabase
+    .from('user_prefs')
+    .select('user_id, todo_reminder_enabled, todo_reminder_frequency, todo_reminder_time, todo_reminder_last_sent')
+    .eq('todo_reminder_enabled', true);
+
+  if (!prefs?.length) return [];
+
+  const eligible = prefs.filter(p => {
+    const reminderHour = parseInt((p.todo_reminder_time ?? '09:00:00').split(':')[0], 10);
+    if (reminderHour !== hour) return false;
+
+    const freq = p.todo_reminder_frequency ?? 'daily';
+    const last = p.todo_reminder_last_sent;
+    if (!last) return true;
+
+    const daysSince = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+    if (freq === 'daily' && daysSince < 1) return false;
+    if (freq === 'every_other_day' && daysSince < 2) return false;
+    if (freq === 'every_two_days' && daysSince < 2) return false;
+    return true;
+  });
+
+  if (!eligible.length) return [];
+
+  const { data: users } = await supabase
+    .from('users')
+    .select('id, whatsapp_number')
+    .in('id', eligible.map(p => p.user_id))
+    .eq('onboarding_completed', true);
+
+  return (users ?? []).map(u => ({ ...u, reminderDate: today }));
+}
+
+async function markTodoReminderSent(userId) {
+  const today = new Date().toISOString().split('T')[0];
+  await supabase
+    .from('user_prefs')
+    .upsert({ user_id: userId, todo_reminder_last_sent: today }, { onConflict: 'user_id' });
+}
+
+async function createList(userId, name, emoji = '📝', listType = 'checklist', extra = {}) {
   const existing = await getLists(userId);
   const maxOrder = existing.reduce((m, l) => Math.max(m, l.sort_order ?? 0), 0);
 
   const { data, error } = await supabase
     .from('lists')
-    .insert({ user_id: userId, name, emoji, list_type: listType, sort_order: maxOrder + 1, last_activity_at: new Date().toISOString() })
-    .select('id, name, emoji, list_type')
+    .insert({ user_id: userId, name, emoji, list_type: listType, sort_order: maxOrder + 1, last_activity_at: new Date().toISOString(), ...extra })
+    .select('id, name, emoji, list_type, is_default, default_type')
     .single();
 
   if (error) throw new Error(`Failed to create list: ${error.message}`);
@@ -1482,6 +1552,10 @@ module.exports = {
   createNoteCategory,
   deleteNoteCategory,
   assignNoteCategory,
+  getTodoList,
+  createDefaultLists,
+  getTodoReminderUsers,
+  markTodoReminderSent,
 };
 
 async function getAllUsersAdmin() {

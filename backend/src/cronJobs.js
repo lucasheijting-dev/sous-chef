@@ -122,6 +122,46 @@ function calcNextDue(recurrence, fromDate) {
   return d.toISOString().split('T')[0];
 }
 
+// ── To-do Reminder — every hour ──────────────────────────────────────────────
+
+cron.schedule('0 * * * *', async () => {
+  try {
+    const users = await db.getTodoReminderUsers();
+    for (const user of users) {
+      try {
+        const todoList = await db.getTodoList(user.id);
+        if (!todoList) continue;
+
+        const items = await db.getListItems(todoList.id);
+        const open  = items.filter(i => !i.checked);
+        if (!open.length) continue;
+
+        const oldest = open
+          .slice()
+          .sort((a, b) => new Date(a.created_at ?? 0) - new Date(b.created_at ?? 0))
+          .slice(0, 3);
+
+        const lines = [
+          `📋 Je hebt nog *${open.length}* open to-do item${open.length === 1 ? '' : 's'}.`,
+          '',
+          'Al een tijdje open:',
+          ...oldest.map(i => `• ${i.text}`),
+          '',
+          'Alles bekijken in de app, of stuur me wat je wilt afvinken.',
+        ];
+
+        await sendMessage(user.whatsapp_number, lines.join('\n'));
+        await db.markTodoReminderSent(user.id);
+        console.log(`[Todo] Reminder sent to ${user.whatsapp_number} (${open.length} open)`);
+      } catch (err) {
+        console.error(`[Todo] Reminder failed for user ${user.id}:`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Todo] Fatal reminder error:', err);
+  }
+});
+
 // ── Habit Reminders + WhatsApp Timed Reminders — every hour ──────────────────
 
 cron.schedule('0 * * * *', async () => {
@@ -399,7 +439,7 @@ cron.schedule('30 7 * * *', async () => {
 });
 
 function start() {
-  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | caldav health check daily 07:30 | keepalive every 13min');
+  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | todo reminders hourly | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | caldav health check daily 07:30 | keepalive every 13min');
 }
 
 module.exports = { start, syncUserCalendar };

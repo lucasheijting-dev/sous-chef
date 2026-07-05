@@ -3,6 +3,7 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const { sendMessage } = require('./whatsapp');
+const db = require('./supabase');
 
 const router = express.Router();
 
@@ -13,14 +14,18 @@ const supabase = createClient(
 
 const WELCOME = `👋 *Welkom bij Sous-Chef!*
 
-Je bent nu gekoppeld aan de app. Stuur me berichten zoals:
+Ik heb twee lijsten voor je klaargezet:
+📋 *To-do* — stuur me alles wat je moet doen
+🛒 *Boodschappen* — stuur me wat je nodig hebt
 
-🛒 "melk kopen" → lijst
+Elke ochtend om 09:00 herinner ik je aan je openstaande to-do's. Dit kun je aanpassen in de instellingen.
+
+Je kunt me ook berichten sturen zoals:
 📅 "tandarts vrijdag 14u" → agenda
 🏃 "gesport" → habit loggen
 📝 "onthoud: wifi-wachtwoord is 1234" → notitie
 
-Typ *help* als je wilt zien wat ik allemaal kan. Veel plezier! 🍳`;
+Stuur maar iets om te beginnen! 🍳`;
 
 // POST /register
 router.post('/', async (req, res) => {
@@ -52,13 +57,8 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: 'Could not create user' });
   }
 
-  // Create default boodschappenlijst for new user
-  supabase.from('lists').insert({
-    user_id: created.id,
-    name: 'Boodschappen',
-    emoji: '🛒',
-    sort_order: 0,
-  }).catch(err => console.error('[Register] Boodschappenlijst failed:', err.message));
+  // Create default lists (Boodschappen + To-do) for new user
+  db.createDefaultLists(created.id).catch(err => console.error('[Register] Default lists failed:', err.message));
 
   // Create default calendar streams for new user
   const defaultStreams = [

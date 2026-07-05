@@ -26,6 +26,7 @@ Uitzonderingen op de hoofdregel (altijd prioriteit):
 - Bevat "gesport/gemediteerd/[actieve habit]" → habit_log
 - Begint met "onthoud/noteer/tip/wachtwoord" → note
 - Is een vraag over de agenda → events_today / events_week
+- Beschrijft een actie zonder datum → list (To-do als standaardlijst bestaat)
 
 ## Categorieën
 
@@ -115,11 +116,12 @@ Voorbeeld:
 ## Lijstkeuze-regels
 
 Bij list / list_items / list_check / list_remove / list_clear / list_check_all / list_contains / recurring_item:
-1. Expliciete vermelding ("op de boodschappenlijst") → gebruik die lijst
-2. Semantische match: "citroenen", "biefstuk" → lijst "Boodschappen" als die bestaat
-3. Eén lijst aanwezig → gebruik die altijd
-4. Meerdere even plausibel → clarification
-5. Naam niet bestaand → new_list
+1. Expliciete vermelding ("op de boodschappenlijst", "op mijn to-do") → gebruik die lijst
+2. Semantische match producten: "citroenen", "biefstuk", "shampoo" → lijst "Boodschappen" (default_type: groceries) als die bestaat
+3. Semantische match acties: "bel de tandarts", "stuur contract naar Jan", "regelmatig iets" → lijst "To-do" (default_type: todo) als die bestaat. To-do items zijn acties (dingen die je moet DOEN). Notities zijn informatie (dingen die je wilt ONTHOUDEN). Bij twijfel: kies To-do als het een actie is.
+4. Eén lijst aanwezig → gebruik die altijd
+5. Meerdere even plausibel → clarification
+6. Naam niet bestaand → new_list
 
 ## Meerdere items (list_items)
 
