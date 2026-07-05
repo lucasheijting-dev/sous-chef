@@ -136,7 +136,7 @@ function AnimatedCard({
   onEmojiPress,
   highlighted,
 }: {
-  item: List & { item_count: number; open_count: number; is_shared?: boolean };
+  item: List & { item_count: number; open_count: number; is_shared?: boolean; is_default?: boolean };
   index: number;
   onPress: () => void;
   onDelete: () => void;
@@ -177,63 +177,76 @@ function AnimatedCard({
   const openCount = item.open_count;
   const progress = totalCount > 0 ? (totalCount - openCount) / totalCount : 0;
 
+  const cardContent = (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
+      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
+      style={[styles.tile, { backgroundColor: colors.surface }, highlighted && { borderWidth: 2, borderColor: Colors.yellow }]}
+    >
+      {/* Tappable emoji icon */}
+      <TouchableOpacity
+        onPress={onEmojiPress}
+        activeOpacity={0.75}
+        hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+        style={[styles.tileIconBox, { backgroundColor: tone.bg }]}
+      >
+        <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
+      </TouchableOpacity>
+      <View style={styles.tileBottom}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={[styles.tileName, { color: colors.black, flex: 1 }]} numberOfLines={1}>{item.name}</Text>
+          {item.is_default && (
+            <Ionicons name="pin" size={11} color={colors.gray400} style={{ transform: [{ rotate: '45deg' }] }} />
+          )}
+        </View>
+        <View style={styles.tileCountRow}>
+          {totalCount > 0 ? (
+            allDone ? (
+              <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
+            ) : (
+              <Text style={[styles.tileCount, { color: colors.gray400 }]}>{totalCount - openCount}/{totalCount}</Text>
+            )
+          ) : (
+            <Text style={[styles.tileCount, { color: colors.gray400 }]}>Leeg</Text>
+          )}
+          {typeLabel && (
+            <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>
+              <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
+            </View>
+          )}
+          {item.is_shared && (
+            <View style={[styles.typeBadge, { backgroundColor: colors.gray100, flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
+              <Ionicons name="people-outline" size={10} color={colors.gray400} />
+              <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>Gedeeld</Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      {totalCount > 0 && (
+        <View style={styles.tileProgressBg}>
+          <View style={[StyleSheet.absoluteFillObject, { opacity: 0.15, backgroundColor: tone.fg }]} />
+          <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#5A8A5A' : tone.fg }]} />
+        </View>
+      )}
+
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: '#5A8A5A', opacity: doneFlash }]}
+      />
+    </Pressable>
+  );
+
   return (
     <Animated.View style={[styles.tileWrap, { opacity: fadeAnim, transform: [{ translateY: slideAnim }, { scale }] }]}>
-      <SwipeDeleteRow onDelete={onDelete} borderRadius={Radius.lg} deleteWidth={80}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
-        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.tile, { backgroundColor: colors.surface }, highlighted && { borderWidth: 2, borderColor: Colors.yellow }]}
-      >
-        {/* Tappable emoji icon */}
-        <TouchableOpacity
-          onPress={onEmojiPress}
-          activeOpacity={0.75}
-          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-          style={[styles.tileIconBox, { backgroundColor: tone.bg }]}
-        >
-          <Text style={styles.tileEmoji}>{item.emoji || '📝'}</Text>
-        </TouchableOpacity>
-        <View style={styles.tileBottom}>
-          <Text style={[styles.tileName, { color: colors.black }]}>{item.name}</Text>
-          <View style={styles.tileCountRow}>
-            {totalCount > 0 ? (
-              allDone ? (
-                <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
-              ) : (
-                <Text style={[styles.tileCount, { color: colors.gray400 }]}>{totalCount - openCount}/{totalCount}</Text>
-              )
-            ) : (
-              <Text style={[styles.tileCount, { color: colors.gray400 }]}>Leeg</Text>
-            )}
-            {typeLabel && (
-              <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>
-                <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
-              </View>
-            )}
-            {item.is_shared && (
-              <View style={[styles.typeBadge, { backgroundColor: colors.gray100, flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
-                <Ionicons name="people-outline" size={10} color={colors.gray400} />
-                <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>Gedeeld</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {totalCount > 0 && (
-          <View style={styles.tileProgressBg}>
-            <View style={[StyleSheet.absoluteFillObject, { opacity: 0.15, backgroundColor: tone.fg }]} />
-            <View style={[styles.tileProgressFill, { width: `${progress * 100}%` as any, backgroundColor: allDone ? '#5A8A5A' : tone.fg }]} />
-          </View>
-        )}
-
-        <Animated.View
-          pointerEvents="none"
-          style={[StyleSheet.absoluteFill, { borderRadius: Radius.lg, backgroundColor: '#5A8A5A', opacity: doneFlash }]}
-        />
-      </Pressable>
-      </SwipeDeleteRow>
+      {item.is_default ? (
+        cardContent
+      ) : (
+        <SwipeDeleteRow onDelete={onDelete} borderRadius={Radius.lg} deleteWidth={80}>
+          {cardContent}
+        </SwipeDeleteRow>
+      )}
     </Animated.View>
   );
 }
@@ -504,7 +517,7 @@ export default function LijstenTab() {
     AsyncStorage.setItem('home_active_tab', tab);
     setTimeout(() => {
       if (tab === 'lists') listsScrollRef.current?.scrollTo({ y: 0, animated: false });
-      if (tab === 'notes') notesScrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+      if (tab === 'notes') notesScrollRef.current?.scrollTo?.({ y: 0, animated: false });
       if (tab === 'receipts') receiptsScrollRef.current?.scrollToOffset?.({ offset: 0, animated: false });
     }, 50);
   }
@@ -683,16 +696,23 @@ export default function LijstenTab() {
   }
 
   const sortedLists = [...lists].sort((a, b) => {
+    // Default lists always float to the top
+    const aDefault = (a as any).is_default ? 0 : 1;
+    const bDefault = (b as any).is_default ? 0 : 1;
+    if (aDefault !== bDefault) return aDefault - bDefault;
+
     if (sortMode === 'az') return a.name.localeCompare(b.name, 'nl');
     if (sortMode === 'complete') {
       const pa = a.item_count > 0 ? (a.item_count - a.open_count) / a.item_count : 0;
       const pb = b.item_count > 0 ? (b.item_count - b.open_count) / b.item_count : 0;
       return pb - pa;
     }
-    // Sink fully-done lists to the bottom
-    const aDone = a.item_count > 0 && a.open_count === 0 ? 1 : 0;
-    const bDone = b.item_count > 0 && b.open_count === 0 ? 1 : 0;
-    if (aDone !== bDone) return aDone - bDone;
+    // Sink fully-done lists to the bottom (but not for default lists — they stay on top)
+    if (!(a as any).is_default) {
+      const aDone = a.item_count > 0 && a.open_count === 0 ? 1 : 0;
+      const bDone = b.item_count > 0 && b.open_count === 0 ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+    }
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
   const listSearchTerm = listSearch.trim().toLowerCase();
@@ -754,33 +774,48 @@ export default function LijstenTab() {
     setAssignModalReceipt(null);
   }
 
-  function deleteList(listId: string, listName: string) {
-    const snapshot = lists;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const filtered = lists.filter(l => l.id !== listId);
-    setLists(filtered);
-    setCache('cache_lists', filtered);
-    setPendingListDelete({ listId, listName, items: snapshot });
-    pendingDeleteIdRef.current = listId;
-    setListUndoVisible(true);
-    undoSlide.setValue(60);
-    undoOpacity.setValue(0);
-    Animated.parallel([
-      Animated.spring(undoSlide, { toValue: 0, useNativeDriver: true, tension: 160, friction: 12 }),
-      Animated.timing(undoOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-    ]).start();
-    if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
-    listUndoTimer.current = setTimeout(async () => {
+  function deleteList(listId: string, listName: string, isDefault = false) {
+    const doDelete = () => {
+      const snapshot = lists;
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      const filtered = lists.filter(l => l.id !== listId);
+      setLists(filtered);
+      setCache('cache_lists', filtered);
+      setPendingListDelete({ listId, listName, items: snapshot });
+      pendingDeleteIdRef.current = listId;
+      setListUndoVisible(true);
+      undoSlide.setValue(60);
+      undoOpacity.setValue(0);
       Animated.parallel([
-        Animated.timing(undoOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-        Animated.timing(undoSlide, { toValue: 60, duration: 220, useNativeDriver: true }),
-      ]).start(() => {
-        setListUndoVisible(false);
-        setPendingListDelete(null);
-      });
-      await fetch(`${API_BASE}/lists/${listId}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
-      pendingDeleteIdRef.current = null;
-    }, 4000);
+        Animated.spring(undoSlide, { toValue: 0, useNativeDriver: true, tension: 160, friction: 12 }),
+        Animated.timing(undoOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      ]).start();
+      if (listUndoTimer.current) clearTimeout(listUndoTimer.current);
+      listUndoTimer.current = setTimeout(async () => {
+        Animated.parallel([
+          Animated.timing(undoOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+          Animated.timing(undoSlide, { toValue: 60, duration: 220, useNativeDriver: true }),
+        ]).start(() => {
+          setListUndoVisible(false);
+          setPendingListDelete(null);
+        });
+        await fetch(`${API_BASE}/lists/${listId}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
+        pendingDeleteIdRef.current = null;
+      }, 4000);
+    };
+
+    if (isDefault) {
+      Alert.alert(
+        `${listName} verwijderen?`,
+        `Weet je zeker dat je ${listName} wilt verwijderen? Deze lijst en alle items worden permanent verwijderd en kunnen niet worden hersteld.\n\nJe kunt hem later herstellen via Instellingen → Lijsten.`,
+        [
+          { text: 'Annuleer', style: 'cancel' },
+          { text: 'Verwijder', style: 'destructive', onPress: doDelete },
+        ]
+      );
+    } else {
+      doDelete();
+    }
   }
 
   function undoListDelete() {
@@ -1053,7 +1088,7 @@ export default function LijstenTab() {
                 {activeLists.map((item, index) => (
                   <AnimatedCard key={item.id} item={item} index={index}
                     onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                    onDelete={() => deleteList(item.id, item.name)}
+                    onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default)}
                     onEmojiPress={() => setEmojiPickerList(item)}
                     highlighted={item.id === highlightedListId}
                   />
@@ -1073,7 +1108,7 @@ export default function LijstenTab() {
                   {doneLists.map((item, index) => (
                     <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                      onDelete={() => deleteList(item.id, item.name)}
+                      onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default)}
                       onEmojiPress={() => setEmojiPickerList(item)}
                       highlighted={item.id === highlightedListId}
                     />
@@ -1090,7 +1125,14 @@ export default function LijstenTab() {
 
       {/* Notes view */}
       {activeTab === 'notes' && (
-        <>
+        <ScrollView
+          ref={notesScrollRef as any}
+          style={{ flex: 1, backgroundColor: colors.offWhite }}
+          contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE + 40 }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
+        >
+          {/* Search bar */}
           {notes.length > 0 && (
             <View style={[styles.searchBar, searchFocused && styles.searchBarFocused, { marginHorizontal: 16, marginTop: 12, marginBottom: 8, backgroundColor: colors.gray100, borderColor: searchFocused ? Colors.yellow + '60' : colors.gray200 }]}>
               <Ionicons name="search-outline" size={15} color={searchFocused ? Colors.yellow : colors.gray400} />
@@ -1113,7 +1155,7 @@ export default function LijstenTab() {
           )}
           {/* Category filter chips */}
           {noteCats.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 8, alignItems: 'center' }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ height: 46 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center', height: 46 }}>
               <TouchableOpacity
                 onPress={() => setSelectedNoteCatId(null)}
                 style={[rStyles.chip, { backgroundColor: !selectedNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
@@ -1147,48 +1189,49 @@ export default function LijstenTab() {
               </TouchableOpacity>
             </ScrollView>
           )}
+          {/* Notes grid or empty state */}
           {filteredNotes.length === 0 ? (
-          <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
-            <View style={[styles.emptyIcon, { backgroundColor: '#FFF3E0' }]}>
-              <Text style={{ fontSize: 32 }}>💡</Text>
+            <View style={{ alignItems: 'center', justifyContent: 'center', paddingTop: 80, paddingHorizontal: 24 }}>
+              <View style={[styles.emptyIcon, { backgroundColor: '#FFF3E0' }]}>
+                <Text style={{ fontSize: 32 }}>💡</Text>
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.black }]}>{search ? 'Geen resultaten' : 'Nog geen notities'}</Text>
+              {!search && (
+                <>
+                  <Text style={[styles.emptyText, { color: colors.gray400 }]}>
+                    Stuur een bericht naar de bot:{'\n'}
+                    <Text style={styles.exampleMsg}>"onthoud: na 22u geen koffie meer"</Text>
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(`whatsapp://send?phone=${BOT_NUMBER}&text=onthoud:`)}
+                    style={styles.emptyActionBtn}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={styles.emptyActionBtnGrad}>
+                      <Ionicons name="logo-whatsapp" size={16} color={Colors.black} />
+                      <Text style={styles.emptyActionBtnText}>Open WhatsApp</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
-            <Text style={[styles.emptyTitle, { color: colors.black }]}>{search ? 'Geen resultaten' : 'Nog geen notities'}</Text>
-            {!search && (
-              <>
-                <Text style={[styles.emptyText, { color: colors.gray400 }]}>
-                  Stuur een bericht naar de bot:{'\n'}
-                  <Text style={styles.exampleMsg}>"onthoud: na 22u geen koffie meer"</Text>
-                </Text>
-                <TouchableOpacity
-                  onPress={() => Linking.openURL(`whatsapp://send?phone=${BOT_NUMBER}&text=onthoud:`)}
-                  style={styles.emptyActionBtn}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={styles.emptyActionBtnGrad}>
-                    <Ionicons name="logo-whatsapp" size={16} color={Colors.black} />
-                    <Text style={styles.emptyActionBtnText}>Open WhatsApp</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
-        ) : (
-          <FlatList
-            ref={notesScrollRef}
-            data={filteredNotes}
-            keyExtractor={(n) => n.id}
-            numColumns={2}
-            contentContainerStyle={styles.noteGrid}
-            columnWrapperStyle={styles.noteRow}
-            style={{ backgroundColor: colors.offWhite }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
-            renderItem={({ item, index }) => {
-              const cat = noteCats.find(c => c.id === item.category_id);
-              return <NoteCard item={item} index={index} search={search} onPress={() => setSelectedNote(item)} category={cat} />;
-            }}
-          />
-        )}
-        </>
+          ) : (
+            <View style={styles.noteGrid}>
+              {Array.from({ length: Math.ceil(filteredNotes.length / 2) }, (_, rowIdx) => {
+                const left = filteredNotes[rowIdx * 2];
+                const right = filteredNotes[rowIdx * 2 + 1];
+                return (
+                  <View key={rowIdx} style={styles.noteRow}>
+                    <NoteCard item={left} index={rowIdx * 2} search={search} onPress={() => setSelectedNote(left)} category={noteCats.find(c => c.id === left.category_id)} />
+                    {right
+                      ? <NoteCard item={right} index={rowIdx * 2 + 1} search={search} onPress={() => setSelectedNote(right)} category={noteCats.find(c => c.id === right.category_id)} />
+                      : <View style={{ flex: 1 }} />}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
       )}
 
       {/* Receipts view */}
@@ -2058,8 +2101,8 @@ const styles = StyleSheet.create({
   retryBtn: { borderRadius: Radius.pill, paddingVertical: 13, paddingHorizontal: 28, marginTop: 8 },
   retryBtnText: { fontFamily: 'Inter_700Bold', fontSize: 15, color: Colors.black },
 
-  noteGrid: { padding: 18, paddingTop: 10, paddingBottom: TAB_BAR_CLEARANCE, gap: 12 },
-  noteRow: { gap: 12, marginBottom: 0 },
+  noteGrid: { padding: 12, paddingTop: 8 },
+  noteRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   noteCard: { flex: 1, borderRadius: Radius.lg, padding: 17, minHeight: 130, ...Shadow.card },
   noteCardTitle: { fontFamily: 'Inter_600SemiBold', fontSize: 15.5, marginBottom: 7, letterSpacing: -0.2, lineHeight: 21 },
   noteCardBody: { fontFamily: 'Inter_400Regular', fontSize: 13.5, lineHeight: 20, flex: 1 },

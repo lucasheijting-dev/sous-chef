@@ -248,6 +248,10 @@ export default function InstellingenTab() {
 
   // Lijsten
   const [listsAutoDelete, setListsAutoDelete] = useState(false);
+  const [todoReminderEnabled, setTodoReminderEnabled] = useState(true);
+  const [todoReminderFreq, setTodoReminderFreq] = useState<'daily' | 'every_other_day' | 'every_two_days'>('daily');
+  const [todoReminderTime, setTodoReminderTime] = useState('09:00');
+  const [restoringDefaults, setRestoringDefaults] = useState(false);
 
   // Morning screen list settings
   const [morningModalVisible, setMorningModalVisible] = useState(false);
@@ -307,7 +311,7 @@ export default function InstellingenTab() {
         .eq('user_id', user.id),
       supabase
         .from('user_prefs')
-        .select('profile_birth_year, profile_employer, profile_friends, profile_extra, lists_auto_delete')
+        .select('profile_birth_year, profile_employer, profile_friends, profile_extra, lists_auto_delete, todo_reminder_enabled, todo_reminder_frequency, todo_reminder_time')
         .eq('user_id', user.id)
         .single(),
     ]);
@@ -324,6 +328,9 @@ export default function InstellingenTab() {
     if (eventsResult.count !== null) setEventsCount(eventsResult.count);
     if (prefsRow.data) {
       setListsAutoDelete(!!prefsRow.data.lists_auto_delete);
+      setTodoReminderEnabled(prefsRow.data.todo_reminder_enabled !== false);
+      setTodoReminderFreq(prefsRow.data.todo_reminder_frequency ?? 'daily');
+      setTodoReminderTime((prefsRow.data.todo_reminder_time ?? '09:00:00').slice(0, 5));
       setProfileBirthYear(String(prefsRow.data.profile_birth_year ?? ''));
       setProfileEmployer(prefsRow.data.profile_employer ?? '');
       setProfileFriends(prefsRow.data.profile_friends ?? '');
@@ -925,6 +932,87 @@ export default function InstellingenTab() {
               />
             }
           />
+          <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+          <SettingsRow
+            icon="refresh-outline"
+            label="Standaardlijsten herstellen"
+            subtitle="Maak To-do en Boodschappen opnieuw aan als ze verwijderd zijn"
+            right={
+              restoringDefaults
+                ? <ActivityIndicator size="small" color={Colors.yellow} />
+                : <Ionicons name="chevron-forward" size={18} color={colors.gray400} />
+            }
+            onPress={async () => {
+              if (!user || user.id === 'dev') return;
+              setRestoringDefaults(true);
+              try {
+                await fetch(`${API_BASE}/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' });
+                Alert.alert('Hersteld', 'Standaardlijsten zijn aangemaakt als ze ontbraken.');
+              } catch {
+                Alert.alert('Fout', 'Kon standaardlijsten niet herstellen.');
+              } finally {
+                setRestoringDefaults(false);
+              }
+            }}
+          />
+        </View>
+
+        <Text style={[styles.sectionLabel, { color: colors.gray400 }]}>To-do herinnering</Text>
+        <View style={[styles.card, { backgroundColor: colors.white }]}>
+          <SettingsRow
+            icon="notifications-outline"
+            label="Dagelijkse herinnering"
+            subtitle="WhatsApp-bericht met je openstaande to-do items"
+            right={
+              <Switch
+                value={todoReminderEnabled}
+                onValueChange={async (v) => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setTodoReminderEnabled(v);
+                  if (!user || user.id === 'dev') return;
+                  await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_enabled: v }, { onConflict: 'user_id' });
+                }}
+                trackColor={{ false: colors.gray100, true: Colors.yellow }}
+                thumbColor={Colors.black}
+              />
+            }
+          />
+          {todoReminderEnabled && (
+            <>
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="time-outline"
+                label="Frequentie"
+                subtitle={{ daily: 'Dagelijks', every_other_day: 'Om de dag', every_two_days: 'Om de 2 dagen' }[todoReminderFreq]}
+                right={<Ionicons name="chevron-forward" size={18} color={colors.gray400} />}
+                onPress={() => {
+                  Alert.alert('Frequentie', 'Hoe vaak wil je een herinnering?', [
+                    { text: 'Dagelijks', onPress: async () => { setTodoReminderFreq('daily'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_frequency: 'daily' }, { onConflict: 'user_id' }); } },
+                    { text: 'Om de dag', onPress: async () => { setTodoReminderFreq('every_other_day'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_frequency: 'every_other_day' }, { onConflict: 'user_id' }); } },
+                    { text: 'Om de 2 dagen', onPress: async () => { setTodoReminderFreq('every_two_days'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_frequency: 'every_two_days' }, { onConflict: 'user_id' }); } },
+                    { text: 'Annuleer', style: 'cancel' },
+                  ]);
+                }}
+              />
+              <View style={[styles.divider, { backgroundColor: colors.gray100 }]} />
+              <SettingsRow
+                icon="alarm-outline"
+                label="Tijdstip"
+                subtitle={`Om ${todoReminderTime}`}
+                right={<Ionicons name="chevron-forward" size={18} color={colors.gray400} />}
+                onPress={() => {
+                  Alert.alert('Tijdstip', 'Kies een tijdstip voor de herinnering', [
+                    { text: '07:00', onPress: async () => { setTodoReminderTime('07:00'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_time: '07:00:00' }, { onConflict: 'user_id' }); } },
+                    { text: '08:00', onPress: async () => { setTodoReminderTime('08:00'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_time: '08:00:00' }, { onConflict: 'user_id' }); } },
+                    { text: '09:00', onPress: async () => { setTodoReminderTime('09:00'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_time: '09:00:00' }, { onConflict: 'user_id' }); } },
+                    { text: '10:00', onPress: async () => { setTodoReminderTime('10:00'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_time: '10:00:00' }, { onConflict: 'user_id' }); } },
+                    { text: '12:00', onPress: async () => { setTodoReminderTime('12:00'); if (user && user.id !== 'dev') await supabase.from('user_prefs').upsert({ user_id: user.id, todo_reminder_time: '12:00:00' }, { onConflict: 'user_id' }); } },
+                    { text: 'Annuleer', style: 'cancel' },
+                  ]);
+                }}
+              />
+            </>
+          )}
         </View>
 
         {/* ── Agenda ─────────────────────────────────────────────────── */}

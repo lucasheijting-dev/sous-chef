@@ -891,8 +891,6 @@ export default function ListDetailScreen() {
                   <Text style={styles.allDoneEmoji}>🎉</Text>
                   <Text style={styles.allDoneText}>Alles afgevinkt!</Text>
                 </View>
-              ) : filteredUnchecked.length > 0 ? (
-                <Text style={styles.sectionLabel}>{filteredUnchecked.length} te doen</Text>
               ) : null
             }
             ListEmptyComponent={
