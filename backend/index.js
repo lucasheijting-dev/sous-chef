@@ -54,7 +54,7 @@ app.get('/join/list/:token', async (req, res) => {
     if (invite) { listName = invite.list_name || listName; listEmoji = invite.list_emoji || listEmoji; }
   } catch { /* serve page regardless */ }
 
-  const deepLink = `app://redirect?listInvite=${encodeURIComponent(token)}`;
+  const deepLink = `app://?listInvite=${encodeURIComponent(token)}`;
   const appStoreUrl = 'https://apps.apple.com/app/de-sous-chef/id6742611499';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.lucasheijting.souschef';
 

@@ -110,4 +110,17 @@ router.post('/items/:itemId/image', async (req, res) => {
   }
 });
 
+// GET /lists/shared?user_id=xxx
+router.get('/shared', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const result = await db.getSharedListsForUser(user_id);
+    res.json(result);
+  } catch (err) {
+    console.error('[Lists] Shared error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

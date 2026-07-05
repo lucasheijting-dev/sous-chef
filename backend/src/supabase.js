@@ -1088,6 +1088,33 @@ async function addListItemSource(listItemId, recipeId, originalText) {
 
 // ── Sharing ─────────────────────────────────────────────────────────────────────
 
+async function getSharedListsForUser(userId) {
+  // Lists shared WITH the user (they are a member but not owner)
+  const { data: memberRows } = await supabase
+    .from('list_members')
+    .select('list_id, lists(id, name, emoji, sort_order, list_type, list_items(checked))')
+    .eq('user_id', userId);
+
+  const sharedWithMe = (memberRows ?? [])
+    .filter(r => r.lists)
+    .map(r => {
+      const l = r.lists;
+      const items = Array.isArray(l.list_items) ? l.list_items : [];
+      return { ...l, item_count: items.length, open_count: items.filter(i => !i.checked).length, is_shared: true };
+    });
+
+  // IDs of the user's OWN lists that have other members (for "Gedeeld" badge)
+  const { data: othersRows } = await supabase
+    .from('list_members')
+    .select('list_id, lists!inner(user_id)')
+    .eq('lists.user_id', userId)
+    .neq('user_id', userId);
+
+  const mySharedListIds = [...new Set((othersRows ?? []).map(r => r.list_id))];
+
+  return { sharedWithMe, mySharedListIds };
+}
+
 async function getListMembers(listId) {
   const { data } = await supabase
     .from('list_members')
@@ -1283,6 +1310,7 @@ module.exports = {
   getBestReminderHour,
   getUsersForDigest,
   getLists,
+  getSharedListsForUser,
   createList,
   renameList,
   updateListEmoji,

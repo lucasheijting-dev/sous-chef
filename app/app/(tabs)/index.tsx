@@ -27,7 +27,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -37,6 +37,7 @@ import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE, getTone, TONE_ORDER, Tones }
 import { SkeletonListCard } from '@/components/SkeletonCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCache, setCache } from '@/lib/cache';
+import { setListRefreshHandler } from '@/lib/listEvents';
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 
 const BOT_NUMBER = '31684965318';
@@ -459,6 +460,7 @@ function formatAmount(total: number | null, currency = 'EUR') {
   return after ? `${total.toFixed(2)} ${sym}` : `${sym}${total.toFixed(2)}`;
 }
 
+
 function formatReceiptDate(iso: string | null) {
   if (!iso) return '';
   try { return new Date(iso + 'T12:00:00').toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -547,40 +549,25 @@ export default function LijstenTab() {
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     try {
-      const [listsRes, sharedRes] = await Promise.all([
+      const [listsRes, sharedData] = await Promise.all([
         supabase
           .from('lists')
           .select('id, name, emoji, sort_order, list_type, list_items(checked)')
           .eq('user_id', user.id)
           .order('sort_order', { ascending: true }),
-        supabase
-          .from('list_members')
-          .select('list_id, user_id, lists(id, name, emoji, sort_order, list_type, list_items(checked))'),
+        fetch(`${API_BASE}/lists/shared?user_id=${user.id}`).then(r => r.json()).catch(() => ({ sharedWithMe: [], mySharedListIds: [] })),
       ]);
       if (listsRes.data) {
+        const sharedWithMe: any[] = sharedData?.sharedWithMe ?? [];
+        const mySharedIds = new Set<string>(sharedData?.mySharedListIds ?? []);
         const ownedProcessed = listsRes.data.map((l: any) => {
           const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
-          const totalCount = items.length;
-          const openCount = items.filter((li: any) => !li.checked).length;
-          // is_shared_with_others = someone else is a member of this owned list
-          const isSharedWithOthers = (sharedRes.data ?? []).some(
-            (r: any) => r.list_id === l.id && r.user_id !== user.id
-          );
-          return { ...l, item_count: totalCount, open_count: openCount, is_shared: isSharedWithOthers };
+          return { ...l, item_count: items.length, open_count: items.filter((li: any) => !li.checked).length, is_shared: mySharedIds.has(l.id) };
         });
-        const sharedProcessed = (sharedRes.data ?? [])
-          .filter((r: any) => r.lists && r.user_id === user.id)
-          .map((r: any) => {
-            const l = r.lists as any;
-            const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
-            const totalCount = items.length;
-            const openCount = items.filter((li: any) => !li.checked).length;
-            return { ...l, item_count: totalCount, open_count: openCount, is_shared: true };
-          });
         const ownedIds = new Set(ownedProcessed.map((l: any) => l.id));
         const mergedAll = [
           ...ownedProcessed,
-          ...sharedProcessed.filter((l: any) => !ownedIds.has(l.id)),
+          ...sharedWithMe.filter((l: any) => !ownedIds.has(l.id)),
         ].filter((l: any) => l.id !== pendingDeleteIdRef.current);
         setLists(mergedAll);
         setCache('cache_lists', mergedAll);
@@ -616,6 +603,11 @@ export default function LijstenTab() {
     return () => { supabase.removeChannel(ch); };
   }, [user, fetchLists, fetchNotes]);
 
+  useFocusEffect(useCallback(() => {
+    setListRefreshHandler(fetchLists);
+    fetchLists();
+    return () => { setListRefreshHandler(null); };
+  }, [fetchLists]));
 
   useEffect(() => {
     getCache<(List & { item_count: number; open_count: number })[]>('cache_lists').then(d => {

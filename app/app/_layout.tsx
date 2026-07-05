@@ -24,6 +24,7 @@ import { ModuleSettingsProvider, useModuleSettings } from '@/context/ModuleSetti
 import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { MorningScreen } from '@/components/MorningScreen';
+import { triggerListRefresh } from '@/lib/listEvents';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -91,31 +92,53 @@ function AuthGate() {
     }).catch(() => {});
   }, [user?.id]);
 
-  // Process pending list invite (from deep link)
+  async function processListInviteToken(token: string) {
+    const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+    try {
+      const res = await fetch(`${API_BASE}/sharing/accept-invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, user_id: user!.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        triggerListRefresh();
+        Alert.alert('Toegevoegd! 🎉', `Je bent toegevoegd aan ${data.list_emoji ?? '📝'} ${data.list_name ?? 'de lijst'}.`);
+      } else if (res.status === 409) {
+        // already a member — silently ignore
+      } else {
+        Alert.alert('Uitnodiging mislukt', data.error ?? 'Probeer het opnieuw.');
+      }
+    } catch {
+      // silent — network issue
+    }
+  }
+
+  // Process pending list invite (from deep link stored before user was ready)
   useEffect(() => {
     if (!user || user.id === 'dev') return;
     AsyncStorage.getItem('pending_list_invite').then(async token => {
       if (!token) return;
       await AsyncStorage.removeItem('pending_list_invite').catch(() => {});
-      const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
-      try {
-        const res = await fetch(`${API_BASE}/sharing/accept-invite`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token, user_id: user.id }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          Alert.alert('Toegevoegd! 🎉', `Je bent toegevoegd aan ${data.list_emoji ?? '📝'} ${data.list_name ?? 'de lijst'}.`);
-        } else if (res.status === 409) {
-          // already a member — silently ignore
-        } else {
-          Alert.alert('Uitnodiging mislukt', data.error ?? 'Probeer het opnieuw.');
-        }
-      } catch {
-        // silent — network issue
-      }
+      processListInviteToken(token);
     }).catch(() => {});
+  }, [user?.id]);
+
+  // Process list invite deep links that arrive while app is already open
+  useEffect(() => {
+    if (!user || user.id === 'dev') return;
+    function handleLiveDeepLink({ url }: { url: string }) {
+      if (url.includes('listInvite')) {
+        const params = new URLSearchParams(url.split('?')[1] ?? '');
+        const token = params.get('listInvite');
+        if (token) {
+          AsyncStorage.removeItem('pending_list_invite').catch(() => {});
+          processListInviteToken(token);
+        }
+      }
+    }
+    const sub = Linking.addEventListener('url', handleLiveDeepLink);
+    return () => sub.remove();
   }, [user?.id]);
 
   return null;
