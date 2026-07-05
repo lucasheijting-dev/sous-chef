@@ -8,8 +8,9 @@
 const TTL_MS = 30 * 60 * 1000;
 const MAX_MESSAGES = 12;
 
-const store    = new Map(); // Map<userId, { messages: [], lastSeen: number }>
-const lastEvent = new Map(); // Map<userId, { id, title, date, time, caldavUid, calendarStream, savedAt }>
+const store         = new Map(); // Map<userId, { messages: [], lastSeen: number }>
+const lastEvent     = new Map(); // Map<userId, { id, title, date, time, caldavUid, calendarStream, savedAt }>
+const pendingRecurMap = new Map(); // Map<userId, { eventData, savedAt }>
 
 
 function _live(userId) {
@@ -53,4 +54,19 @@ function getLastEvent(userId) {
   return ev;
 }
 
-module.exports = { getHistory, addExchange, setLastEvent, getLastEvent };
+function setPendingRecurring(userId, data) {
+  pendingRecurMap.set(userId, { ...data, savedAt: Date.now() });
+}
+
+function getPendingRecurring(userId) {
+  const pr = pendingRecurMap.get(userId);
+  if (!pr) return null;
+  if (Date.now() - pr.savedAt > TTL_MS) { pendingRecurMap.delete(userId); return null; }
+  return pr;
+}
+
+function clearPendingRecurring(userId) {
+  pendingRecurMap.delete(userId);
+}
+
+module.exports = { getHistory, addExchange, setLastEvent, getLastEvent, setPendingRecurring, getPendingRecurring, clearPendingRecurring };

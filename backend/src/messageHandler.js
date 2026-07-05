@@ -64,6 +64,107 @@ async function _calUpdate(userId, calProvider, calInfo, caldavCreds, stream, cal
   return null;
 }
 
+// ── Recurring event expansion ─────────────────────────────────────────────────
+
+function generateRecurringDates(startDate, intervalType, untilDate, max = 104) {
+  const pad = n => String(n).padStart(2, '0');
+  const dates = [];
+  let cur = new Date(startDate + 'T00:00:00');
+  const until = new Date(untilDate + 'T23:59:59');
+  while (cur <= until && dates.length < max) {
+    dates.push(`${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`);
+    if (intervalType === 'daily')        cur.setDate(cur.getDate() + 1);
+    else if (intervalType === 'monthly') cur.setMonth(cur.getMonth() + 1);
+    else                                 cur.setDate(cur.getDate() + 7);
+  }
+  return dates;
+}
+
+async function handleRecurringAnswer(text, userId, from, pending) {
+  const lc = text.toLowerCase().trim();
+  const pad = n => String(n).padStart(2, '0');
+
+  // Parse duration from user's answer
+  const maandenMatch = lc.match(/(\d+)\s*maand/);
+  const wekenMatch   = lc.match(/(\d+)\s*week/);
+  const keerMatch    = lc.match(/(\d+)\s*keer/);
+  const jarenMatch   = lc.match(/(\d+)\s*jaar/);
+  const eeuwigMatch  = /altijd|voor altijd|eeuwig|onbepaald/.test(lc);
+
+  // Determine interval type
+  const rec = pending.eventRecurrence ?? '';
+  let intervalType = 'weekly';
+  if (rec === 'daily'          || /dagelijks|elke dag/.test(lc)) intervalType = 'daily';
+  else if (rec.startsWith('monthly') || /maandelijks|elke maand/.test(lc)) intervalType = 'monthly';
+
+  const startDate = pending.startDate ?? new Date().toISOString().split('T')[0];
+  const start = new Date(startDate + 'T00:00:00');
+  let until = null;
+
+  if (eeuwigMatch) {
+    until = new Date(start); until.setFullYear(until.getFullYear() + 2);
+  } else if (maandenMatch) {
+    until = new Date(start); until.setMonth(until.getMonth() + parseInt(maandenMatch[1]));
+  } else if (jarenMatch) {
+    until = new Date(start); until.setFullYear(until.getFullYear() + parseInt(jarenMatch[1]));
+  } else if (wekenMatch) {
+    until = new Date(start); until.setDate(until.getDate() + parseInt(wekenMatch[1]) * 7);
+  } else if (keerMatch) {
+    const n = parseInt(keerMatch[1]);
+    until = new Date(start);
+    if (intervalType === 'daily')        until.setDate(until.getDate() + n - 1);
+    else if (intervalType === 'monthly') until.setMonth(until.getMonth() + n - 1);
+    else                                 until.setDate(until.getDate() + (n - 1) * 7);
+  }
+
+  if (!until) return { handled: false };
+
+  const untilStr = `${until.getFullYear()}-${pad(until.getMonth()+1)}-${pad(until.getDate())}`;
+  const dates = generateRecurringDates(startDate, intervalType, untilStr);
+  if (dates.length === 0) return { handled: false };
+
+  // Get calendar provider
+  const calInfo = await db.getCalendarProvider(userId).catch(() => null);
+  const calProvider = calInfo?.calendar_provider ?? (calInfo?.caldav_username ? 'iphone' : null);
+  let caldavCreds = null;
+  if (calProvider !== 'none' && calProvider !== 'google' && calProvider !== 'outlook') {
+    if (caldav.isConfigured()) caldavCreds = await db.getCalDAVCredentials(userId).catch(() => null);
+  }
+
+  // One RRULE CalDAV event for iPhone sync
+  const rrule = intervalType === 'daily' ? 'daily' : intervalType === 'monthly' ? 'monthly' : 'weekly';
+  let caldavUid = null;
+  try {
+    caldavUid = await _calCreate(userId, calProvider, calInfo, caldavCreds, pending.calendarStream, {
+      title: pending.eventTitle, date: startDate, time: pending.eventTime ?? null,
+      recurrence: rrule, recurrenceUntil: untilStr,
+      reminderMinutesBefore: pending.reminderMinutes ?? 30,
+      durationMinutes: pending.durationMinutes ?? null,
+    });
+  } catch (err) {
+    console.error('Recurring CalDAV create failed:', err.message);
+  }
+
+  // Individual DB events for app agenda display
+  for (let i = 0; i < dates.length; i++) {
+    await db.createEvent(userId, {
+      title: pending.eventTitle,
+      date: dates[i],
+      time: pending.eventTime ?? null,
+      recurrence: null,
+      reminderDaysBefore: null,
+      caldavUid: i === 0 ? caldavUid : null,
+      calendarStream: pending.calendarStream,
+    }).catch(() => {});
+  }
+
+  sendCalendarPush(userId, { title: pending.eventTitle, date: dates[0], time: pending.eventTime ?? null, calendarStream: pending.calendarStream }).catch(() => {});
+
+  const intervalLabel = intervalType === 'daily' ? 'dagelijks' : intervalType === 'monthly' ? 'elke maand' : 'elke week';
+  const reply = `📅 *${pending.eventTitle}* ingepland!\n\n🔄 ${dates.length}× ${intervalLabel} — t/m ${formatDate(dates[dates.length - 1])}.\n\n_Staat nu in je agenda._ ✅`;
+  return { handled: true, reply };
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 const UNDO_TRIGGERS     = ['ongedaan', 'undo', 'terugdraaien', 'verwijder laatste', 'annuleer laatste'];
@@ -220,6 +321,20 @@ async function handleMessage({ from, text }) {
     await sendSplit(from, reply);
     await db.incrementMessageCount(userId);
     return;
+  }
+
+  // Check for pending recurring event — user is answering "tot wanneer?" question
+  const pendingRec = session.getPendingRecurring(userId);
+  if (pendingRec) {
+    const result = await handleRecurringAnswer(text, userId, from, pendingRec);
+    if (result.handled) {
+      session.clearPendingRecurring(userId);
+      session.addExchange(userId, text, result.reply);
+      await sendSplit(from, result.reply);
+      await db.incrementMessageCount(userId);
+      return;
+    }
+    session.clearPendingRecurring(userId); // can't parse → treat as new message
   }
 
   // Load all context in parallel
@@ -724,6 +839,30 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
             location:                intent.event_location ?? null,
           }];
 
+      // If non-yearly recurring event without end date → ask for clarification first
+      const recurEv = eventList.find(ev => ev.recurrence && ev.recurrence !== 'yearly' && !intent.recurrence_until);
+      if (recurEv) {
+        const recLabel = recurEv.recurrence === 'daily' ? 'dagelijks'
+          : recurEv.recurrence?.startsWith('monthly') ? 'maandelijks'
+          : 'wekelijks';
+        const example = recurEv.recurrence?.startsWith('monthly')
+          ? 'een half jaar lang elke maand (6×)'
+          : recurEv.recurrence === 'daily'
+          ? '2 weken lang elke dag (14×)'
+          : '3 maanden lang elke week (13×)';
+
+        session.setPendingRecurring(userId, {
+          eventTitle:      recurEv.title ?? intent.event_title ?? originalText,
+          eventTime:       recurEv.time ?? null,
+          eventRecurrence: recurEv.recurrence,
+          calendarStream:  recurEv.calendar_stream ?? intent.calendar_stream ?? 'personal',
+          startDate:       recurEv.date ?? new Date().toISOString().split('T')[0],
+          durationMinutes: recurEv.duration_minutes ?? null,
+          reminderMinutes: intent.reminder_minutes_before ?? 30,
+        });
+        return `🔄 *${recurEv.title ?? intent.event_title}* — ${recLabel} inplannen.\n\nTot wanneer en hoe vaak?\n_Bijv: ${example}_`;
+      }
+
       // Determine calendar provider + credentials
       const calInfo   = await db.getCalendarProvider(userId).catch(() => null);
       const calProvider = calInfo?.calendar_provider ?? (calInfo?.caldav_username ? 'iphone' : null);
@@ -800,6 +939,23 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
               recurrence: ev.recurrence ?? null, reminderDaysBefore: reminderDays,
             }).catch(() => {});
           }
+        }
+
+        // If non-yearly recurring with end date: expand to individual DB events for app display
+        if (ev.recurrence && ev.recurrence !== 'yearly' && recurrenceUntil) {
+          const intervalType = ev.recurrence === 'daily' ? 'daily' : ev.recurrence.startsWith('monthly') ? 'monthly' : 'weekly';
+          const dates = generateRecurringDates(ev.date, intervalType, recurrenceUntil);
+          for (let i = 0; i < dates.length; i++) {
+            const s = await db.createEvent(userId, {
+              title: evTitle, date: dates[i], time: ev.time ?? null,
+              recurrence: null, reminderDaysBefore: null,
+              caldavUid: i === 0 ? caldavUid : null, calendarStream: stream,
+            }).catch(() => null);
+            if (i === 0 && s) lastSavedEvent = { id: s.id, title: evTitle, date: dates[0], time: ev.time ?? null, caldavUid, calendarStream: stream };
+          }
+          const intervalLabel = intervalType === 'daily' ? 'dagelijks' : intervalType === 'monthly' ? 'elke maand' : 'elke week';
+          lines.push(`• *Ingepland* — *${evTitle}* 🔄 ${dates.length}× ${intervalLabel} t/m ${fmtDate(recurrenceUntil)}`);
+          continue;
         }
 
         const saved = await db.createEvent(userId, {
