@@ -49,10 +49,26 @@ app.get('/join/list/:token', async (req, res) => {
   const db = require('./src/supabase');
   let listName = 'een lijst';
   let listEmoji = '📝';
+  let listId = null;
   try {
     const invite = await db.getListInvite(token);
-    if (invite) { listName = invite.list_name || listName; listEmoji = invite.list_emoji || listEmoji; }
+    if (invite) {
+      listName = invite.list_name || listName;
+      listEmoji = invite.list_emoji || listEmoji;
+      listId = invite.list_id;
+    }
   } catch { /* serve page regardless */ }
+
+  let previewItems = [];
+  if (listId) {
+    try {
+      previewItems = await db.getListItemsPreview(listId);
+    } catch { /* skip preview gracefully */ }
+  }
+
+  const previewHtml = previewItems.length > 0
+    ? `<div class="preview">${previewItems.map(i => `<div class="preview-item">☐ ${i.text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`).join('')}</div>`
+    : '';
 
   const deepLink = `app://?listInvite=${encodeURIComponent(token)}`;
   const appStoreUrl = 'https://apps.apple.com/app/de-sous-chef/id6742611499';
@@ -76,9 +92,13 @@ app.get('/join/list/:token', async (req, res) => {
     .btn-primary{background:#FCC10C;color:#000}
     .btn-store{background:#1a1a1a;color:#fff;border:1px solid #333;font-size:14px}
     .stores{display:flex;flex-direction:column;gap:8px;width:100%;max-width:320px}
-    #opening{font-size:14px;color:#666}
+    #opening{font-size:14px;color:#666;width:100%;max-width:320px}
     #fallback{display:none;width:100%;max-width:320px}
     .divider{width:100%;max-width:320px;border-top:1px solid #222;padding-top:20px;margin-top:4px}
+    .preview{background:#111;border-radius:12px;padding:12px 16px;width:100%;max-width:320px;text-align:left;margin:4px 0}
+    .preview-item{font-size:14px;color:#ccc;padding:4px 0;border-bottom:1px solid #1e1e1e}
+    .preview-item:last-child{border-bottom:none}
+    .preview-more{font-size:12px;color:#555;padding-top:6px}
   </style>
 </head>
 <body>
@@ -87,21 +107,25 @@ app.get('/join/list/:token', async (req, res) => {
     <h1>Sous-Chef</h1>
     <div class="list-name">${listEmoji} ${listName}</div>
   </div>
+  ${previewHtml}
   <p>Je bent uitgenodigd om mee te werken aan deze lijst!</p>
+  <a class="btn btn-primary" href="${deepLink}" id="open-btn">Open in Sous-Chef</a>
   <p id="opening">De app wordt geopend…</p>
   <div id="fallback">
     <div class="stores">
       <a class="btn btn-store" href="${appStoreUrl}">📱 Download in de App Store</a>
       <a class="btn btn-store" href="${playStoreUrl}">🤖 Download in Google Play</a>
     </div>
-    <p style="margin-top:16px;font-size:13px;color:#555">Na installatie, klik de link opnieuw om automatisch toe te voegen.</p>
+    <p style="margin-top:16px;font-size:13px;color:#555">Na installatie, klik de link opnieuw — je wordt automatisch toegevoegd.</p>
   </div>
   <script>
     window.location = '${deepLink}';
     setTimeout(function(){
-      document.getElementById('opening').style.display='none';
-      document.getElementById('fallback').style.display='block';
-    }, 2000);
+      document.getElementById('opening').textContent = 'App opent niet? Klik hier';
+      document.getElementById('opening').style.cursor = 'pointer';
+      document.getElementById('opening').onclick = function(){ window.location = '${deepLink}'; };
+      document.getElementById('fallback').style.display = 'block';
+    }, 3000);
   </script>
 </body>
 </html>`);

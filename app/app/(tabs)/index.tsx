@@ -133,12 +133,14 @@ function AnimatedCard({
   onPress,
   onDelete,
   onEmojiPress,
+  highlighted,
 }: {
   item: List & { item_count: number; open_count: number; is_shared?: boolean };
   index: number;
   onPress: () => void;
   onDelete: () => void;
   onEmojiPress: () => void;
+  highlighted?: boolean;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -181,7 +183,7 @@ function AnimatedCard({
         onPress={onPress}
         onPressIn={() => Animated.spring(scale, { toValue: 0.97, useNativeDriver: true, speed: 50 }).start()}
         onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 50 }).start()}
-        style={[styles.tile, { backgroundColor: colors.surface }]}
+        style={[styles.tile, { backgroundColor: colors.surface }, highlighted && { borderWidth: 2, borderColor: Colors.yellow }]}
       >
         {/* Tappable emoji icon */}
         <TouchableOpacity
@@ -537,6 +539,9 @@ export default function LijstenTab() {
   const [editNoteBody, setEditNoteBody] = useState('');
   const [editNoteTitle, setEditNoteTitle] = useState('');
 
+  const [highlightedListId, setHighlightedListId] = useState<string | null>(null);
+  const prevListIdsRef = useRef<Set<string>>(new Set());
+
   const scrollY = useRef(new Animated.Value(0)).current;
   const emptyBreath = useRef(new Animated.Value(1)).current;
   const breathLoopRef = useRef<Animated.CompositeAnimation | null>(null);
@@ -569,6 +574,12 @@ export default function LijstenTab() {
           ...ownedProcessed,
           ...sharedWithMe.filter((l: any) => !ownedIds.has(l.id)),
         ].filter((l: any) => l.id !== pendingDeleteIdRef.current);
+        const newSharedList = mergedAll.find(l => l.is_shared && !prevListIdsRef.current.has(l.id));
+        if (newSharedList && prevListIdsRef.current.size > 0) {
+          setHighlightedListId(newSharedList.id);
+          setTimeout(() => setHighlightedListId(null), 3000);
+        }
+        prevListIdsRef.current = new Set(mergedAll.map(l => l.id));
         setLists(mergedAll);
         setCache('cache_lists', mergedAll);
         setFetchError(false);
@@ -595,6 +606,10 @@ export default function LijstenTab() {
     const ch = supabase.channel('lists-notes-ch')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'lists', filter: `user_id=eq.${user.id}` }, fetchLists)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items' }, () => {
+        if (fetchListsDebounceRef.current) clearTimeout(fetchListsDebounceRef.current);
+        fetchListsDebounceRef.current = setTimeout(fetchLists, 400);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'list_members' }, () => {
         if (fetchListsDebounceRef.current) clearTimeout(fetchListsDebounceRef.current);
         fetchListsDebounceRef.current = setTimeout(fetchLists, 400);
       })
@@ -1009,6 +1024,7 @@ export default function LijstenTab() {
                     onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                     onDelete={() => deleteList(item.id, item.name)}
                     onEmojiPress={() => setEmojiPickerList(item)}
+                    highlighted={item.id === highlightedListId}
                   />
                 ))}
                 {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
@@ -1028,6 +1044,7 @@ export default function LijstenTab() {
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                       onDelete={() => deleteList(item.id, item.name)}
                       onEmojiPress={() => setEmojiPickerList(item)}
+                      highlighted={item.id === highlightedListId}
                     />
                   ))}
                   {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}

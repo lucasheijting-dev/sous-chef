@@ -28,7 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
@@ -220,6 +220,7 @@ function TipItemRow({ item, colors }: { item: ListItem; colors: any }) {
 export default function ListDetailScreen() {
   const { id, name, emoji, list_type: listTypeParam } = useLocalSearchParams<{ id: string; name: string; emoji: string; list_type?: string }>();
   const navigation = useNavigation();
+  const router = useRouter();
   const { colors } = useTheme();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
@@ -253,11 +254,15 @@ export default function ListDetailScreen() {
   const [geoToggling, setGeoToggling] = useState(false);
   const [geoPermModal, setGeoPermModal] = useState(false);
 
-  const [members, setMembers] = useState<{ user_id: string; role: string; users: { display_name?: string; whatsapp_number: string } | null }[]>([]);
+  const [members, setMembers] = useState<{ user_id: string; role: string; created_at?: string; users: { display_name?: string; whatsapp_number: string } | null }[]>([]);
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [inviteUrlLoading, setInviteUrlLoading] = useState(false);
   const [inviteError, setInviteError] = useState(false);
+  const [invitePhone, setInvitePhone] = useState('');
+  const [invitePhoneSending, setInvitePhoneSending] = useState(false);
+  const [invitePhoneError, setInvitePhoneError] = useState('');
+  const [invitePhoneSuccess, setInvitePhoneSuccess] = useState(false);
 
   const [recipeModalVisible, setRecipeModalVisible] = useState(false);
   const [recipeUrl, setRecipeUrl] = useState('');
@@ -323,7 +328,7 @@ export default function ListDetailScreen() {
     if (!user || user.id === 'dev') return;
     const { data } = await supabase
       .from('list_members')
-      .select('user_id, role, users(display_name, whatsapp_number)')
+      .select('user_id, role, created_at, users(display_name, whatsapp_number)')
       .eq('list_id', id);
     setMembers((data as any) ?? []);
   }
@@ -358,6 +363,12 @@ export default function ListDetailScreen() {
   useEffect(() => {
     fetchItems();
     fetchMembers();
+    if (user && user.id !== 'dev') {
+      fetch(`${API_BASE}/sharing/invite-link?list_id=${id}&user_id=${user.id}&list_name=${encodeURIComponent(name ?? '')}&list_emoji=${encodeURIComponent(emoji ?? '📝')}`)
+        .then(r => r.json())
+        .then(d => { if (d.url) setInviteUrl(d.url); })
+        .catch(() => {});
+    }
     const channel = supabase.channel(`list-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'list_items', filter: `list_id=eq.${id}` }, fetchItems)
       .subscribe();
@@ -504,8 +515,10 @@ export default function ListDetailScreen() {
 
   async function openInviteModal() {
     setInviteModalVisible(true);
-    setInviteUrl('');
     setInviteError(false);
+    setInvitePhoneError('');
+    setInvitePhoneSuccess(false);
+    if (inviteUrl) return;
     setInviteUrlLoading(true);
     try {
       const res = await fetch(
@@ -521,6 +534,60 @@ export default function ListDetailScreen() {
       setInviteError(true);
     }
     finally { setInviteUrlLoading(false); }
+  }
+
+  function shareViaWhatsApp() {
+    const count = items.length;
+    const msg = `Hey! Ik wil de lijst ${emoji ?? '📝'} *${name}* met je delen in De Sous-Chef 🍳\n\n${count > 0 ? `Er staan al ${count} dingen op de lijst.\n\n` : ''}Klik op de link om direct mee te doen:\n${inviteUrl}`;
+    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() =>
+      Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`)
+    );
+  }
+
+  async function copyLink() {
+    await import('expo-clipboard').then(C => C.setStringAsync(inviteUrl));
+    showToast('Link gekopieerd!', 'success');
+  }
+
+  async function sendPhoneInvite() {
+    if (!invitePhone.trim()) return;
+    setInvitePhoneSending(true);
+    setInvitePhoneError('');
+    setInvitePhoneSuccess(false);
+    try {
+      const res = await fetch(`${API_BASE}/sharing/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'list', resource_id: id, phone: invitePhone.trim(), user_id: user!.id }),
+      });
+      const data = await res.json();
+      if (res.ok) { setInvitePhoneSuccess(true); setInvitePhone(''); }
+      else setInvitePhoneError(data.error ?? 'Uitnodiging mislukt');
+    } catch { setInvitePhoneError('Netwerk fout. Probeer opnieuw.'); }
+    setInvitePhoneSending(false);
+  }
+
+  async function revokeInviteLink() {
+    const token = inviteUrl.split('/').pop();
+    if (!token) return;
+    try {
+      await fetch(`${API_BASE}/sharing/invite?token=${token}&user_id=${user!.id}`, { method: 'DELETE' });
+    } catch {}
+    setInviteUrl('');
+    setInviteError(false);
+    setInviteModalVisible(false);
+    Alert.alert('Link ongeldig gemaakt. Genereer een nieuwe link als je iemand wilt uitnodigen.');
+  }
+
+  const isSharedWithMe = members.some(m => m.user_id === user?.id);
+
+  async function leaveList() {
+    await fetch(`${API_BASE}/sharing/member`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'list', resource_id: id, target_user_id: user!.id, user_id: user!.id }),
+    });
+    router.back();
   }
 
   async function importRecipeFromApp() {
@@ -743,17 +810,54 @@ export default function ListDetailScreen() {
         {members.length > 0 && (
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 6 }}>
             <Ionicons name="people-outline" size={13} color={colors.gray400} />
+            {!isSharedWithMe && user && user.id !== 'dev' && (
+              <View style={{ position: 'relative', width: 26, height: 26 }}>
+                <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFB800', justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>
+                    {(user.whatsapp_number ?? '?').slice(0, 2).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
+                  <Ionicons name="star" size={8} color="#fff" />
+                </View>
+              </View>
+            )}
             {members.map(m => {
               const memberName = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
               const memberPhone = m.users?.whatsapp_number;
               const initials = memberName.slice(0, 2).toUpperCase();
+              const isOwner = false;
+              const joinedDate = m.created_at ? new Date(m.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
               return (
-                <TouchableOpacity key={m.user_id} onLongPress={() => Alert.alert(memberName, memberPhone ?? '')} activeOpacity={0.8} style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
-                </TouchableOpacity>
+                <View key={m.user_id} style={{ position: 'relative', width: 26, height: 26 }}>
+                  <TouchableOpacity
+                    onLongPress={() => Alert.alert(memberName, [memberPhone, joinedDate ? `Lid sinds ${joinedDate}` : ''].filter(Boolean).join('\n'))}
+                    activeOpacity={0.8}
+                    style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: isOwner ? '#FFB800' : Colors.yellow, justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
+                  </TouchableOpacity>
+                  {isOwner && (
+                    <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
+                      <Ionicons name="star" size={8} color="#fff" />
+                    </View>
+                  )}
+                </View>
               );
             })}
           </View>
+        )}
+        {isSharedWithMe && (
+          <TouchableOpacity
+            onPress={() => Alert.alert('Lijst verlaten?', 'Je verlaat deze gedeelde lijst. De eigenaar kan je opnieuw uitnodigen.', [
+              { text: 'Annuleer', style: 'cancel' },
+              { text: 'Verlaat', style: 'destructive', onPress: leaveList },
+            ])}
+            style={{ marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#EF4444', alignItems: 'center' }}
+            activeOpacity={0.8}
+          >
+            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#EF4444' }}>Verlaat gedeelde lijst</Text>
+          </TouchableOpacity>
         )}
 
         {loading ? (
@@ -1036,9 +1140,14 @@ export default function ListDetailScreen() {
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: colors.black }}>
                 Chefje toevoegen 👨‍🍳
               </Text>
-              <Text style={{ fontFamily: 'Inter_300Light', fontSize: 14, color: colors.gray400, lineHeight: 20 }}>
-                Stuur de link hieronder. Als ze de app hebben, opent de lijst automatisch en worden ze meteen toegevoegd.
-              </Text>
+
+              <View style={{ alignItems: 'center', gap: 6, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.gray100 }}>
+                <Text style={{ fontSize: 32 }}>{emoji ?? '📝'}</Text>
+                <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 18, color: colors.black }}>{name}</Text>
+                <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400 }}>
+                  {totalCount} items · {members.length > 0 ? `${members.length} leden` : 'Nog niemand gedeeld'}
+                </Text>
+              </View>
 
               {inviteUrlLoading ? (
                 <View style={{ paddingVertical: 24, alignItems: 'center' }}>
@@ -1053,42 +1162,41 @@ export default function ListDetailScreen() {
                 </View>
               ) : inviteUrl ? (
                 <>
-                  {/* Link preview */}
-                  <View style={{ backgroundColor: colors.gray100, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <Ionicons name="link-outline" size={16} color={colors.gray400} />
-                    <Text style={{ flex: 1, fontFamily: 'Inter_400Regular', fontSize: 13, color: colors.gray400 }} numberOfLines={1}>{inviteUrl}</Text>
+                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, textAlign: 'center' }}>
+                    Link geldig voor 7 dagen
+                  </Text>
+
+                  <TouchableOpacity onPress={shareViaWhatsApp} style={{ backgroundColor: '#25D366', borderRadius: Radius.lg, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }} activeOpacity={0.85}>
+                    <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 15, color: '#fff' }}>Deel via WhatsApp</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={copyLink} style={{ backgroundColor: colors.gray100, borderRadius: Radius.lg, padding: 12, alignItems: 'center' }} activeOpacity={0.8}>
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: colors.gray400 }}>Kopieer link</Text>
+                  </TouchableOpacity>
+
+                  <View style={{ borderTopWidth: 1, borderTopColor: colors.gray100, paddingTop: 16, gap: 10 }}>
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>Of nodig direct uit op nummer</Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TextInput
+                        value={invitePhone}
+                        onChangeText={setInvitePhone}
+                        placeholder="+31 6 12345678"
+                        keyboardType="phone-pad"
+                        style={{ flex: 1, backgroundColor: colors.gray100, borderRadius: Radius.md, padding: 12, fontFamily: 'Inter_400Regular', fontSize: 14, color: colors.black }}
+                        placeholderTextColor={colors.gray400}
+                      />
+                      <TouchableOpacity onPress={sendPhoneInvite} disabled={invitePhoneSending} style={{ backgroundColor: Colors.yellow, borderRadius: Radius.md, padding: 12, justifyContent: 'center', opacity: invitePhoneSending ? 0.6 : 1 }} activeOpacity={0.8}>
+                        {invitePhoneSending ? <ActivityIndicator size="small" color={Colors.black} /> : <Ionicons name="send" size={18} color={Colors.black} />}
+                      </TouchableOpacity>
+                    </View>
+                    {invitePhoneError ? <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: '#EF4444' }}>{invitePhoneError}</Text> : null}
+                    {invitePhoneSuccess ? <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: '#22C55E' }}>Uitnodiging verstuurd via WhatsApp!</Text> : null}
                   </View>
 
-                  {/* Actions */}
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <TouchableOpacity
-                      onPress={async () => {
-                        await import('expo-clipboard').then(C => C.setStringAsync(inviteUrl));
-                        showToast('Link gekopieerd!', 'success');
-                      }}
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, paddingVertical: 15, borderWidth: 1.5, borderColor: Colors.yellow }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="copy-outline" size={17} color={Colors.yellow} />
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: Colors.yellow }}>Kopieer link</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        const msg = `Hey! Ik wil de lijst "${emoji ?? '📝'} ${name}" met je delen in De Sous-Chef 🍳\n\nKlik op de link om meteen toe te voegen:\n${inviteUrl}`;
-                        Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`).catch(() =>
-                          Linking.openURL(`https://wa.me/?text=${encodeURIComponent(msg)}`)
-                        );
-                      }}
-                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 14, paddingVertical: 15, backgroundColor: '#25D366' }}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="logo-whatsapp" size={17} color="#fff" />
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 14, color: '#fff' }}>WhatsApp</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={{ fontFamily: 'Inter_300Light', fontSize: 12, color: colors.gray400, textAlign: 'center' }}>
-                    Link is 7 dagen geldig
-                  </Text>
+                  <TouchableOpacity onPress={revokeInviteLink} style={{ alignItems: 'center', paddingTop: 4 }} activeOpacity={0.7}>
+                    <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 12, color: '#EF4444' }}>Uitnodigingslink ongeldig maken</Text>
+                  </TouchableOpacity>
                 </>
               ) : null}
             </Pressable>

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Alert, Linking } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, Modal, Text, TouchableOpacity, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -56,6 +56,9 @@ function AuthGate() {
   const { settings, isLoading: settingsLoading } = useModuleSettings();
   const segments = useSegments();
   const router = useRouter();
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+  const [pendingInviteDetails, setPendingInviteDetails] = useState<{ list_name: string; list_emoji: string; inviter_name: string; expires_at: string } | null>(null);
+  const [inviteBanner, setInviteBanner] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
   useEffect(() => {
     if (userLoading || settingsLoading) return;
@@ -92,25 +95,52 @@ function AuthGate() {
     }).catch(() => {});
   }, [user?.id]);
 
-  async function processListInviteToken(token: string) {
+  async function fetchInviteDetails(token: string) {
+    const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+    try {
+      const res = await fetch(`${API_BASE}/sharing/invite-details?token=${encodeURIComponent(token)}`);
+      if (!res.ok) {
+        const data = await res.json();
+        setInviteBanner({ type: 'error', message: data.error ?? 'Uitnodiging niet gevonden of verlopen' });
+        setTimeout(() => setInviteBanner(null), 4000);
+        return;
+      }
+      const details = await res.json();
+      setPendingInviteToken(token);
+      setPendingInviteDetails(details);
+    } catch {
+      // silent network error
+    }
+  }
+
+  async function acceptPendingInvite() {
+    if (!pendingInviteToken || !user) return;
     const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
     try {
       const res = await fetch(`${API_BASE}/sharing/accept-invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, user_id: user!.id }),
+        body: JSON.stringify({ token: pendingInviteToken, user_id: user.id }),
       });
       const data = await res.json();
+      setPendingInviteToken(null);
+      setPendingInviteDetails(null);
       if (res.ok) {
         triggerListRefresh();
-        Alert.alert('Toegevoegd! 🎉', `Je bent toegevoegd aan ${data.list_emoji ?? '📝'} ${data.list_name ?? 'de lijst'}.`);
+        setInviteBanner({ type: 'success', message: `Toegevoegd aan ${data.list_emoji ?? '📝'} ${data.list_name ?? 'de lijst'}!` });
+        setTimeout(() => setInviteBanner(null), 5000);
       } else if (res.status === 409) {
-        // already a member — silently ignore
+        setInviteBanner({ type: 'info', message: 'Je bent al lid van deze lijst.' });
+        setTimeout(() => setInviteBanner(null), 3000);
       } else {
-        Alert.alert('Uitnodiging mislukt', data.error ?? 'Probeer het opnieuw.');
+        setInviteBanner({ type: 'error', message: data.error ?? 'Uitnodiging mislukt. Probeer het opnieuw.' });
+        setTimeout(() => setInviteBanner(null), 4000);
       }
     } catch {
-      // silent — network issue
+      setInviteBanner({ type: 'error', message: 'Netwerk fout. Probeer het opnieuw.' });
+      setTimeout(() => setInviteBanner(null), 4000);
+      setPendingInviteToken(null);
+      setPendingInviteDetails(null);
     }
   }
 
@@ -120,7 +150,7 @@ function AuthGate() {
     AsyncStorage.getItem('pending_list_invite').then(async token => {
       if (!token) return;
       await AsyncStorage.removeItem('pending_list_invite').catch(() => {});
-      processListInviteToken(token);
+      fetchInviteDetails(token);
     }).catch(() => {});
   }, [user?.id]);
 
@@ -133,7 +163,7 @@ function AuthGate() {
         const token = params.get('listInvite');
         if (token) {
           AsyncStorage.removeItem('pending_list_invite').catch(() => {});
-          processListInviteToken(token);
+          fetchInviteDetails(token);
         }
       }
     }
@@ -141,7 +171,43 @@ function AuthGate() {
     return () => sub.remove();
   }, [user?.id]);
 
-  return null;
+  return (
+    <>
+      <Modal visible={pendingInviteDetails !== null} transparent animationType="slide" onRequestClose={() => { setPendingInviteToken(null); setPendingInviteDetails(null); }}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, gap: 16 }}>
+            <View style={{ alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 40 }}>{pendingInviteDetails?.list_emoji ?? '📝'}</Text>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 20, color: '#000', textAlign: 'center' }}>{pendingInviteDetails?.list_name}</Text>
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 14, color: '#666', textAlign: 'center' }}>
+                {pendingInviteDetails?.inviter_name} wil deze lijst met je delen
+              </Text>
+            </View>
+            <TouchableOpacity onPress={acceptPendingInvite} style={{ backgroundColor: '#FCC10C', borderRadius: 16, padding: 16, alignItems: 'center' }} activeOpacity={0.85}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: '#000' }}>Accepteer uitnodiging</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setPendingInviteToken(null); setPendingInviteDetails(null); }} style={{ alignItems: 'center', padding: 8 }} activeOpacity={0.7}>
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 15, color: '#666' }}>Weiger</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {inviteBanner && (
+        <View style={{
+          position: 'absolute', top: 60, left: 16, right: 16, zIndex: 9999,
+          backgroundColor: inviteBanner.type === 'success' ? '#22C55E' : inviteBanner.type === 'error' ? '#EF4444' : '#3B82F6',
+          borderRadius: 14, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 10,
+          shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 4 },
+        }}>
+          <Text style={{ fontSize: 18 }}>{inviteBanner.type === 'success' ? '✅' : inviteBanner.type === 'error' ? '❌' : 'ℹ️'}</Text>
+          <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#fff', flex: 1 }}>{inviteBanner.message}</Text>
+          <TouchableOpacity onPress={() => setInviteBanner(null)}>
+            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 18, lineHeight: 20 }}>×</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </>
+  );
 }
 
 async function checkForOTAUpdate() {

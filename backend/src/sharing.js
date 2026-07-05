@@ -107,6 +107,26 @@ router.get('/invite-link', async (req, res) => {
   }
 });
 
+// GET /sharing/invite-details?token=xxx
+router.get('/invite-details', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+    const invite = await db.getListInvite(token);
+    if (!invite) return res.status(404).json({ error: 'Uitnodiging niet gevonden of verlopen' });
+    if (new Date(invite.expires_at) < new Date()) return res.status(410).json({ error: 'Uitnodiging verlopen' });
+    const inviter = await db.getUserById(invite.created_by);
+    res.json({
+      list_name: invite.list_name,
+      list_emoji: invite.list_emoji,
+      inviter_name: inviter?.display_name ?? inviter?.whatsapp_number ?? 'Iemand',
+      expires_at: invite.expires_at,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /sharing/accept-invite
 // Body: { token, user_id }
 router.post('/accept-invite', async (req, res) => {
@@ -120,9 +140,31 @@ router.post('/accept-invite', async (req, res) => {
     if (invite.created_by === user_id) return res.status(400).json({ error: 'Je kunt jezelf niet uitnodigen' });
 
     await db.addListMember(invite.list_id, user_id, invite.created_by);
+
+    const newMember = await db.getUserById(user_id);
+    const creator = await db.getUserById(invite.created_by);
+    if (creator?.whatsapp_number && newMember) {
+      const memberName = newMember.display_name ?? newMember.whatsapp_number;
+      sendMessage(creator.whatsapp_number,
+        `✅ *${memberName}* heeft de uitnodiging voor *${invite.list_emoji ?? '📝'} ${invite.list_name}* geaccepteerd en is nu lid!`
+      ).catch(() => {});
+    }
+
     res.json({ ok: true, list_id: invite.list_id, list_name: invite.list_name, list_emoji: invite.list_emoji });
   } catch (err) {
     console.error('[Sharing] Accept invite error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /sharing/invite?token=xxx&user_id=xxx
+router.delete('/invite', async (req, res) => {
+  try {
+    const { token, user_id } = req.query;
+    if (!token || !user_id) return res.status(400).json({ error: 'Missing params' });
+    await db.revokeListInvite(token, user_id);
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

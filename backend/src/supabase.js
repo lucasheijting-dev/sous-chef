@@ -1246,6 +1246,21 @@ async function getListInvite(token) {
   return data ?? null;
 }
 
+async function getListItemsPreview(listId) {
+  const { data } = await supabase
+    .from('list_items')
+    .select('text')
+    .eq('list_id', listId)
+    .eq('checked', false)
+    .order('created_at', { ascending: true })
+    .limit(5);
+  return data ?? [];
+}
+
+async function revokeListInvite(token, createdBy) {
+  await supabase.from('list_invites').delete().eq('token', token).eq('created_by', createdBy);
+}
+
 // ── Notification Prefs ────────────────────────────────────────────────────────
 
 async function getNotifPrefs(userId) {
@@ -1432,6 +1447,8 @@ module.exports = {
   deleteHabitLog,
   createListInvite,
   getListInvite,
+  getListItemsPreview,
+  revokeListInvite,
   getNotifPrefs,
   saveNotifPrefs,
   getNotifPrefsForUsers,
