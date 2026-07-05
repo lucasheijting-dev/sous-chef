@@ -5,8 +5,8 @@
 // has context from the current conversation without unbounded memory growth.
 // Swap the Map for Redis when running multiple instances.
 
-const TTL_MS = 10 * 60 * 1000;
-const MAX_MESSAGES = 8;
+const TTL_MS = 30 * 60 * 1000;
+const MAX_MESSAGES = 12;
 
 const store    = new Map(); // Map<userId, { messages: [], lastSeen: number }>
 const lastEvent = new Map(); // Map<userId, { id, title, date, time, caldavUid, calendarStream, savedAt }>

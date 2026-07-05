@@ -1635,14 +1635,14 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     }
 
     case 'greeting':
-      return intent.reply_text ?? 'Hoi! Waarmee kan ik je helpen? 🍳';
+      return intent.reply_text ?? 'Hoi! Wat staat er op de planning?';
 
     case 'clarification':
       return intent.clarification_question ?? 'Kun je dat iets duidelijker omschrijven?';
 
     case 'unknown':
     default:
-      return intent.reply_text ?? 'Hmm, dat begreep ik niet helemaal. Stuur "wat kun je?" om te zien wat ik kan doen.';
+      return intent.reply_text ?? 'Dat snap ik niet helemaal — probeer het anders te omschrijven.';
   }
 }
 
@@ -1651,15 +1651,15 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 function buildGreetingReply(lists, activeHabits, todayEvents, uncheckedItems = []) {
   const hour = new Date().getHours();
   let salutation;
-  if (hour >= 5  && hour < 12) salutation = 'Goedemorgen! ☀️';
-  else if (hour >= 12 && hour < 18) salutation = 'Goedemiddag! 🌤️';
-  else salutation = 'Goedenavond! 🌙';
+  if (hour >= 5  && hour < 12) salutation = 'Goedemorgen ☀️';
+  else if (hour >= 12 && hour < 18) salutation = 'Hey 👋';
+  else salutation = 'Goedenavond';
 
   const parts = [salutation];
 
   if (todayEvents.length > 0) {
     const evLines = todayEvents.map(e => `  • *${e.title}*${e.time ? ` om ${e.time}` : ''}`).join('\n');
-    parts.push(`📅 *Vandaag op je agenda:*\n${evLines}`);
+    parts.push(`📅 *Vandaag:*\n${evLines}`);
   }
 
   if (uncheckedItems.length > 0) {
@@ -1669,14 +1669,14 @@ function buildGreetingReply(lists, activeHabits, todayEvents, uncheckedItems = [
     const itemStr = topItems.length > 0
       ? ` (${topList?.emoji ?? '📝'} ${topItems.map(i => i.text).join(', ')}${total > topItems.length ? ` +${total - topItems.length} meer` : ''})`
       : ` — ${total} open`;
-    parts.push(`📋 *Open items:* ${total}${itemStr}`);
+    parts.push(`📋 *Open:* ${total}${itemStr}`);
   }
 
   if (activeHabits.length > 0) {
-    parts.push(`🏋️ *Habits vandaag:* ${activeHabits.map(h => h.name).join(' · ')}`);
+    parts.push(`🏋️ *Habits:* ${activeHabits.map(h => h.name).join(' · ')}`);
   }
 
-  if (parts.length === 1) parts.push('Waarmee kan ik je helpen vandaag? 🍳');
+  if (parts.length === 1) parts.push('Wat staat er op de planning?');
 
   return parts.join('\n\n');
 }
