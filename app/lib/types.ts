@@ -40,6 +40,16 @@ export type Note = {
   created_at: string;
   updated_at?: string;
   image_url?: string | null;
+  category_id?: string | null;
+};
+
+export type NoteCategory = {
+  id: string;
+  user_id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  created_at: string;
 };
 
 export type CalEvent = {

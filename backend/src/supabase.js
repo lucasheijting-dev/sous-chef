@@ -273,15 +273,36 @@ async function deleteRecurringItem(itemId) {
 
 // ── Notes ──────────────────────────────────────────────────────────────────────
 
-async function createNote(userId, title, body) {
+async function createNote(userId, title, body, categoryId) {
   const { data, error } = await supabase
     .from('notes')
-    .insert({ user_id: userId, title: title ?? body.slice(0, 50), body, updated_at: new Date().toISOString() })
-    .select('id, title')
+    .insert({ user_id: userId, title: title ?? body.slice(0, 50), body, category_id: categoryId ?? null, updated_at: new Date().toISOString() })
+    .select('id, title, category_id')
     .single();
 
   if (error) throw new Error(`Failed to create note: ${error.message}`);
   return data;
+}
+
+async function getNoteCategories(userId) {
+  const { data, error } = await supabase.from('note_categories').select('*').eq('user_id', userId).order('created_at');
+  if (error) throw new Error(`getNoteCategories: ${error.message}`);
+  return data ?? [];
+}
+
+async function createNoteCategory(userId, { name, emoji, color }) {
+  const { data, error } = await supabase.from('note_categories').insert({ user_id: userId, name, emoji, color }).select('*').single();
+  if (error) throw new Error(`createNoteCategory: ${error.message}`);
+  return data;
+}
+
+async function deleteNoteCategory(catId, userId) {
+  await supabase.from('note_categories').delete().eq('id', catId).eq('user_id', userId);
+}
+
+async function assignNoteCategory(noteId, userId, categoryId) {
+  const { error } = await supabase.from('notes').update({ category_id: categoryId }).eq('id', noteId).eq('user_id', userId);
+  if (error) throw new Error(`assignNoteCategory: ${error.message}`);
 }
 
 async function deleteNote(noteId) {
@@ -1457,6 +1478,10 @@ module.exports = {
   deleteHabitGoal,
   getAllUsersAdmin,
   setUserBlocked,
+  getNoteCategories,
+  createNoteCategory,
+  deleteNoteCategory,
+  assignNoteCategory,
 };
 
 async function getAllUsersAdmin() {

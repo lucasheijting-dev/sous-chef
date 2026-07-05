@@ -32,7 +32,7 @@ import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useModuleSettings } from '@/context/ModuleSettingsContext';
-import { List, Note } from '@/lib/types';
+import { List, Note, NoteCategory } from '@/lib/types';
 import { Colors, Shadow, Radius, TAB_BAR_CLEARANCE, getTone, TONE_ORDER, Tones } from '@/constants/Design';
 import { SkeletonListCard } from '@/components/SkeletonCard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -263,7 +263,7 @@ function HighlightText({ text, query, style, numberOfLines }: { text: string; qu
   );
 }
 
-function NoteCard({ item, index, onPress, search }: { item: Note; index: number; onPress: () => void; isDark?: boolean; search?: string }) {
+function NoteCard({ item, index, onPress, search, category }: { item: Note; index: number; onPress: () => void; isDark?: boolean; search?: string; category?: NoteCategory }) {
   const { colors, isDark } = useTheme();
   const scale = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
@@ -306,9 +306,16 @@ function NoteCard({ item, index, onPress, search }: { item: Note; index: number;
           numberOfLines={4}
         />
         <View style={styles.noteCardFooter}>
-          <View style={[styles.noteCardTag, { backgroundColor: tone.bg }]}>
-            <Text style={[styles.noteCardTagText, { color: tone.fg }]}>Notitie</Text>
-          </View>
+          {category ? (
+            <View style={[styles.noteCardTag, { backgroundColor: category.color + '22' }]}>
+              <Text style={{ fontSize: 11 }}>{category.emoji}</Text>
+              <Text style={[styles.noteCardTagText, { color: category.color }]}>{category.name}</Text>
+            </View>
+          ) : (
+            <View style={[styles.noteCardTag, { backgroundColor: tone.bg }]}>
+              <Text style={[styles.noteCardTagText, { color: tone.fg }]}>Notitie</Text>
+            </View>
+          )}
           <Text style={[styles.noteCardDate, { color: colors.gray400 }]}>{dateLabel}</Text>
         </View>
       </Pressable>
@@ -542,6 +549,13 @@ export default function LijstenTab() {
   const [addNoteTitle, setAddNoteTitle] = useState('');
   const [addNoteBody, setAddNoteBody] = useState('');
   const [addNoteSaving, setAddNoteSaving] = useState(false);
+  const [noteCats, setNoteCats] = useState<NoteCategory[]>([]);
+  const [selectedNoteCatId, setSelectedNoteCatId] = useState<string | null>(null);
+  const [addNoteCatId, setAddNoteCatId] = useState<string | null>(null);
+  const [newNoteCatVisible, setNewNoteCatVisible] = useState(false);
+  const [newNoteCatName, setNewNoteCatName] = useState('');
+  const [newNoteCatEmoji, setNewNoteCatEmoji] = useState('📁');
+  const [newNoteCatSaving, setNewNoteCatSaving] = useState(false);
 
   const [highlightedListId, setHighlightedListId] = useState<string | null>(null);
   const prevListIdsRef = useRef<Set<string>>(new Set());
@@ -599,8 +613,11 @@ export default function LijstenTab() {
 
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') return;
-    const { data } = await supabase.from('notes').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-    if (data) { setNotes(data); setCache('cache_notes', data); }
+    const [notesRes] = await Promise.all([
+      supabase.from('notes').select('id, user_id, title, body, created_at, updated_at, image_url, category_id').eq('user_id', user.id).order('created_at', { ascending: false }),
+      fetch(`${API_BASE}/notes/categories?user_id=${user.id}`).then(r => r.json()).then(cats => { if (Array.isArray(cats)) setNoteCats(cats); }).catch(() => {}),
+    ]);
+    if (notesRes.data) { setNotes(notesRes.data); setCache('cache_notes', notesRes.data); }
   }, [user]);
 
   useEffect(() => {
@@ -637,10 +654,11 @@ export default function LijstenTab() {
     });
   }, []);
 
-  const filteredNotes = notes.filter(n =>
-    n.title?.toLowerCase().includes(search.toLowerCase()) ||
-    n.body.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredNotes = notes.filter(n => {
+    const matchesSearch = n.title?.toLowerCase().includes(search.toLowerCase()) || n.body.toLowerCase().includes(search.toLowerCase());
+    const matchesCat = selectedNoteCatId ? n.category_id === selectedNoteCatId : true;
+    return matchesSearch && matchesCat;
+  });
 
   async function deleteNote(noteId: string) {
     setSelectedNote(null);
@@ -1084,6 +1102,42 @@ export default function LijstenTab() {
               )}
             </View>
           )}
+          {/* Category filter chips */}
+          {(noteCats.length > 0 || notes.length > 0) && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setSelectedNoteCatId(null)}
+                style={[rStyles.chip, { backgroundColor: !selectedNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
+              >
+                <Text style={[rStyles.chipText, { color: !selectedNoteCatId ? colors.white : colors.gray400 }]}>Alle</Text>
+              </TouchableOpacity>
+              {noteCats.map(cat => (
+                <TouchableOpacity
+                  key={cat.id}
+                  onPress={() => setSelectedNoteCatId(selectedNoteCatId === cat.id ? null : cat.id)}
+                  onLongPress={() => Alert.alert(`${cat.emoji} ${cat.name}`, 'Categorie verwijderen?', [
+                    { text: 'Annuleer', style: 'cancel' },
+                    { text: 'Verwijder', style: 'destructive', onPress: async () => {
+                      await fetch(`${API_BASE}/notes/categories/${cat.id}?user_id=${user?.id}`, { method: 'DELETE' });
+                      setNoteCats(prev => prev.filter(c => c.id !== cat.id));
+                      if (selectedNoteCatId === cat.id) setSelectedNoteCatId(null);
+                    }},
+                  ])}
+                  style={[rStyles.chip, { backgroundColor: selectedNoteCatId === cat.id ? cat.color : colors.white, borderColor: selectedNoteCatId === cat.id ? cat.color : colors.gray200 }]}
+                >
+                  <Text style={{ fontSize: 13 }}>{cat.emoji}</Text>
+                  <Text style={[rStyles.chipText, { color: selectedNoteCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                onPress={() => { setNewNoteCatName(''); setNewNoteCatEmoji('📁'); setNewNoteCatVisible(true); }}
+                style={[rStyles.chip, { backgroundColor: colors.white, borderColor: colors.gray200, borderStyle: 'dashed' }]}
+              >
+                <Ionicons name="add" size={14} color={colors.gray400} />
+                <Text style={[rStyles.chipText, { color: colors.gray400 }]}>Nieuw</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
           {filteredNotes.length === 0 ? (
           <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
             <View style={[styles.emptyIcon, { backgroundColor: '#FFF3E0' }]}>
@@ -1119,9 +1173,10 @@ export default function LijstenTab() {
             columnWrapperStyle={styles.noteRow}
             style={{ backgroundColor: colors.offWhite }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchNotes(); }} tintColor={Colors.yellow} colors={[Colors.yellow]} />}
-            renderItem={({ item, index }) => (
-              <NoteCard item={item} index={index} search={search} onPress={() => setSelectedNote(item)} />
-            )}
+            renderItem={({ item, index }) => {
+              const cat = noteCats.find(c => c.id === item.category_id);
+              return <NoteCard item={item} index={index} search={search} onPress={() => setSelectedNote(item)} category={cat} />;
+            }}
           />
         )}
         </>
@@ -1644,7 +1699,7 @@ export default function LijstenTab() {
       {activeTab === 'notes' && (
         <TouchableOpacity
           style={[fabStyles.fab, { bottom: insets.bottom + 90 }]}
-          onPress={() => { setAddNoteTitle(''); setAddNoteBody(''); setAddNoteVisible(true); }}
+          onPress={() => { setAddNoteTitle(''); setAddNoteBody(''); setAddNoteCatId(selectedNoteCatId); setAddNoteVisible(true); }}
           activeOpacity={0.85}
         >
           <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={fabStyles.fabGrad}>
@@ -1670,11 +1725,11 @@ export default function LijstenTab() {
                     const res = await fetch(`${API_BASE}/notes?user_id=${user.id}`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ title: addNoteTitle.trim() || null, body: addNoteBody.trim() }),
+                      body: JSON.stringify({ title: addNoteTitle.trim() || null, body: addNoteBody.trim(), category_id: addNoteCatId }),
                     });
                     const data = await res.json().catch(() => null);
                     if (data?.id) {
-                      const newNote: Note = { id: data.id, user_id: user.id, title: addNoteTitle.trim() || null, body: addNoteBody.trim(), created_at: new Date().toISOString() };
+                      const newNote: Note = { id: data.id, user_id: user.id, title: addNoteTitle.trim() || null, body: addNoteBody.trim(), created_at: new Date().toISOString(), category_id: addNoteCatId };
                       setNotes(prev => [newNote, ...prev]);
                     }
                   } catch {}
@@ -1708,8 +1763,110 @@ export default function LijstenTab() {
                 multiline
                 textAlignVertical="top"
               />
+              {/* Category picker */}
+              {noteCats.length > 0 && (
+                <View style={{ marginTop: 24 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400, marginBottom: 10 }}>CATEGORIE</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => setAddNoteCatId(null)}
+                      style={[rStyles.chip, { backgroundColor: !addNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
+                    >
+                      <Text style={[rStyles.chipText, { color: !addNoteCatId ? colors.white : colors.gray400 }]}>Geen</Text>
+                    </TouchableOpacity>
+                    {noteCats.map(cat => (
+                      <TouchableOpacity
+                        key={cat.id}
+                        onPress={() => setAddNoteCatId(addNoteCatId === cat.id ? null : cat.id)}
+                        style={[rStyles.chip, { backgroundColor: addNoteCatId === cat.id ? cat.color : colors.white, borderColor: addNoteCatId === cat.id ? cat.color : colors.gray200 }]}
+                      >
+                        <Text style={{ fontSize: 13 }}>{cat.emoji}</Text>
+                        <Text style={[rStyles.chipText, { color: addNoteCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </ScrollView>
           </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* New note category modal */}
+      <Modal visible={newNoteCatVisible} transparent animationType="slide" onRequestClose={() => setNewNoteCatVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Pressable style={sheetStyles.overlay} onPress={() => setNewNoteCatVisible(false)}>
+            <Pressable style={[sheetStyles.sheet, { backgroundColor: colors.white, paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 32 }]} onPress={() => {}}>
+              <View style={sheetStyles.handle} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <Text style={[sheetStyles.title, { color: colors.black, marginBottom: 0 }]}>Nieuwe categorie</Text>
+                <TouchableOpacity onPress={() => setNewNoteCatVisible(false)} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: colors.gray100, alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="close" size={16} color={colors.gray600} />
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const emojis = ['📁','📝','💡','🔥','⭐','❤️','🎯','🧠','💼','🎉','🌿','✈️','🏠','🛒','📚'];
+                    const idx = emojis.indexOf(newNoteCatEmoji);
+                    setNewNoteCatEmoji(emojis[(idx + 1) % emojis.length]);
+                  }}
+                  style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: colors.gray100, justifyContent: 'center', alignItems: 'center' }}
+                >
+                  <Text style={{ fontSize: 26 }}>{newNoteCatEmoji}</Text>
+                </TouchableOpacity>
+                <View style={[fabStyles.inputWrap, { flex: 1, backgroundColor: colors.gray100 }]}>
+                  <TextInput
+                    style={[fabStyles.input, { color: colors.black }]}
+                    value={newNoteCatName}
+                    onChangeText={setNewNoteCatName}
+                    placeholder="Naam van de categorie..."
+                    placeholderTextColor={colors.gray400}
+                    autoFocus
+                    returnKeyType="done"
+                    selectionColor={Colors.yellow}
+                    onSubmitEditing={async () => {
+                      if (!newNoteCatName.trim() || newNoteCatSaving || !user) return;
+                      setNewNoteCatSaving(true);
+                      try {
+                        const res = await fetch(`${API_BASE}/notes/categories?user_id=${user.id}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ name: newNoteCatName.trim(), emoji: newNoteCatEmoji, color: '#FCC10C' }),
+                        });
+                        const cat = await res.json().catch(() => null);
+                        if (cat?.id) setNoteCats(prev => [...prev, cat]);
+                      } catch {}
+                      setNewNoteCatSaving(false);
+                      setNewNoteCatVisible(false);
+                    }}
+                  />
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[sheetStyles.destructiveBtn, { backgroundColor: newNoteCatName.trim() ? Colors.yellow : colors.gray200 }]}
+                disabled={!newNoteCatName.trim() || newNoteCatSaving}
+                activeOpacity={0.85}
+                onPress={async () => {
+                  if (!newNoteCatName.trim() || newNoteCatSaving || !user) return;
+                  setNewNoteCatSaving(true);
+                  try {
+                    const res = await fetch(`${API_BASE}/notes/categories?user_id=${user.id}`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: newNoteCatName.trim(), emoji: newNoteCatEmoji, color: '#FCC10C' }),
+                    });
+                    const cat = await res.json().catch(() => null);
+                    if (cat?.id) setNoteCats(prev => [...prev, cat]);
+                  } catch {}
+                  setNewNoteCatSaving(false);
+                  setNewNoteCatVisible(false);
+                }}
+              >
+                {newNoteCatSaving ? <ActivityIndicator size="small" color={Colors.black} /> : <Text style={[sheetStyles.destructiveBtnText, { color: Colors.black }]}>Aanmaken</Text>}
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 

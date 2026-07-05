@@ -9,13 +9,65 @@ const router = express.Router();
 router.post('/', async (req, res) => {
   try {
     const { user_id } = req.query;
-    const { title, body } = req.body;
+    const { title, body, category_id } = req.body;
     if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
     if (!body?.trim()) return res.status(400).json({ error: 'Missing body' });
-    const note = await db.createNote(user_id, title?.trim() || null, body.trim());
+    const note = await db.createNote(user_id, title?.trim() || null, body.trim(), category_id ?? null);
     res.json(note);
   } catch (err) {
     console.error('[Notes] Create error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /notes/categories?user_id=xxx
+router.get('/categories', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const cats = await db.getNoteCategories(user_id);
+    res.json(cats);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /notes/categories?user_id=xxx
+router.post('/categories', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const { name, emoji, color } = req.body;
+    if (!user_id || !name?.trim()) return res.status(400).json({ error: 'Missing user_id or name' });
+    const cat = await db.createNoteCategory(user_id, { name: name.trim(), emoji: emoji ?? '📁', color: color ?? '#FCC10C' });
+    res.json(cat);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /notes/categories/:catId?user_id=xxx
+router.delete('/categories/:catId', async (req, res) => {
+  try {
+    const { catId } = req.params;
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    await db.deleteNoteCategory(catId, user_id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /notes/:noteId/category?user_id=xxx
+router.patch('/:noteId/category', async (req, res) => {
+  try {
+    const { noteId } = req.params;
+    const { user_id } = req.query;
+    const { category_id } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    await db.assignNoteCategory(noteId, user_id, category_id ?? null);
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
