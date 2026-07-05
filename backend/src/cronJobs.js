@@ -447,8 +447,26 @@ cron.schedule('30 7 * * *', async () => {
   }
 });
 
+// ── Soft-delete cleanup — every day at 04:00 ─────────────────────────────────
+// Hard-deletes records soft-deleted more than 30 days ago
+
+cron.schedule('0 4 * * *', async () => {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    await Promise.all([
+      db.supabaseAdmin.from('list_items').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+      db.supabaseAdmin.from('lists').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+      db.supabaseAdmin.from('notes').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+      db.supabaseAdmin.from('events').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+    ]);
+    console.log('[SoftDelete] Cleanup done for records before', cutoff);
+  } catch (err) {
+    console.error('[SoftDelete] Cleanup error:', err.message);
+  }
+});
+
 function start() {
-  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | todo reminders hourly | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | caldav health check daily 07:30 | keepalive every 13min');
+  console.log('[CronJobs] Scheduled: digest Mon 09:00 | recurring daily 06:00 | todo reminders hourly | habit+wa reminders hourly | event reminders daily 08:00 | birthdays daily 08:30 | suggestions Thu 10:00 | context build daily 02:00 | caldav retry+sync every 15min | caldav health check daily 07:30 | keepalive every 13min | soft-delete cleanup daily 04:00');
 }
 
 module.exports = { start, syncUserCalendar };

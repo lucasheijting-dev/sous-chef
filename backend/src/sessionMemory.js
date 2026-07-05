@@ -10,7 +10,8 @@ const MAX_MESSAGES = 12;
 
 const store         = new Map(); // Map<userId, { messages: [], lastSeen: number }>
 const lastEvent     = new Map(); // Map<userId, { id, title, date, time, caldavUid, calendarStream, savedAt }>
-const pendingRecurMap = new Map(); // Map<userId, { eventData, savedAt }>
+const pendingRecurMap  = new Map(); // Map<userId, { eventData, savedAt }>
+const pendingPhotoMap  = new Map(); // Map<userId, { items, listId, listName, listEmoji, savedAt }>
 
 
 function _live(userId) {
@@ -69,4 +70,17 @@ function clearPendingRecurring(userId) {
   pendingRecurMap.delete(userId);
 }
 
-module.exports = { getHistory, addExchange, setLastEvent, getLastEvent, setPendingRecurring, getPendingRecurring, clearPendingRecurring };
+function setPendingPhotoItems(userId, data) {
+  pendingPhotoMap.set(userId, { ...data, savedAt: Date.now() });
+}
+function getPendingPhotoItems(userId) {
+  const p = pendingPhotoMap.get(userId);
+  if (!p) return null;
+  if (Date.now() - p.savedAt > TTL_MS) { pendingPhotoMap.delete(userId); return null; }
+  return p;
+}
+function clearPendingPhotoItems(userId) {
+  pendingPhotoMap.delete(userId);
+}
+
+module.exports = { getHistory, addExchange, setLastEvent, getLastEvent, setPendingRecurring, getPendingRecurring, clearPendingRecurring, setPendingPhotoItems, getPendingPhotoItems, clearPendingPhotoItems };

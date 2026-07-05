@@ -145,6 +145,7 @@ async function getLists(userId) {
     .from('lists')
     .select('id, name, emoji, sort_order, last_activity_at, is_default, default_type')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('last_activity_at', { ascending: false, nullsFirst: false });
 
   if (error) throw new Error(`Failed to get lists: ${error.message}`);
@@ -244,12 +245,14 @@ async function updateListEmoji(listId, emoji) {
 }
 
 async function deleteList(listId) {
-  const r1 = await supabase.from('list_items').delete().eq('list_id', listId);
+  const now = new Date().toISOString();
+  // Soft-delete: mark list and its items as deleted
+  const r1 = await supabase.from('list_items').update({ deleted_at: now }).eq('list_id', listId).is('deleted_at', null);
   if (r1.error) throw new Error(`deleteList items: ${r1.error.message}`);
-  const r2 = await supabase.from('list_members').delete().eq('list_id', listId);
-  if (r2.error) throw new Error(`deleteList members: ${r2.error.message}`);
-  const r3 = await supabase.from('lists').delete().eq('id', listId);
+  const r3 = await supabase.from('lists').update({ deleted_at: now }).eq('id', listId);
   if (r3.error) throw new Error(`deleteList: ${r3.error.message}`);
+  // Members are a join table — hard delete is fine
+  await supabase.from('list_members').delete().eq('list_id', listId);
 }
 
 async function addListItem(listId, text, quantity = null) {
@@ -268,15 +271,16 @@ async function addListItem(listId, text, quantity = null) {
 async function getListItems(listId) {
   const { data } = await supabase
     .from('list_items')
-    .select('id, text, checked')
+    .select('id, text, checked, quantity, created_at')
     .eq('list_id', listId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: true });
 
   return data ?? [];
 }
 
 async function deleteListItem(itemId) {
-  const { error } = await supabase.from('list_items').delete().eq('id', itemId);
+  const { error } = await supabase.from('list_items').update({ deleted_at: new Date().toISOString() }).eq('id', itemId);
   if (error) throw new Error(`deleteListItem: ${error.message}`);
 }
 
@@ -379,7 +383,7 @@ async function assignNoteCategory(noteId, userId, categoryId) {
 }
 
 async function deleteNote(noteId) {
-  const { error } = await supabase.from('notes').delete().eq('id', noteId);
+  const { error } = await supabase.from('notes').update({ deleted_at: new Date().toISOString() }).eq('id', noteId);
   if (error) throw new Error(`deleteNote: ${error.message}`);
 }
 
@@ -747,6 +751,7 @@ async function getTodayEvents(userId) {
     .select('id, title, date, time, recurrence')
     .eq('user_id', userId)
     .eq('date', today)
+    .is('deleted_at', null)
     .order('time', { ascending: true, nullsFirst: false });
   return data ?? [];
 }
@@ -757,6 +762,7 @@ async function getEventsForDate(userId, date) {
     .select('id, title, date, time, calendar_stream')
     .eq('user_id', userId)
     .eq('date', date)
+    .is('deleted_at', null)
     .not('time', 'is', null);
   return data ?? [];
 }
@@ -766,6 +772,7 @@ async function getEventsByTitle(userId, title) {
     .from('events')
     .select('id, title, date, time, recurrence, caldav_uid, calendar_stream')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .ilike('title', `%${title}%`);
   return (data ?? []).map(e => ({ ...e, caldavUid: e.caldav_uid, calendarStream: e.calendar_stream }));
 }
@@ -845,7 +852,7 @@ async function getEventById(userId, eventId) {
 }
 
 async function deleteEventById(userId, eventId) {
-  const { error } = await supabase.from('events').delete().eq('id', eventId).eq('user_id', userId);
+  const { error } = await supabase.from('events').update({ deleted_at: new Date().toISOString() }).eq('id', eventId).eq('user_id', userId);
   if (error) throw new Error(`deleteEventById: ${error.message}`);
 }
 
@@ -860,6 +867,7 @@ async function getNotes(userId) {
     .from('notes')
     .select('id, title, body')
     .eq('user_id', userId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   return data ?? [];
 }
@@ -1604,6 +1612,7 @@ module.exports = {
   markTodoReminderSent,
   saveFeedback,
   createEventWithBirthYear,
+  supabaseAdmin: supabase,
 };
 
 async function getAllUsersAdmin() {

@@ -3,6 +3,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const db        = require('./supabase');
 const { sendMessage } = require('./whatsapp');
+const session   = require('./sessionMemory');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -77,9 +78,10 @@ async function analyzeImage(buffer, mimeType, { caption, lists, notes, userCateg
 Kies het beste type:
 
 1. Als het een bonnetje/kassabon is → type "receipt"
-2. Als het bijschrift aangeeft dat de foto bij een NOTITIE hoort (bijv. "voeg toe aan notitie X", "foto voor notitie Y", "bij mijn notitie Z") → type "note_image" en geef "note_name" mee
-3. Als het bijschrift aangeeft dat de foto bij een LIJST hoort (bijv. "foto voor de boodschappenlijst", "voeg toe aan [lijstnaam]", "zet op mijn [lijstnaam]") → type "list_item" en geef "list_name" en "item_text" mee
-4. Anders → type "other"
+2. Als het een handgeschreven of getypte LIJST van items is (boodschappenlijstje, takenlijstje, opsomming) → type "handwritten_list" en extraheer alle leesbare items
+3. Als het bijschrift aangeeft dat de foto bij een NOTITIE hoort (bijv. "voeg toe aan notitie X") → type "note_image"
+4. Als het bijschrift aangeeft dat de foto bij een LIJST hoort met één item → type "list_item"
+5. Anders → type "other"
 
 Antwoordformaten:
 
@@ -96,6 +98,16 @@ Voor bonnetje:
   "description": "korte samenvatting"
 }
 
+Voor handgeschreven lijst:
+{
+  "type": "handwritten_list",
+  "items": ["item 1", "item 2", "item 3"],
+  "detected_list_type": "groceries|todo|other",
+  "suggested_list_name": "Boodschappen of To-do of null",
+  "readable": true
+}
+Als de lijst onleesbaar is: { "type": "handwritten_list", "readable": false, "items": [] }
+
 Voor notitie-foto:
 {
   "type": "note_image",
@@ -107,7 +119,7 @@ Voor lijst-item met foto:
 {
   "type": "list_item",
   "list_name": "naam van de lijst uit het bijschrift",
-  "item_text": "korte tekst voor het lijst-item (product/item naam) op basis van de foto + bijschrift",
+  "item_text": "korte tekst voor het lijst-item",
   "description": "korte beschrijving in het Nederlands"
 }
 
@@ -117,7 +129,7 @@ Voor overig:
   "description": "wat zie je in het Nederlands, max 2 zinnen"
 }
 
-Regels voor bonnetjes: bedragen in Nederlandse notatie (€12,50 of 12.50) → altijd als getal (12.50). Herken: 'AH'/'Albert Heijn' → store: 'Albert Heijn'; 'JMB'/'Jumbo' → 'Jumbo'; 'Lidl','Aldi','Plus','Dirk','Spar','Coop','Picnic' → exact die naam.${catBlock}
+Regels voor bonnetjes: bedragen → altijd als getal (12.50). Herken: 'AH'/'Albert Heijn' → 'Albert Heijn'; 'JMB'/'Jumbo' → 'Jumbo'; 'Lidl','Aldi','Plus','Dirk','Spar','Coop','Picnic' → exact die naam.${catBlock}
 
 Geef ALLEEN geldige JSON terug.`,
           },
@@ -194,6 +206,42 @@ async function handleImageMessage({ from, mediaId, userId, caption }) {
         : '';
 
       await sendMessage(from, `🧾 *Bonnetje gescand!*\n\n🏪 ${analysis.store ?? 'Onbekend'}${dateStr}\n💶 *${totalStr}*${items}\n\n_Opgeslagen in de Bonnetjes tab._`);
+      return;
+    }
+
+    if (analysis.type === 'handwritten_list') {
+      if (!analysis.readable || !analysis.items?.length) {
+        await sendMessage(from, 'Ik kan dit niet goed lezen. Kun je een scherpere foto sturen, of typ de items gewoon?');
+        return;
+      }
+
+      // Find the best matching list
+      const suggestedName = analysis.suggested_list_name;
+      let targetList = null;
+      if (suggestedName) {
+        targetList = fuzzyFind(lists, 'name', suggestedName);
+      }
+      // Fallback: match by detected_list_type
+      if (!targetList && analysis.detected_list_type === 'groceries') {
+        targetList = lists.find(l => l.default_type === 'groceries') ?? fuzzyFind(lists, 'name', 'boodschappen');
+      }
+      if (!targetList && analysis.detected_list_type === 'todo') {
+        targetList = lists.find(l => l.default_type === 'todo') ?? fuzzyFind(lists, 'name', 'to-do');
+      }
+      if (!targetList) targetList = lists[0] ?? null;
+
+      const itemLines = analysis.items.map(i => `• ${i}`).join('\n');
+      const listLabel = targetList ? `${targetList.emoji ?? '📝'} *${targetList.name}*` : 'een nieuwe lijst';
+
+      // Store pending state for confirmation
+      session.setPendingPhotoItems(userId, {
+        items: analysis.items,
+        listId: targetList?.id ?? null,
+        listName: targetList?.name ?? null,
+        listEmoji: targetList?.emoji ?? '📝',
+      });
+
+      await sendMessage(from, `📋 Ik zie ${analysis.items.length} items:\n\n${itemLines}\n\nZet ik ze op ${listLabel}? (ja / nee, op [andere lijst])`);
       return;
     }
 

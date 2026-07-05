@@ -341,6 +341,51 @@ async function handleMessage({ from, text }) {
     return;
   }
 
+  // Check for pending photo items — user is confirming a handwritten list
+  const pendingPhoto = session.getPendingPhotoItems(userId);
+  if (pendingPhoto) {
+    if (confirm.isConfirm(lc)) {
+      session.clearPendingPhotoItems(userId);
+      const targetList = pendingPhoto.listId
+        ? { id: pendingPhoto.listId, name: pendingPhoto.listName, emoji: pendingPhoto.listEmoji }
+        : null;
+      if (!targetList) {
+        await sendMessage(from, 'Ik kon geen lijst vinden om de items op te zetten. Maak eerst een lijst aan.');
+        await db.incrementMessageCount(userId);
+        return;
+      }
+      for (const item of pendingPhoto.items) {
+        await db.addListItem(targetList.id, item).catch(() => {});
+      }
+      await sendMessage(from, `✓ ${pendingPhoto.items.length} items toegevoegd aan ${pendingPhoto.listEmoji ?? '📝'} *${pendingPhoto.listName}*.`);
+      await db.incrementMessageCount(userId);
+      return;
+    }
+    if (confirm.isCancel(lc)) {
+      session.clearPendingPhotoItems(userId);
+      await sendMessage(from, '↩️ Geannuleerd — er zijn geen items toegevoegd.');
+      await db.incrementMessageCount(userId);
+      return;
+    }
+    // User specified a different list: "nee, op To-do" or just a list name
+    const altListName = text.replace(/^nee[,.]?\s*/i, '').replace(/^op\s*/i, '').trim();
+    if (altListName) {
+      const allLists = await db.getLists(userId);
+      const altList = allLists.find(l => l.name.toLowerCase().includes(altListName.toLowerCase()));
+      if (altList) {
+        session.clearPendingPhotoItems(userId);
+        for (const item of pendingPhoto.items) {
+          await db.addListItem(altList.id, item).catch(() => {});
+        }
+        await sendMessage(from, `✓ ${pendingPhoto.items.length} items toegevoegd aan ${altList.emoji ?? '📝'} *${altList.name}*.`);
+        await db.incrementMessageCount(userId);
+        return;
+      }
+    }
+    // Can't parse → clear and treat as new message
+    session.clearPendingPhotoItems(userId);
+  }
+
   // Check for pending recurring event — user is answering "tot wanneer?" question
   const pendingRec = session.getPendingRecurring(userId);
   if (pendingRec) {
