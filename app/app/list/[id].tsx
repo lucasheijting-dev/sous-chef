@@ -274,6 +274,7 @@ export default function ListDetailScreen() {
   const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
   const [uploadingImageItemId, setUploadingImageItemId] = useState<string | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [addRowHeight, setAddRowHeight] = useState(80);
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -738,7 +739,7 @@ export default function ListDetailScreen() {
   if (doneExpanded) flatItems.push(...filteredChecked);
 
   return (
-    <View style={[styles.root, { paddingBottom: keyboardHeight }]}>
+    <View style={styles.root}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
         {isGroceryList && (
@@ -879,9 +880,8 @@ export default function ListDetailScreen() {
             data={flatItems}
             keyExtractor={(i) => i.id}
             style={{ flex: 1 }}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={[styles.list, { paddingBottom: addRowHeight + 16 }]}
             keyboardShouldPersistTaps="handled"
-            automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
             }
@@ -969,7 +969,15 @@ export default function ListDetailScreen() {
           </View>
         )}
 
-        <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: keyboardHeight > 0 ? 10 : (insets.bottom > 0 ? insets.bottom : 14), flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+        <View
+          onLayout={e => setAddRowHeight(e.nativeEvent.layout.height)}
+          style={[styles.addRow, {
+            position: 'absolute', left: 0, right: 0, bottom: keyboardHeight,
+            backgroundColor: colors.offWhite, borderTopColor: colors.gray100,
+            paddingBottom: keyboardHeight > 0 ? 10 : (insets.bottom > 0 ? insets.bottom : 14),
+            flexDirection: 'row', alignItems: 'center', gap: 8,
+          }]}
+        >
           {isGroceryList && (
             <TouchableOpacity onPress={() => setRecipeModalVisible(true)} style={[styles.recipeImportBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.7}>
               <Text style={{ fontSize: 20 }}>🍽️</Text>
@@ -1011,7 +1019,7 @@ export default function ListDetailScreen() {
         )}
 
         {pendingDelete && (
-          <View style={[styles.snackbar, { bottom: (insets.bottom > 0 ? insets.bottom : 14) + 80 }]}>
+          <View style={[styles.snackbar, { bottom: keyboardHeight + addRowHeight + 8 }]}>
             <Text style={styles.snackbarText}>Item verwijderd</Text>
             <TouchableOpacity onPress={undoDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={styles.snackbarUndo}>Ongedaan maken</Text>
