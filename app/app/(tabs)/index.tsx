@@ -545,6 +545,7 @@ export default function LijstenTab() {
   const [editingNote, setEditingNote] = useState(false);
   const [editNoteBody, setEditNoteBody] = useState('');
   const [editNoteTitle, setEditNoteTitle] = useState('');
+  const [editNoteCatId, setEditNoteCatId] = useState<string | null>(null);
   const [addNoteVisible, setAddNoteVisible] = useState(false);
   const [addNoteTitle, setAddNoteTitle] = useState('');
   const [addNoteBody, setAddNoteBody] = useState('');
@@ -672,11 +673,11 @@ export default function LijstenTab() {
     const body = editNoteBody.trim();
     if (!body) return;
     const title = editNoteTitle.trim() || null;
-    const updated = { ...selectedNote, body, title };
+    const updated = { ...selectedNote, body, title, category_id: editNoteCatId };
     setNotes(prev => prev.map(n => n.id === selectedNote.id ? updated : n));
     setSelectedNote(updated);
     setEditingNote(false);
-    await supabase.from('notes').update({ body, title }).eq('id', selectedNote.id);
+    await supabase.from('notes').update({ body, title, category_id: editNoteCatId }).eq('id', selectedNote.id);
   }
 
   const sortedLists = [...lists].sort((a, b) => {
@@ -1103,7 +1104,7 @@ export default function LijstenTab() {
             </View>
           )}
           {/* Category filter chips */}
-          {(noteCats.length > 0 || notes.length > 0) && (
+          {noteCats.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 8 }}>
               <TouchableOpacity
                 onPress={() => setSelectedNoteCatId(null)}
@@ -1507,7 +1508,7 @@ export default function LijstenTab() {
             ) : (
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity
-                  onPress={() => { setEditNoteTitle(selectedNote?.title ?? ''); setEditNoteBody(selectedNote?.body ?? ''); setEditingNote(true); }}
+                  onPress={() => { setEditNoteTitle(selectedNote?.title ?? ''); setEditNoteBody(selectedNote?.body ?? ''); setEditNoteCatId(selectedNote?.category_id ?? null); setEditingNote(true); }}
                   style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}
                 >
                   <Ionicons name="pencil-outline" size={16} color={colors.black} />
@@ -1542,6 +1543,34 @@ export default function LijstenTab() {
                 multiline
                 autoFocus
               />
+              <View style={{ marginTop: 24 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400, marginBottom: 10 }}>CATEGORIE</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setEditNoteCatId(null)}
+                    style={[rStyles.chip, { backgroundColor: !editNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
+                  >
+                    <Text style={[rStyles.chipText, { color: !editNoteCatId ? colors.white : colors.gray400 }]}>Geen</Text>
+                  </TouchableOpacity>
+                  {noteCats.map(cat => (
+                    <TouchableOpacity
+                      key={cat.id}
+                      onPress={() => setEditNoteCatId(editNoteCatId === cat.id ? null : cat.id)}
+                      style={[rStyles.chip, { backgroundColor: editNoteCatId === cat.id ? cat.color : colors.white, borderColor: editNoteCatId === cat.id ? cat.color : colors.gray200 }]}
+                    >
+                      <Text style={{ fontSize: 13 }}>{cat.emoji}</Text>
+                      <Text style={[rStyles.chipText, { color: editNoteCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    onPress={() => { setNewNoteCatName(''); setNewNoteCatEmoji('📁'); setNewNoteCatVisible(true); }}
+                    style={[rStyles.chip, { backgroundColor: colors.white, borderColor: colors.gray200, borderStyle: 'dashed' }]}
+                  >
+                    <Ionicons name="add" size={14} color={colors.gray400} />
+                    <Text style={[rStyles.chipText, { color: colors.gray400 }]}>Nieuw</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
             </ScrollView>
           ) : (
             <ScrollView contentContainerStyle={styles.modalContent}>
@@ -1764,29 +1793,34 @@ export default function LijstenTab() {
                 textAlignVertical="top"
               />
               {/* Category picker */}
-              {noteCats.length > 0 && (
-                <View style={{ marginTop: 24 }}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400, marginBottom: 10 }}>CATEGORIE</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+              <View style={{ marginTop: 24 }}>
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400, marginBottom: 10 }}>CATEGORIE</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setAddNoteCatId(null)}
+                    style={[rStyles.chip, { backgroundColor: !addNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
+                  >
+                    <Text style={[rStyles.chipText, { color: !addNoteCatId ? colors.white : colors.gray400 }]}>Geen</Text>
+                  </TouchableOpacity>
+                  {noteCats.map(cat => (
                     <TouchableOpacity
-                      onPress={() => setAddNoteCatId(null)}
-                      style={[rStyles.chip, { backgroundColor: !addNoteCatId ? colors.black : colors.white, borderColor: colors.gray200 }]}
+                      key={cat.id}
+                      onPress={() => setAddNoteCatId(addNoteCatId === cat.id ? null : cat.id)}
+                      style={[rStyles.chip, { backgroundColor: addNoteCatId === cat.id ? cat.color : colors.white, borderColor: addNoteCatId === cat.id ? cat.color : colors.gray200 }]}
                     >
-                      <Text style={[rStyles.chipText, { color: !addNoteCatId ? colors.white : colors.gray400 }]}>Geen</Text>
+                      <Text style={{ fontSize: 13 }}>{cat.emoji}</Text>
+                      <Text style={[rStyles.chipText, { color: addNoteCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
                     </TouchableOpacity>
-                    {noteCats.map(cat => (
-                      <TouchableOpacity
-                        key={cat.id}
-                        onPress={() => setAddNoteCatId(addNoteCatId === cat.id ? null : cat.id)}
-                        style={[rStyles.chip, { backgroundColor: addNoteCatId === cat.id ? cat.color : colors.white, borderColor: addNoteCatId === cat.id ? cat.color : colors.gray200 }]}
-                      >
-                        <Text style={{ fontSize: 13 }}>{cat.emoji}</Text>
-                        <Text style={[rStyles.chipText, { color: addNoteCatId === cat.id ? '#fff' : colors.black }]}>{cat.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
+                  ))}
+                  <TouchableOpacity
+                    onPress={() => { setNewNoteCatName(''); setNewNoteCatEmoji('📁'); setNewNoteCatVisible(true); }}
+                    style={[rStyles.chip, { backgroundColor: colors.white, borderColor: colors.gray200, borderStyle: 'dashed' }]}
+                  >
+                    <Ionicons name="add" size={14} color={colors.gray400} />
+                    <Text style={[rStyles.chipText, { color: colors.gray400 }]}>Nieuw</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              </View>
             </ScrollView>
           </SafeAreaView>
         </KeyboardAvoidingView>
