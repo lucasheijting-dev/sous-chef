@@ -637,7 +637,7 @@ function HabitBarCard({ habit, log, isToday }: { habit: Habit; log: HabitLog | u
       {level ? (
         <View style={[hbar.pill, { backgroundColor: pillColor }]}>
           <Text style={[hbar.pillText, { color: level === 'elite' ? Colors.black : '#fff' }]}>
-            {level === 'mini' ? 'Mini' : level === 'good' ? 'Good' : level === 'elite' ? 'Elite' : level === 'skip' ? 'Skip' : '✕'}
+            {level === 'mini' ? 'Mini' : level === 'good' ? 'Plus' : level === 'elite' ? 'Elite' : level === 'skip' ? 'Skip' : '✕'}
           </Text>
         </View>
       ) : (
@@ -918,20 +918,23 @@ function HabitsMain() {
   async function saveQuickAddHabit() {
     if (!user || !quickAddName.trim()) return;
     setQuickAddSaving(true);
-    await supabase.from('habits').insert({
-      user_id: user.id,
-      name: quickAddName.trim(),
-      mini_goal: quickAddMini.trim() || 'Minimum',
-      good_goal: quickAddGood.trim() || 'Goed',
-      elite_goal: quickAddElite.trim() || 'Elite',
-      is_active: true,
-      sort_order: habits.length,
-    });
+    const name = quickAddName.trim();
+    await fetch(`${API_BASE}/habits?user_id=${user.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        mini_goal: quickAddMini.trim() || 'Minimum',
+        good_goal: quickAddGood.trim() || 'Goed',
+        elite_goal: quickAddElite.trim() || 'Elite',
+        sort_order: habits.length,
+      }),
+    }).catch(() => {});
     setQuickAddName(''); setQuickAddMini(''); setQuickAddGood(''); setQuickAddElite('');
     setQuickAddVisible(false);
     setQuickAddSaving(false);
     fetchData();
-    showToast(`${quickAddName.trim()} toegevoegd!`, 'success');
+    showToast(`${name} toegevoegd!`, 'success');
   }
 
   // ── Derived data ─────────────────────────────────────────────────────────────

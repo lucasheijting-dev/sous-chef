@@ -5,6 +5,20 @@ const db      = require('./supabase');
 
 const router = express.Router();
 
+// POST /habits?user_id=xxx
+router.post('/', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const { name, mini_goal, good_goal, elite_goal, sort_order } = req.body;
+    if (!user_id || !name?.trim()) return res.status(400).json({ error: 'Missing user_id or name' });
+    const habit = await db.createHabit(user_id, { name: name.trim(), mini_goal, good_goal, elite_goal, sort_order });
+    res.json(habit);
+  } catch (err) {
+    console.error('[Habits] Create error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /habits/goals?user_id=xxx
 router.get('/goals', async (req, res) => {
   try {
