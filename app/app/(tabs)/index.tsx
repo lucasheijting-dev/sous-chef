@@ -538,6 +538,10 @@ export default function LijstenTab() {
   const [editingNote, setEditingNote] = useState(false);
   const [editNoteBody, setEditNoteBody] = useState('');
   const [editNoteTitle, setEditNoteTitle] = useState('');
+  const [addNoteVisible, setAddNoteVisible] = useState(false);
+  const [addNoteTitle, setAddNoteTitle] = useState('');
+  const [addNoteBody, setAddNoteBody] = useState('');
+  const [addNoteSaving, setAddNoteSaving] = useState(false);
 
   const [highlightedListId, setHighlightedListId] = useState<string | null>(null);
   const prevListIdsRef = useRef<Set<string>>(new Set());
@@ -1635,6 +1639,79 @@ export default function LijstenTab() {
           </LinearGradient>
         </TouchableOpacity>
       )}
+
+      {/* New note FAB */}
+      {activeTab === 'notes' && (
+        <TouchableOpacity
+          style={[fabStyles.fab, { bottom: insets.bottom + 90 }]}
+          onPress={() => { setAddNoteTitle(''); setAddNoteBody(''); setAddNoteVisible(true); }}
+          activeOpacity={0.85}
+        >
+          <LinearGradient colors={[Colors.yellow, Colors.yellowDark]} style={fabStyles.fabGrad}>
+            <Ionicons name="add" size={26} color={Colors.black} />
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      {/* New note modal */}
+      <Modal visible={addNoteVisible} animationType="slide" presentationStyle="formSheet" onRequestClose={() => setAddNoteVisible(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: colors.white }}>
+            <View style={[styles.modalHeader, { borderBottomColor: colors.gray100 }]}>
+              <TouchableOpacity onPress={() => setAddNoteVisible(false)} style={[styles.closeBtn, { backgroundColor: colors.gray100 }]}>
+                <Ionicons name="close" size={18} color={colors.gray400} />
+              </TouchableOpacity>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 17, color: colors.black }}>Nieuwe notitie</Text>
+              <TouchableOpacity
+                onPress={async () => {
+                  if (!user || !addNoteBody.trim() || addNoteSaving) return;
+                  setAddNoteSaving(true);
+                  try {
+                    const res = await fetch(`${API_BASE}/notes?user_id=${user.id}`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ title: addNoteTitle.trim() || null, body: addNoteBody.trim() }),
+                    });
+                    const data = await res.json().catch(() => null);
+                    if (data?.id) {
+                      const newNote: Note = { id: data.id, user_id: user.id, title: addNoteTitle.trim() || null, body: addNoteBody.trim(), created_at: new Date().toISOString() };
+                      setNotes(prev => [newNote, ...prev]);
+                    }
+                  } catch {}
+                  setAddNoteSaving(false);
+                  setAddNoteVisible(false);
+                }}
+                disabled={!addNoteBody.trim() || addNoteSaving}
+                style={[styles.closeBtn, { backgroundColor: Colors.yellow, opacity: addNoteBody.trim() ? 1 : 0.4 }]}
+              >
+                {addNoteSaving ? <ActivityIndicator size="small" color={Colors.black} /> : <Ionicons name="checkmark" size={18} color={Colors.black} />}
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 28, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+              <TextInput
+                style={{ fontFamily: 'Inter_700Bold', fontSize: 26, color: colors.black, marginBottom: 16, letterSpacing: -0.6 }}
+                value={addNoteTitle}
+                onChangeText={setAddNoteTitle}
+                placeholder="Titel (optioneel)"
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                returnKeyType="next"
+                autoFocus
+              />
+              <TextInput
+                style={{ fontFamily: 'Inter_400Regular', fontSize: 17, color: colors.black, lineHeight: 28, minHeight: 160 }}
+                value={addNoteBody}
+                onChangeText={setAddNoteBody}
+                placeholder="Schrijf hier je notitie..."
+                placeholderTextColor={colors.gray400}
+                selectionColor={Colors.yellow}
+                multiline
+                textAlignVertical="top"
+              />
+            </ScrollView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* New list modal */}
       <Modal visible={newListModalVisible} transparent animationType="slide" onRequestClose={() => setNewListModalVisible(false)}>
