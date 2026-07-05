@@ -273,6 +273,15 @@ export default function ListDetailScreen() {
 
   const [imageViewUrl, setImageViewUrl] = useState<string | null>(null);
   const [uploadingImageItemId, setUploadingImageItemId] = useState<string | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvent, e => setKeyboardHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   useEffect(() => {
     if (!isGroceryList) return;
@@ -729,8 +738,7 @@ export default function ListDetailScreen() {
   if (doneExpanded) flatItems.push(...filteredChecked);
 
   return (
-    <View style={styles.root}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}>
+    <View style={[styles.root, { paddingBottom: keyboardHeight }]}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
         {isGroceryList && (
@@ -961,7 +969,7 @@ export default function ListDetailScreen() {
           </View>
         )}
 
-        <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: insets.bottom > 0 ? insets.bottom : 14, flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+        <View style={[styles.addRow, { backgroundColor: colors.offWhite, borderTopColor: colors.gray100, paddingBottom: keyboardHeight > 0 ? 10 : (insets.bottom > 0 ? insets.bottom : 14), flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
           {isGroceryList && (
             <TouchableOpacity onPress={() => setRecipeModalVisible(true)} style={[styles.recipeImportBtn, { backgroundColor: colors.gray100 }]} activeOpacity={0.7}>
               <Text style={{ fontSize: 20 }}>🍽️</Text>
@@ -1205,7 +1213,6 @@ export default function ListDetailScreen() {
           </Pressable>
         </Modal>
       </View>
-      </KeyboardAvoidingView>
     </View>
   );
 }
