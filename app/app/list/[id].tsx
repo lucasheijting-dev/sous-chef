@@ -98,6 +98,7 @@ function SwipeableItem({
   tapToEdit,
   onAddPhoto,
   onViewImage,
+  addedByInitial,
 }: {
   item: ListItem;
   onToggle: () => void;
@@ -109,6 +110,7 @@ function SwipeableItem({
   tapToEdit?: boolean;
   onAddPhoto?: () => void;
   onViewImage?: (url: string) => void;
+  addedByInitial?: string | null;
 }) {
   const { colors } = useTheme();
   const [editText, setEditText] = useState(item.text);
@@ -156,6 +158,11 @@ function SwipeableItem({
           )}
           {!isEditing && item.list_item_sources && item.list_item_sources.length > 0 && (
             <Text style={{ fontSize: 13, marginRight: 2 }}>🍽️</Text>
+          )}
+          {!isEditing && addedByInitial && (
+            <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#E5E7EB', alignItems: 'center', justifyContent: 'center', marginRight: 4 }}>
+              <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 8, color: '#6B7280' }}>{addedByInitial}</Text>
+            </View>
           )}
           {!isEditing && (
             <TouchableOpacity
@@ -315,13 +322,6 @@ export default function ListDetailScreen() {
               <Ionicons name="person-add-outline" size={17} color={Colors.black} />
             </View>
           </TouchableOpacity>
-          {items.length > 0 && (
-            <TouchableOpacity onPress={shareList} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-              <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="share-outline" size={17} color={Colors.black} />
-              </View>
-            </TouchableOpacity>
-          )}
         </View>
       ),
     });
@@ -946,6 +946,15 @@ export default function ListDetailScreen() {
                 return <LinkItemRow item={item} colors={colors} />;
               }
               const isTips = listType === 'tips';
+              const addedByInitial = (() => {
+                if (!item.added_by_user_id) return null;
+                if (item.added_by_user_id === user?.id) return null; // own items: no badge
+                const member = members.find(m => m.user_id === item.added_by_user_id);
+                if (!member) return null;
+                const name = member.users?.display_name?.trim();
+                if (name) return name[0].toUpperCase();
+                return member.users?.whatsapp_number?.slice(-2) ?? null;
+              })();
               return (
                 <SwipeableItem
                   item={item}
@@ -958,6 +967,7 @@ export default function ListDetailScreen() {
                   tapToEdit={isTips}
                   onAddPhoto={() => addPhotoToItem(item.id)}
                   onViewImage={setImageViewUrl}
+                  addedByInitial={addedByInitial}
                 />
               );
 

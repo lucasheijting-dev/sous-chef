@@ -664,7 +664,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const isDupe = existing.some(i => i.text.toLowerCase() === itemText.toLowerCase());
       if (isDupe) return `_${itemText}_ staat al op ${list.emoji ?? '📝'} ${list.name}.`;
 
-      const added = await db.addListItem(intent.list_id, itemText, quantity);
+      const added = await db.addListItem(intent.list_id, itemText, quantity, userId);
       undo.record(userId, 'add_item', {
         itemId: added.id, text: added.text, listName: list.name, listEmoji: list.emoji ?? '📝',
       });
@@ -695,7 +695,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
 
       // For single-item list_items, pass quantity; for multi-item, quantity is per-item (not supported in Claude output for arrays)
       const singleQty = newTexts.length === 1 ? (intent.item_quantity ?? null) : null;
-      const added = await Promise.all(newTexts.map(t => db.addListItem(intent.list_id, t, singleQty)));
+      const added = await Promise.all(newTexts.map(t => db.addListItem(intent.list_id, t, singleQty, userId)));
       undo.record(userId, 'add_items', {
         itemIds: added.map(a => a.id), count: added.length,
         listName: list.name, listEmoji: list.emoji ?? '📝',

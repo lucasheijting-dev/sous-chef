@@ -80,12 +80,11 @@ const MONTH_START = (() => {
 
 const NINETY_DAYS_AGO = utcDateStr(Date.now() - 90 * 86400000);
 
-const STRIP_DAYS = Math.max(7, new Date().getUTCDate());
-
-function getDayStrip(count: number) {
-  const todayMs = utcMsFromStr(getTodayStr());
-  return Array.from({ length: count }, (_, i) => {
-    const ms = todayMs - (count - 1 - i) * 86400000;
+function getWeekStrip(todayMs: number) {
+  const dow = (new Date(todayMs).getUTCDay() + 6) % 7; // 0=Mon, 6=Sun
+  const mondayMs = todayMs - dow * 86400000;
+  return Array.from({ length: 7 }, (_, i) => {
+    const ms = mondayMs + i * 86400000;
     const d = new Date(ms);
     return {
       date: utcDateStr(ms),
@@ -94,8 +93,6 @@ function getDayStrip(count: number) {
     };
   });
 }
-
-const strip = getDayStrip(STRIP_DAYS);
 const WEEK_DAYS_SHORT = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -201,7 +198,12 @@ const ring = StyleSheet.create({
 
 function SparkLine({ habitId, logs }: { habitId: string; logs: HabitLog[] }) {
   const { colors } = useTheme();
-  const last7 = strip.slice(-7);
+  const todayMs = utcMsFromStr(getTodayStr());
+  const last7 = Array.from({ length: 7 }, (_, i) => {
+    const ms = todayMs - (6 - i) * 86400000;
+    const d = new Date(ms);
+    return { date: utcDateStr(ms), day: d.toLocaleDateString('nl-NL', { weekday: 'short', timeZone: 'UTC' }).slice(0, 2).toUpperCase(), num: String(d.getUTCDate()) };
+  });
   return (
     <View style={spark.wrap}>
       {last7.map(day => {
@@ -762,6 +764,7 @@ function HabitsMain() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState(getTodayStr);
+  const strip = useMemo(() => getWeekStrip(utcMsFromStr(today)), [today]);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const { toastProps, show: showToast } = useToast();
 
@@ -818,9 +821,6 @@ function HabitsMain() {
     return () => sub.remove();
   }, []);
 
-  useEffect(() => {
-    setTimeout(() => stripRef.current?.scrollToEnd({ animated: false }), 100);
-  }, [loading]);
 
   function selectDay(date: string) {
     if (date === selectedDay) return;
@@ -1012,7 +1012,15 @@ function HabitsMain() {
                   {(['day', 'week'] as const).map(m => (
                     <TouchableOpacity
                       key={m}
-                      onPress={() => { haptic('light'); setViewMode(m); }}
+                      onPress={() => {
+                        haptic('light');
+                        if (m === 'week') {
+                          const ms = utcMsFromStr(selectedDay);
+                          const dow = (new Date(ms).getUTCDay() + 6) % 7;
+                          setSelectedDay(utcDateStr(ms - dow * 86400000));
+                        }
+                        setViewMode(m);
+                      }}
                       style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: viewMode === m ? colors.surface : 'transparent' }}
                       activeOpacity={0.75}
                     >
@@ -1111,31 +1119,29 @@ function HabitsMain() {
             )) : (
               <>
                 {/* Week navigation */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, marginBottom: 6 }}>
-                  <TouchableOpacity onPress={() => selectDay(utcDateStr(utcMsFromStr(selectedDay) - 7 * 86400000))} activeOpacity={0.7}>
-                    <Ionicons name="chevron-back" size={22} color={colors.gray400} />
-                  </TouchableOpacity>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>
-                    {(() => {
-                      const ms = utcMsFromStr(selectedDay);
-                      const dow = (new Date(ms).getUTCDay() + 6) % 7;
-                      const monMs = ms - dow * 86400000;
-                      const sunMs = monMs + 6 * 86400000;
-                      const fmt = (m: number) => new Date(m).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-                      return `${fmt(monMs)} – ${fmt(sunMs)}`;
-                    })()}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      const next = utcDateStr(utcMsFromStr(selectedDay) + 7 * 86400000);
-                      if (next <= today) selectDay(next);
-                    }}
-                    activeOpacity={0.7}
-                    disabled={utcDateStr(utcMsFromStr(selectedDay) + 7 * 86400000) > today}
-                  >
-                    <Ionicons name="chevron-forward" size={22} color={utcDateStr(utcMsFromStr(selectedDay) + 7 * 86400000) > today ? colors.gray200 : colors.gray400} />
-                  </TouchableOpacity>
-                </View>
+                {(() => {
+                  const ms = utcMsFromStr(selectedDay);
+                  const dow = (new Date(ms).getUTCDay() + 6) % 7;
+                  const thisMondayMs = ms - dow * 86400000;
+                  const prevMon = utcDateStr(thisMondayMs - 7 * 86400000);
+                  const nextMon = utcDateStr(thisMondayMs + 7 * 86400000);
+                  const sunMs = thisMondayMs + 6 * 86400000;
+                  const fmt = (m: number) => new Date(m).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+                  const nextDisabled = nextMon > today;
+                  return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, marginBottom: 6 }}>
+                      <TouchableOpacity onPress={() => selectDay(prevMon)} activeOpacity={0.7}>
+                        <Ionicons name="chevron-back" size={22} color={colors.gray400} />
+                      </TouchableOpacity>
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 13, color: colors.gray400 }}>
+                        {fmt(thisMondayMs)} – {fmt(sunMs)}
+                      </Text>
+                      <TouchableOpacity onPress={() => { if (!nextDisabled) selectDay(nextMon); }} activeOpacity={0.7} disabled={nextDisabled}>
+                        <Ionicons name="chevron-forward" size={22} color={nextDisabled ? colors.gray200 : colors.gray400} />
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
                 <WeekGrid
                   habits={habits}
                   logs={logs}

@@ -123,6 +123,20 @@ router.get('/shared', async (req, res) => {
   }
 });
 
+// DELETE /lists/:listId/leave?user_id=xxx — leave a shared list (removes self from members)
+router.delete('/:listId/leave', async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    await db.leaveList(listId, user_id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Lists] Leave error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /lists/restore-defaults?user_id=xxx — recreate any missing default lists
 router.post('/restore-defaults', async (req, res) => {
   try {

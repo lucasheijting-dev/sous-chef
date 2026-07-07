@@ -128,6 +128,12 @@ const sheetStyles = StyleSheet.create({
 
 // ── List Card ──────────────────────────────────────────────────────────────────
 
+function memberInitial(m: { display_name?: string; whatsapp_number?: string }): string {
+  if (m.display_name?.trim()) return m.display_name.trim()[0].toUpperCase();
+  if (m.whatsapp_number) return m.whatsapp_number.slice(-2);
+  return '?';
+}
+
 function AnimatedCard({
   item,
   index,
@@ -136,7 +142,7 @@ function AnimatedCard({
   onEmojiPress,
   highlighted,
 }: {
-  item: List & { item_count: number; open_count: number; is_shared?: boolean; is_default?: boolean };
+  item: List & { item_count: number; open_count: number; is_shared?: boolean; is_default?: boolean; shared_with_me?: boolean; members?: Array<{ display_name?: string; whatsapp_number?: string }> };
   index: number;
   onPress: () => void;
   onDelete: () => void;
@@ -150,7 +156,7 @@ function AnimatedCard({
 
   const { colors, isDark } = useTheme();
   const tone = getTone(index, isDark);
-  const allDone = item.item_count > 0 && item.open_count === 0;
+  const allDone = !item.shared_with_me && item.item_count > 0 && item.open_count === 0;
   const prevAllDone = useRef(allDone);
 
   useEffect(() => {
@@ -215,11 +221,17 @@ function AnimatedCard({
               <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>{typeLabel}</Text>
             </View>
           )}
-          {item.is_shared && (
-            <View style={[styles.typeBadge, { backgroundColor: colors.gray100, flexDirection: 'row', alignItems: 'center', gap: 3 }]}>
-              <Ionicons name="people-outline" size={10} color={colors.gray400} />
-              <Text style={[styles.typeBadgeText, { color: colors.gray400 }]}>Gedeeld</Text>
+          {item.is_shared && (item.members ?? []).length > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: -4 }}>
+              {(item.members ?? []).slice(0, 3).map((m, i) => (
+                <View key={i} style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: colors.gray200, borderWidth: 1.5, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center', zIndex: 3 - i }}>
+                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 8, color: colors.gray600 }}>{memberInitial(m)}</Text>
+                </View>
+              ))}
             </View>
+          )}
+          {item.is_shared && (item.members ?? []).length === 0 && (
+            <Ionicons name="people-outline" size={12} color={colors.gray400} />
           )}
         </View>
       </View>
@@ -575,6 +587,7 @@ export default function LijstenTab() {
 
   const [highlightedListId, setHighlightedListId] = useState<string | null>(null);
   const prevListIdsRef = useRef<Set<string>>(new Set());
+  const defaultsEnsured = useRef(false);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const emptyBreath = useRef(new Animated.Value(1)).current;
@@ -588,20 +601,28 @@ export default function LijstenTab() {
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     try {
+      // Ensure default lists exist before fetching (only once per session)
+      if (!defaultsEnsured.current) {
+        await fetch(`${API_BASE}/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' }).catch(() => {});
+        defaultsEnsured.current = true;
+      }
+
       const [listsRes, sharedData] = await Promise.all([
         supabase
           .from('lists')
-          .select('id, name, emoji, sort_order, list_type, list_items(checked)')
+          .select('id, name, emoji, sort_order, list_type, is_default, default_type, list_items(checked)')
           .eq('user_id', user.id)
+          .is('deleted_at', null)
           .order('sort_order', { ascending: true }),
-        fetch(`${API_BASE}/lists/shared?user_id=${user.id}`).then(r => r.json()).catch(() => ({ sharedWithMe: [], mySharedListIds: [] })),
+        fetch(`${API_BASE}/lists/shared?user_id=${user.id}`).then(r => r.json()).catch(() => ({ sharedWithMe: [], mySharedListIds: [], mySharedListMembers: {} })),
       ]);
       if (listsRes.data) {
         const sharedWithMe: any[] = sharedData?.sharedWithMe ?? [];
         const mySharedIds = new Set<string>(sharedData?.mySharedListIds ?? []);
+        const mySharedListMembers: Record<string, Array<{ display_name?: string; whatsapp_number?: string }>> = sharedData?.mySharedListMembers ?? {};
         const ownedProcessed = listsRes.data.map((l: any) => {
           const items: any[] = Array.isArray(l.list_items) ? l.list_items : [];
-          return { ...l, item_count: items.length, open_count: items.filter((li: any) => !li.checked).length, is_shared: mySharedIds.has(l.id) };
+          return { ...l, item_count: items.length, open_count: items.filter((li: any) => !li.checked).length, is_shared: mySharedIds.has(l.id), shared_with_me: false, members: mySharedListMembers[l.id] ?? [] };
         });
         const ownedIds = new Set(ownedProcessed.map((l: any) => l.id));
         const mergedAll = [
@@ -719,8 +740,11 @@ export default function LijstenTab() {
   const filteredSortedLists = listSearchTerm
     ? sortedLists.filter(l => l.name.toLowerCase().includes(listSearchTerm))
     : sortedLists;
-  const activeLists = filteredSortedLists.filter(l => !(l.item_count > 0 && l.open_count === 0));
-  const doneLists   = filteredSortedLists.filter(l => l.item_count > 0 && l.open_count === 0);
+  const myLists       = filteredSortedLists.filter(l => !(l as any).shared_with_me);
+  const sharedLists   = filteredSortedLists.filter(l => !!(l as any).shared_with_me);
+  const isDone = (l: any) => !l.shared_with_me && l.item_count > 0 && l.open_count === 0;
+  const activeLists   = myLists.filter(l => !isDone(l));
+  const doneLists     = myLists.filter(l => isDone(l));
 
   const [receiptError, setReceiptError] = useState(false);
   const [pendingReceiptDelete, setPendingReceiptDelete] = useState<Receipt | null>(null);
@@ -774,7 +798,22 @@ export default function LijstenTab() {
     setAssignModalReceipt(null);
   }
 
-  function deleteList(listId: string, listName: string, isDefault = false) {
+  function deleteList(listId: string, listName: string, isDefault = false, isSharedWithMe = false) {
+    if (isSharedWithMe) {
+      Alert.alert(
+        'Lijst verlaten?',
+        `Je verlaat "${listName}". Je ziet deze lijst niet meer.`,
+        [
+          { text: 'Annuleer', style: 'cancel' },
+          { text: 'Verlaten', style: 'destructive', onPress: () => {
+            setLists(prev => prev.filter(l => l.id !== listId));
+            fetch(`${API_BASE}/lists/${listId}/leave?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
+          }},
+        ]
+      );
+      return;
+    }
+
     const doDelete = () => {
       const snapshot = lists;
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -1082,13 +1121,13 @@ export default function LijstenTab() {
             {showBanner && (
               <GettingStartedBanner userId={user?.id ?? null} onDismiss={() => updateSetting('getting_started_dismissed', true)} colors={colors} />
             )}
-            {/* Active lists */}
+            {/* Active own lists */}
             {activeLists.length > 0 && (
               <View style={styles.tileRow}>
                 {activeLists.map((item, index) => (
                   <AnimatedCard key={item.id} item={item} index={index}
                     onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                    onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default)}
+                    onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default, false)}
                     onEmojiPress={() => setEmojiPickerList(item)}
                     highlighted={item.id === highlightedListId}
                   />
@@ -1096,7 +1135,7 @@ export default function LijstenTab() {
                 {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
               </View>
             )}
-            {/* Done lists sink to bottom */}
+            {/* Done own lists sink to bottom */}
             {doneLists.length > 0 && (
               <>
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 14, gap: 10 }}>
@@ -1108,12 +1147,33 @@ export default function LijstenTab() {
                   {doneLists.map((item, index) => (
                     <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                      onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default)}
+                      onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default, false)}
                       onEmojiPress={() => setEmojiPickerList(item)}
                       highlighted={item.id === highlightedListId}
                     />
                   ))}
                   {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
+                </View>
+              </>
+            )}
+            {/* Shared lists — separate section */}
+            {sharedLists.length > 0 && (
+              <>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 14, gap: 10 }}>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Gedeeld</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                </View>
+                <View style={styles.tileRow}>
+                  {sharedLists.map((item, index) => (
+                    <AnimatedCard key={item.id} item={item} index={activeLists.length + doneLists.length + index}
+                      onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                      onDelete={() => deleteList(item.id, item.name, false, true)}
+                      onEmojiPress={() => {}}
+                      highlighted={item.id === highlightedListId}
+                    />
+                  ))}
+                  {sharedLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
                 </View>
               </>
             )}

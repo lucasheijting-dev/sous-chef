@@ -29,6 +29,7 @@ export type ListItem = {
   checked: boolean;
   created_at: string;
   image_url?: string | null;
+  added_by_user_id?: string | null;
   list_item_sources?: { recipe_id: string; recipes: { title: string } | null }[];
 };
 

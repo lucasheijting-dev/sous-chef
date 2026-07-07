@@ -255,9 +255,10 @@ async function deleteList(listId) {
   await supabase.from('list_members').delete().eq('list_id', listId);
 }
 
-async function addListItem(listId, text, quantity = null) {
+async function addListItem(listId, text, quantity = null, userId = null) {
   const insertData = { list_id: listId, text, checked: false };
   if (quantity != null) insertData.quantity = quantity;
+  if (userId != null) insertData.added_by_user_id = userId;
 
   const [{ data, error }] = await Promise.all([
     supabase.from('list_items').insert(insertData).select('id, text, quantity').single(),
@@ -1201,30 +1202,62 @@ async function addListItemSource(listItemId, recipeId, originalText) {
 // ── Sharing ─────────────────────────────────────────────────────────────────────
 
 async function getSharedListsForUser(userId) {
-  // Lists shared WITH the user (they are a member but not owner)
+  // Lists where the user is a member (but not necessarily owner)
   const { data: memberRows } = await supabase
     .from('list_members')
-    .select('list_id, lists(id, name, emoji, sort_order, list_type, list_items(checked))')
+    .select('list_id, lists(id, name, emoji, sort_order, list_type, user_id, list_items(checked))')
     .eq('user_id', userId);
 
-  const sharedWithMe = (memberRows ?? [])
-    .filter(r => r.lists)
-    .map(r => {
-      const l = r.lists;
-      const items = Array.isArray(l.list_items) ? l.list_items : [];
-      return { ...l, item_count: items.length, open_count: items.filter(i => !i.checked).length, is_shared: true };
-    });
-
-  // IDs of the user's OWN lists that have other members (for "Gedeeld" badge)
+  // Members of the user's OWN lists (others who are members)
   const { data: othersRows } = await supabase
     .from('list_members')
-    .select('list_id, lists!inner(user_id)')
+    .select('list_id, user_id, lists!inner(user_id)')
     .eq('lists.user_id', userId)
     .neq('user_id', userId);
 
   const mySharedListIds = [...new Set((othersRows ?? []).map(r => r.list_id))];
 
-  return { sharedWithMe, mySharedListIds };
+  // Collect all user IDs we need names for (owners of lists shared with me + members of my shared lists)
+  const ownerIds = (memberRows ?? []).filter(r => r.lists?.user_id && r.lists.user_id !== userId).map(r => r.lists.user_id);
+  const memberUserIds = (othersRows ?? []).map(r => r.user_id);
+  const allUserIds = [...new Set([...ownerIds, ...memberUserIds])];
+
+  const userMap = {};
+  if (allUserIds.length > 0) {
+    const { data: users } = await supabase
+      .from('users')
+      .select('id, display_name, whatsapp_number')
+      .in('id', allUserIds);
+    for (const u of (users ?? [])) userMap[u.id] = { display_name: u.display_name, whatsapp_number: u.whatsapp_number };
+  }
+
+  const sharedWithMe = (memberRows ?? [])
+    .filter(r => r.lists && r.lists.user_id !== userId)
+    .map(r => {
+      const l = r.lists;
+      const items = Array.isArray(l.list_items) ? l.list_items : [];
+      const ownerInfo = userMap[l.user_id] ?? null;
+      const { user_id: _uid, ...listRest } = l;
+      return { ...listRest, item_count: items.length, open_count: items.filter(i => !i.checked).length, is_shared: true, shared_with_me: true, members: ownerInfo ? [ownerInfo] : [] };
+    });
+
+  const mySharedListMembers = {};
+  for (const row of (othersRows ?? [])) {
+    if (!mySharedListMembers[row.list_id]) mySharedListMembers[row.list_id] = [];
+    const info = userMap[row.user_id];
+    if (info) mySharedListMembers[row.list_id].push(info);
+  }
+
+  return { sharedWithMe, mySharedListIds, mySharedListMembers };
+}
+
+async function leaveList(listId, userId) {
+  const { error } = await supabase
+    .from('list_members')
+    .delete()
+    .eq('list_id', listId)
+    .eq('user_id', userId);
+  if (error) throw new Error(`leaveList: ${error.message}`);
 }
 
 async function getListMembers(listId) {
@@ -1471,6 +1504,7 @@ module.exports = {
   getUsersForDigest,
   getLists,
   getSharedListsForUser,
+  leaveList,
   createList,
   renameList,
   updateListEmoji,
