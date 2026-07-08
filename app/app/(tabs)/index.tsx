@@ -202,9 +202,6 @@ function AnimatedCard({
       <View style={styles.tileBottom}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Text style={[styles.tileName, { color: colors.black, flex: 1 }]} numberOfLines={1}>{item.name}</Text>
-          {item.is_default && (
-            <Ionicons name="pin" size={20} color={Colors.yellow} style={{ transform: [{ rotate: '45deg' }] }} />
-          )}
         </View>
         <View style={styles.tileCountRow}>
           {totalCount > 0 ? (

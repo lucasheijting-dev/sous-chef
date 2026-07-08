@@ -64,6 +64,31 @@ function groupNotes(notes: Note[]): { title: string; data: Note[] }[] {
   }));
 }
 
+function InlineMd({ text, style, numberOfLines }: { text: string; style?: any; numberOfLines?: number }) {
+  const parts: { t: string; bold: boolean }[] = [];
+  const regex = /\*\*(.*?)\*\*/g;
+  let last = 0, m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) parts.push({ t: text.slice(last, m.index), bold: false });
+    parts.push({ t: m[1], bold: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ t: text.slice(last), bold: false });
+  return (
+    <Text style={style} numberOfLines={numberOfLines}>
+      {parts.map((p, i) =>
+        p.bold
+          ? <Text key={i} style={{ fontFamily: 'Inter_700Bold' }}>{p.t}</Text>
+          : <Text key={i}>{p.t}</Text>
+      )}
+    </Text>
+  );
+}
+
+function stripMd(text: string): string {
+  return text.replace(/\*\*(.*?)\*\*/g, '$1');
+}
+
 function getCardStyles(isDark: boolean) {
   return [
     { bg: isDark ? '#2C2C2E' : Colors.white, title: isDark ? Colors.white : Colors.black, body: isDark ? '#AEAEB2' : Colors.gray600, date: isDark ? '#3A3A3C' : Colors.gray200 },
@@ -136,11 +161,9 @@ function NoteCard({
               </View>
             )}
             <Text style={[styles.cardTitle, { color: style.title }]} numberOfLines={2}>
-              {item.title || item.body.slice(0, 40)}
+              {item.title ? stripMd(item.title) : stripMd(item.body.slice(0, 40))}
             </Text>
-            <Text style={[styles.cardBody, { color: style.body }]} numberOfLines={5}>
-              {item.body}
-            </Text>
+            <InlineMd text={item.body} style={[styles.cardBody, { color: style.body }]} numberOfLines={5} />
             <View style={styles.cardFooter}>
               <Text style={[styles.cardDate, { color: style.date }]}>
                 {item.updated_at && item.updated_at !== item.created_at ? `Bijgewerkt ${formatDate(item.updated_at)}` : `Aangemaakt ${formatDate(item.created_at)}`}
@@ -508,7 +531,7 @@ export default function NotitiesTab() {
                   selectionColor={Colors.yellow}
                 />
               ) : (
-                <Text style={[styles.modalBody, { color: colors.gray800 }]}>{selected?.body}</Text>
+                <InlineMd text={selected?.body ?? ''} style={[styles.modalBody, { color: colors.gray800 }]} />
               )}
               {selected?.image_url && (
                 <TouchableOpacity onPress={() => setImageViewUrl(selected.image_url!)} activeOpacity={0.9} style={{ marginTop: 20 }}>

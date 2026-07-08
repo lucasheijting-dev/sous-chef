@@ -963,10 +963,10 @@ function HabitsMain() {
   const selectedLogsCount = useMemo(() => logs.filter(l => l.date === selectedDay).length, [logs, selectedDay]);
   const allDoneSelected   = habits.length > 0 && selectedLogsCount >= habits.length;
   const selectedDayBestLevel = useMemo((): 'mini' | 'good' | 'elite' => {
-    const dayLogs = logs.filter(l => l.date === selectedDay);
-    if (dayLogs.some(l => l.level === 'elite')) return 'elite';
+    const dayLogs = logs.filter(l => l.date === selectedDay && l.level !== 'skip' && l.level !== 'not_done');
+    if (dayLogs.some(l => l.level === 'mini'))  return 'mini';
     if (dayLogs.some(l => l.level === 'good'))  return 'good';
-    return 'mini';
+    return 'elite';
   }, [logs, selectedDay]);
 
   const completionPct = habits.length > 0 ? (selectedLogsCount / habits.length) : 0;
