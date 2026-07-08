@@ -278,18 +278,25 @@ function LoggedPill({ log }: { log: HabitLog | undefined }) {
 
 // ── All Done Card ──────────────────────────────────────────────────────────────
 
-function AllDoneCard({ day }: { day: string }) {
+const LEVEL_CARD_CONFIG = {
+  elite: { emoji: '🏆', label: 'Elite',  gradColors: ['#FCC10C', '#E5A800'] as [string, string], textColor: Colors.black, subColor: 'rgba(0,0,0,0.6)' },
+  good:  { emoji: '⭐', label: 'Plus',   gradColors: ['#A9AFB7', '#8B9299'] as [string, string], textColor: '#fff',        subColor: 'rgba(255,255,255,0.75)' },
+  mini:  { emoji: '⚡', label: 'Mini',   gradColors: ['#22C55E', '#16A34A'] as [string, string], textColor: '#fff',        subColor: 'rgba(255,255,255,0.75)' },
+};
+
+function AllDoneCard({ day, bestLevel }: { day: string; bestLevel: 'mini' | 'good' | 'elite' }) {
   const scale = useRef(new Animated.Value(0.9)).current;
   useEffect(() => {
     Animated.spring(scale, { toValue: 1, useNativeDriver: true, tension: 120, friction: 10 }).start();
   }, []);
   const label = dayLabel(day);
+  const cfg = LEVEL_CARD_CONFIG[bestLevel] ?? LEVEL_CARD_CONFIG.elite;
   return (
     <Animated.View style={[s.allDoneCard, { transform: [{ scale }] }]}>
-      <LinearGradient colors={['#FCC10C', '#E5A800']} style={s.allDoneGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <Text style={s.allDoneEmoji}>🏆</Text>
-        <Text style={s.allDoneTitle}>Perfect!</Text>
-        <Text style={s.allDoneSub}>Alle habits voltooid{day === getTodayStr() ? ' vandaag' : ` op ${label.toLowerCase()}`}</Text>
+      <LinearGradient colors={cfg.gradColors} style={s.allDoneGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <Text style={s.allDoneEmoji}>{cfg.emoji}</Text>
+        <Text style={[s.allDoneTitle, { color: cfg.textColor }]}>{cfg.label}!</Text>
+        <Text style={[s.allDoneSub, { color: cfg.subColor }]}>Alle habits voltooid{day === getTodayStr() ? ' vandaag' : ` op ${label.toLowerCase()}`}</Text>
       </LinearGradient>
     </Animated.View>
   );
@@ -955,6 +962,12 @@ function HabitsMain() {
   }, [allDoneToday]);
   const selectedLogsCount = useMemo(() => logs.filter(l => l.date === selectedDay).length, [logs, selectedDay]);
   const allDoneSelected   = habits.length > 0 && selectedLogsCount >= habits.length;
+  const selectedDayBestLevel = useMemo((): 'mini' | 'good' | 'elite' => {
+    const dayLogs = logs.filter(l => l.date === selectedDay);
+    if (dayLogs.some(l => l.level === 'elite')) return 'elite';
+    if (dayLogs.some(l => l.level === 'good'))  return 'good';
+    return 'mini';
+  }, [logs, selectedDay]);
 
   const completionPct = habits.length > 0 ? (selectedLogsCount / habits.length) : 0;
   const isPastDay = selectedDay < today;
@@ -970,13 +983,14 @@ function HabitsMain() {
     return habits.length > 0 ? 'Begin je dag sterk' : '';
   }, [habits, logs, allDoneToday, todayLogsCount]);
 
-  function stripDayCompletion(date: string) {
-    if (habits.length === 0) return null;
-    const count = logs.filter(l => l.date === date).length;
-    const all = habits.length;
-    if (count === 0) return null;
-    if (count >= all) return 'all';
-    return 'partial';
+  function stripDayStatus(date: string): { completion: 'all' | 'partial' | null; bestLevel: 'mini' | 'good' | 'elite' | null } {
+    if (habits.length === 0) return { completion: null, bestLevel: null };
+    const dayLogs = logs.filter(l => l.date === date);
+    if (dayLogs.length === 0) return { completion: null, bestLevel: null };
+    const completion = dayLogs.length >= habits.length ? 'all' : 'partial';
+    const bestLevel = dayLogs.some(l => l.level === 'elite') ? 'elite'
+      : dayLogs.some(l => l.level === 'good') ? 'good' : 'mini';
+    return { completion, bestLevel };
   }
 
   if (loading) {
@@ -1018,6 +1032,8 @@ function HabitsMain() {
                           const ms = utcMsFromStr(selectedDay);
                           const dow = (new Date(ms).getUTCDay() + 6) % 7;
                           setSelectedDay(utcDateStr(ms - dow * 86400000));
+                        } else {
+                          setSelectedDay(today);
                         }
                         setViewMode(m);
                       }}
@@ -1049,12 +1065,18 @@ function HabitsMain() {
               const isSelected = day.date === selectedDay;
               const isToday = day.date === today;
               const isFuture = day.date > today;
-              const completion = stripDayCompletion(day.date);
+              const { completion, bestLevel } = stripDayStatus(day.date);
+              const levelDotColor = bestLevel === 'elite' ? Colors.yellow
+                : bestLevel === 'good' ? '#A9AFB7'
+                : '#22C55E';
+              const dotBg = completion === 'all'
+                ? (isToday ? 'rgba(0,0,0,0.45)' : levelDotColor)
+                : completion === 'partial' ? colors.gray200 : null;
               return (
                 <TouchableOpacity
                   style={[
                     s.weekDay,
-                    isToday && !isSelected && { backgroundColor: Colors.yellow },
+                    isToday && { backgroundColor: Colors.yellow },
                     isSelected && !isToday && { backgroundColor: colors.gray100 },
                     isFuture && { opacity: 0.4 },
                   ]}
@@ -1062,15 +1084,16 @@ function HabitsMain() {
                   activeOpacity={isFuture ? 1 : 0.75}
                   hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
                 >
-                  <Text style={[s.weekDayDow, { color: isToday && !isSelected ? 'rgba(0,0,0,0.55)' : colors.gray400 }]}>
+                  <Text style={[s.weekDayDow, { color: isToday ? 'rgba(0,0,0,0.55)' : colors.gray400 }]}>
                     {day.day.slice(0, 2)}
                   </Text>
-                  <Text style={[s.weekDayNum, { color: isToday && !isSelected ? Colors.black : colors.black }]}>
+                  <Text style={[s.weekDayNum, { color: colors.black }]}>
                     {day.num}
                   </Text>
-                  {completion === 'all'     && <View style={[s.weekDot, { backgroundColor: isToday && !isSelected ? 'rgba(0,0,0,0.45)' : Colors.yellow }]} />}
-                  {completion === 'partial' && <View style={[s.weekDot, { backgroundColor: colors.gray200 }]} />}
-                  {!completion              && <View style={s.weekDotEmpty} />}
+                  {dotBg
+                    ? <View style={[s.weekDot, { backgroundColor: dotBg }]} />
+                    : <View style={s.weekDotEmpty} />
+                  }
                 </TouchableOpacity>
               );
             }}
@@ -1096,7 +1119,7 @@ function HabitsMain() {
                 : `${dayLabel(selectedDay).toUpperCase()} · ${habits.length} HABITS`}
             </Text>
 
-            {viewMode === 'day' && allDoneSelected && <AllDoneCard day={selectedDay} />}
+            {viewMode === 'day' && allDoneSelected && <AllDoneCard day={selectedDay} bestLevel={selectedDayBestLevel} />}
 
             {viewMode === 'day' ? habitData.map(({ habit, log }) => (
               <View key={habit.id} style={{ marginBottom: 10 }}>
