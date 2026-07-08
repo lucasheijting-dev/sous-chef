@@ -203,7 +203,7 @@ function AnimatedCard({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Text style={[styles.tileName, { color: colors.black, flex: 1 }]} numberOfLines={1}>{item.name}</Text>
           {item.is_default && (
-            <Ionicons name="pin" size={15} color={Colors.yellow} style={{ transform: [{ rotate: '45deg' }] }} />
+            <Ionicons name="pin" size={20} color={Colors.yellow} style={{ transform: [{ rotate: '45deg' }] }} />
           )}
         </View>
         <View style={styles.tileCountRow}>
@@ -741,9 +741,9 @@ export default function LijstenTab() {
     ? sortedLists.filter(l => l.name.toLowerCase().includes(listSearchTerm))
     : sortedLists;
   const pinnedLists   = filteredSortedLists.filter(l => !!(l as any).is_default);
-  const createdLists  = filteredSortedLists.filter(l => !(l as any).is_default && !(l as any).shared_with_me);
-  const sharedLists   = filteredSortedLists.filter(l => !!(l as any).shared_with_me);
-  const isDone = (l: any) => !l.is_shared && !l.shared_with_me && !l.is_default && l.item_count > 0 && l.open_count === 0;
+  const sharedLists   = filteredSortedLists.filter(l => !(l as any).is_default && ((l as any).is_shared || (l as any).shared_with_me));
+  const createdLists  = filteredSortedLists.filter(l => !(l as any).is_default && !(l as any).is_shared && !(l as any).shared_with_me);
+  const isDone = (l: any) => !l.is_default && !l.is_shared && !l.shared_with_me && l.item_count > 0 && l.open_count === 0;
   const activeLists   = createdLists.filter(l => !isDone(l));
   const doneLists     = createdLists.filter(l => isDone(l));
 
@@ -1122,11 +1122,11 @@ export default function LijstenTab() {
             {showBanner && (
               <GettingStartedBanner userId={user?.id ?? null} onDismiss={() => updateSetting('getting_started_dismissed', true)} colors={colors} />
             )}
-            {/* ── Gepind ── */}
+            {/* ── Standaard ── */}
             {pinnedLists.length > 0 && (
               <>
                 <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: 2 }}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Gepind</Text>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Standaard</Text>
                 </View>
                 <View style={styles.tileRow}>
                   {pinnedLists.map((item, index) => (
@@ -1141,16 +1141,35 @@ export default function LijstenTab() {
                 </View>
               </>
             )}
+            {/* ── Gedeeld ── */}
+            {sharedLists.length > 0 && (
+              <>
+                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: pinnedLists.length > 0 ? 16 : 2 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Gedeeld</Text>
+                </View>
+                <View style={styles.tileRow}>
+                  {sharedLists.map((item, index) => (
+                    <AnimatedCard key={item.id} item={item} index={pinnedLists.length + index}
+                      onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                      onDelete={() => deleteList(item.id, item.name, false, !!(item as any).shared_with_me)}
+                      onEmojiPress={() => setEmojiPickerList(item)}
+                      highlighted={item.id === highlightedListId}
+                    />
+                  ))}
+                  {sharedLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
+                </View>
+              </>
+            )}
             {/* ── Mijn lijsten ── */}
             {(activeLists.length > 0 || doneLists.length > 0) && (
               <>
-                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: pinnedLists.length > 0 ? 16 : 2 }}>
+                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: (pinnedLists.length > 0 || sharedLists.length > 0) ? 16 : 2 }}>
                   <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Mijn lijsten</Text>
                 </View>
                 {activeLists.length > 0 && (
                   <View style={styles.tileRow}>
                     {activeLists.map((item, index) => (
-                      <AnimatedCard key={item.id} item={item} index={pinnedLists.length + index}
+                      <AnimatedCard key={item.id} item={item} index={pinnedLists.length + sharedLists.length + index}
                         onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                         onDelete={() => deleteList(item.id, item.name, false, false)}
                         onEmojiPress={() => setEmojiPickerList(item)}
@@ -1169,7 +1188,7 @@ export default function LijstenTab() {
                     </View>
                     <View style={styles.tileRow}>
                       {doneLists.map((item, index) => (
-                        <AnimatedCard key={item.id} item={item} index={pinnedLists.length + activeLists.length + index}
+                        <AnimatedCard key={item.id} item={item} index={pinnedLists.length + sharedLists.length + activeLists.length + index}
                           onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                           onDelete={() => deleteList(item.id, item.name, false, false)}
                           onEmojiPress={() => setEmojiPickerList(item)}
@@ -1180,25 +1199,6 @@ export default function LijstenTab() {
                     </View>
                   </>
                 )}
-              </>
-            )}
-            {/* ── Gedeeld ── */}
-            {sharedLists.length > 0 && (
-              <>
-                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: (pinnedLists.length > 0 || activeLists.length > 0 || doneLists.length > 0) ? 16 : 2 }}>
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Gedeeld</Text>
-                </View>
-                <View style={styles.tileRow}>
-                  {sharedLists.map((item, index) => (
-                    <AnimatedCard key={item.id} item={item} index={pinnedLists.length + activeLists.length + doneLists.length + index}
-                      onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                      onDelete={() => deleteList(item.id, item.name, false, true)}
-                      onEmojiPress={() => {}}
-                      highlighted={item.id === highlightedListId}
-                    />
-                  ))}
-                  {sharedLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
-                </View>
               </>
             )}
           </ScrollView>
