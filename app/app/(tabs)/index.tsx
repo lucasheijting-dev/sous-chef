@@ -156,7 +156,7 @@ function AnimatedCard({
 
   const { colors, isDark } = useTheme();
   const tone = getTone(index, isDark);
-  const allDone = !item.shared_with_me && item.item_count > 0 && item.open_count === 0;
+  const allDone = !item.is_shared && !item.shared_with_me && item.item_count > 0 && item.open_count === 0;
   const prevAllDone = useRef(allDone);
 
   useEffect(() => {
@@ -203,7 +203,7 @@ function AnimatedCard({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <Text style={[styles.tileName, { color: colors.black, flex: 1 }]} numberOfLines={1}>{item.name}</Text>
           {item.is_default && (
-            <Ionicons name="pin" size={11} color={colors.gray400} style={{ transform: [{ rotate: '45deg' }] }} />
+            <Ionicons name="pin" size={15} color={Colors.yellow} style={{ transform: [{ rotate: '45deg' }] }} />
           )}
         </View>
         <View style={styles.tileCountRow}>
@@ -740,11 +740,12 @@ export default function LijstenTab() {
   const filteredSortedLists = listSearchTerm
     ? sortedLists.filter(l => l.name.toLowerCase().includes(listSearchTerm))
     : sortedLists;
-  const myLists       = filteredSortedLists.filter(l => !(l as any).shared_with_me);
+  const pinnedLists   = filteredSortedLists.filter(l => !!(l as any).is_default);
+  const createdLists  = filteredSortedLists.filter(l => !(l as any).is_default && !(l as any).shared_with_me);
   const sharedLists   = filteredSortedLists.filter(l => !!(l as any).shared_with_me);
-  const isDone = (l: any) => !l.shared_with_me && l.item_count > 0 && l.open_count === 0;
-  const activeLists   = myLists.filter(l => !isDone(l));
-  const doneLists     = myLists.filter(l => isDone(l));
+  const isDone = (l: any) => !l.is_shared && !l.shared_with_me && !l.is_default && l.item_count > 0 && l.open_count === 0;
+  const activeLists   = createdLists.filter(l => !isDone(l));
+  const doneLists     = createdLists.filter(l => isDone(l));
 
   const [receiptError, setReceiptError] = useState(false);
   const [pendingReceiptDelete, setPendingReceiptDelete] = useState<Receipt | null>(null);
@@ -1121,52 +1122,75 @@ export default function LijstenTab() {
             {showBanner && (
               <GettingStartedBanner userId={user?.id ?? null} onDismiss={() => updateSetting('getting_started_dismissed', true)} colors={colors} />
             )}
-            {/* Active own lists */}
-            {activeLists.length > 0 && (
-              <View style={styles.tileRow}>
-                {activeLists.map((item, index) => (
-                  <AnimatedCard key={item.id} item={item} index={index}
-                    onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                    onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default, false)}
-                    onEmojiPress={() => setEmojiPickerList(item)}
-                    highlighted={item.id === highlightedListId}
-                  />
-                ))}
-                {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
-              </View>
-            )}
-            {/* Done own lists sink to bottom */}
-            {doneLists.length > 0 && (
+            {/* ── Gepind ── */}
+            {pinnedLists.length > 0 && (
               <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 14, gap: 10 }}>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
-                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Klaar ({doneLists.length})</Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: 2 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Gepind</Text>
                 </View>
                 <View style={styles.tileRow}>
-                  {doneLists.map((item, index) => (
-                    <AnimatedCard key={item.id} item={item} index={activeLists.length + index}
+                  {pinnedLists.map((item, index) => (
+                    <AnimatedCard key={item.id} item={item} index={index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
-                      onDelete={() => deleteList(item.id, item.name, !!(item as any).is_default, false)}
+                      onDelete={() => deleteList(item.id, item.name, true, false)}
                       onEmojiPress={() => setEmojiPickerList(item)}
                       highlighted={item.id === highlightedListId}
                     />
                   ))}
-                  {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
+                  {pinnedLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
                 </View>
               </>
             )}
-            {/* Shared lists — separate section */}
+            {/* ── Mijn lijsten ── */}
+            {(activeLists.length > 0 || doneLists.length > 0) && (
+              <>
+                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: pinnedLists.length > 0 ? 16 : 2 }}>
+                  <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Mijn lijsten</Text>
+                </View>
+                {activeLists.length > 0 && (
+                  <View style={styles.tileRow}>
+                    {activeLists.map((item, index) => (
+                      <AnimatedCard key={item.id} item={item} index={pinnedLists.length + index}
+                        onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                        onDelete={() => deleteList(item.id, item.name, false, false)}
+                        onEmojiPress={() => setEmojiPickerList(item)}
+                        highlighted={item.id === highlightedListId}
+                      />
+                    ))}
+                    {activeLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
+                  </View>
+                )}
+                {doneLists.length > 0 && (
+                  <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 14, gap: 10 }}>
+                      <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Klaar ({doneLists.length})</Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                    </View>
+                    <View style={styles.tileRow}>
+                      {doneLists.map((item, index) => (
+                        <AnimatedCard key={item.id} item={item} index={pinnedLists.length + activeLists.length + index}
+                          onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
+                          onDelete={() => deleteList(item.id, item.name, false, false)}
+                          onEmojiPress={() => setEmojiPickerList(item)}
+                          highlighted={item.id === highlightedListId}
+                        />
+                      ))}
+                      {doneLists.length % 2 !== 0 && <View style={styles.tileWrap} />}
+                    </View>
+                  </>
+                )}
+              </>
+            )}
+            {/* ── Gedeeld ── */}
             {sharedLists.length > 0 && (
               <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 8, paddingBottom: 14, gap: 10 }}>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
+                <View style={{ paddingHorizontal: 2, paddingBottom: 10, paddingTop: (pinnedLists.length > 0 || activeLists.length > 0 || doneLists.length > 0) ? 16 : 2 }}>
                   <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: colors.gray400, textTransform: 'uppercase', letterSpacing: 0.8 }}>Gedeeld</Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.gray100 }} />
                 </View>
                 <View style={styles.tileRow}>
                   {sharedLists.map((item, index) => (
-                    <AnimatedCard key={item.id} item={item} index={activeLists.length + doneLists.length + index}
+                    <AnimatedCard key={item.id} item={item} index={pinnedLists.length + activeLists.length + doneLists.length + index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                       onDelete={() => deleteList(item.id, item.name, false, true)}
                       onEmojiPress={() => {}}

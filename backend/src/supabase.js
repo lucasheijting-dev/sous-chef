@@ -163,9 +163,14 @@ async function getTodoList(userId) {
 }
 
 async function createDefaultLists(userId) {
-  const existing = await getLists(userId);
-  const hasGroceries = existing.some(l => l.default_type === 'groceries');
-  const hasTodo     = existing.some(l => l.default_type === 'todo');
+  // Check INCLUDING soft-deleted rows — don't recreate if user has ever had these lists
+  const { data: existing } = await supabase
+    .from('lists')
+    .select('default_type')
+    .eq('user_id', userId)
+    .in('default_type', ['groceries', 'todo']);
+  const hasGroceries = (existing ?? []).some(l => l.default_type === 'groceries');
+  const hasTodo     = (existing ?? []).some(l => l.default_type === 'todo');
 
   const toInsert = [];
   if (!hasGroceries) toInsert.push({ user_id: userId, name: 'Boodschappen', emoji: '🛒', sort_order: 0, is_default: true, default_type: 'groceries', last_activity_at: new Date().toISOString() });
@@ -1208,16 +1213,22 @@ async function getSharedListsForUser(userId) {
     .select('list_id, lists(id, name, emoji, sort_order, list_type, user_id, list_items(checked))')
     .eq('user_id', userId);
 
-  // Members of the user's OWN lists (others who are members)
-  const { data: othersRows } = await supabase
-    .from('list_members')
-    .select('list_id, user_id, lists!inner(user_id)')
-    .eq('lists.user_id', userId)
-    .neq('user_id', userId);
+  // My own list IDs (for finding who is a member of my lists)
+  const { data: myListsData } = await supabase
+    .from('lists')
+    .select('id')
+    .eq('user_id', userId)
+    .is('deleted_at', null);
+  const myListIds = (myListsData ?? []).map(l => l.id);
+
+  // Members of my own lists (excluding self)
+  const { data: othersRows } = myListIds.length > 0
+    ? await supabase.from('list_members').select('list_id, user_id').in('list_id', myListIds).neq('user_id', userId)
+    : { data: [] };
 
   const mySharedListIds = [...new Set((othersRows ?? []).map(r => r.list_id))];
 
-  // Collect all user IDs we need names for (owners of lists shared with me + members of my shared lists)
+  // Collect all user IDs we need names for
   const ownerIds = (memberRows ?? []).filter(r => r.lists?.user_id && r.lists.user_id !== userId).map(r => r.lists.user_id);
   const memberUserIds = (othersRows ?? []).map(r => r.user_id);
   const allUserIds = [...new Set([...ownerIds, ...memberUserIds])];
