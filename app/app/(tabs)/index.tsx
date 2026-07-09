@@ -40,6 +40,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCache, setCache } from '@/lib/cache';
 import { setListRefreshHandler } from '@/lib/listEvents';
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
+import { Toast, useToast } from '@/components/Toast';
 
 const BOT_NUMBER = '31684965318';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
@@ -128,10 +129,9 @@ const sheetStyles = StyleSheet.create({
 
 // ── List Card ──────────────────────────────────────────────────────────────────
 
-function memberInitial(m: { display_name?: string; whatsapp_number?: string }): string {
+function memberInitial(m: { display_name?: string; whatsapp_number?: string }): string | null {
   if (m.display_name?.trim()) return m.display_name.trim()[0].toUpperCase();
-  if (m.whatsapp_number) return m.whatsapp_number.slice(-2);
-  return '?';
+  return null; // no display_name → show person icon instead
 }
 
 function AnimatedCard({
@@ -220,11 +220,17 @@ function AnimatedCard({
           )}
           {item.is_shared && (item.members ?? []).length > 0 && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: -4 }}>
-              {(item.members ?? []).slice(0, 3).map((m, i) => (
-                <View key={i} style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: colors.gray200, borderWidth: 1.5, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center', zIndex: 3 - i }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 8, color: colors.gray600 }}>{memberInitial(m)}</Text>
-                </View>
-              ))}
+              {(item.members ?? []).slice(0, 3).map((m, i) => {
+                const initial = memberInitial(m);
+                return (
+                  <View key={i} style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: colors.gray200, borderWidth: 1.5, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center', zIndex: 3 - i }}>
+                    {initial
+                      ? <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 8, color: colors.gray600 }}>{initial}</Text>
+                      : <Ionicons name="person" size={9} color={colors.gray600} />
+                    }
+                  </View>
+                );
+              })}
             </View>
           )}
           {item.is_shared && (item.members ?? []).length === 0 && (
@@ -517,6 +523,7 @@ export default function LijstenTab() {
   const listsScrollRef = useRef<any>(null);
   const notesScrollRef = useRef<any>(null);
   const receiptsScrollRef = useRef<any>(null);
+  const { toastProps, show: showToast } = useToast();
 
   function switchTab(tab: Tab) {
     if (tab === activeTab) return;
@@ -600,8 +607,10 @@ export default function LijstenTab() {
     try {
       // Ensure default lists exist before fetching (only once per session)
       if (!defaultsEnsured.current) {
-        await fetch(`${API_BASE}/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' }).catch(() => {});
-        defaultsEnsured.current = true;
+        const ok = await fetch(`${API_BASE}/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' })
+          .then(r => r.ok)
+          .catch(() => false);
+        if (ok) defaultsEnsured.current = true;
       }
 
       const [listsRes, sharedData] = await Promise.all([
@@ -1149,7 +1158,9 @@ export default function LijstenTab() {
                     <AnimatedCard key={item.id} item={item} index={pinnedLists.length + index}
                       onPress={() => router.push({ pathname: '/list/[id]', params: { id: item.id, name: item.name, emoji: item.emoji, list_type: item.list_type ?? 'checklist' } })}
                       onDelete={() => deleteList(item.id, item.name, false, !!(item as any).shared_with_me)}
-                      onEmojiPress={() => setEmojiPickerList(item)}
+                      onEmojiPress={(item as any).shared_with_me
+                        ? () => showToast('Alleen de eigenaar kan de emoji aanpassen.', 'info')
+                        : () => setEmojiPickerList(item)}
                       highlighted={item.id === highlightedListId}
                     />
                   ))}
@@ -2115,6 +2126,7 @@ export default function LijstenTab() {
           </Pressable>
         </Pressable>
       </Modal>
+      <Toast {...toastProps} />
     </View>
     </GestureHandlerRootView>
   );

@@ -336,11 +336,11 @@ export default function ListDetailScreen() {
 
   async function fetchMembers() {
     if (!user || user.id === 'dev') return;
-    const { data } = await supabase
-      .from('list_members')
-      .select('user_id, role, created_at, users(display_name, whatsapp_number)')
-      .eq('list_id', id);
-    setMembers((data as any) ?? []);
+    const res = await fetch(`${API_BASE}/lists/${id}/members?user_id=${user.id}`).catch(() => null);
+    if (res?.ok) {
+      const data = await res.json().catch(() => []);
+      setMembers(Array.isArray(data) ? data : []);
+    }
   }
 
   const fetchItems = useCallback(async () => {
@@ -390,6 +390,7 @@ export default function ListDetailScreen() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: !item.checked } : i));
     await supabase.from('list_items').update({ checked: !item.checked }).eq('id', item.id);
+    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
     if (!item.checked) {
       showBatchDeleteBanner();
     }
@@ -405,6 +406,7 @@ export default function ListDetailScreen() {
     const ids = unchecked.map(i => i.id);
     setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, checked: true } : i));
     await supabase.from('list_items').update({ checked: true }).in('id', ids);
+    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
     showToast(`${ids.length} item${ids.length > 1 ? 's' : ''} afgevinkt`, 'success');
     showBatchDeleteBanner();
   }
@@ -416,6 +418,7 @@ export default function ListDetailScreen() {
     const ids = checked.map(i => i.id);
     setItems(prev => prev.map(i => ids.includes(i.id) ? { ...i, checked: false } : i));
     await supabase.from('list_items').update({ checked: false }).in('id', ids);
+    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
     showToast('Lijst teruggezet', 'success');
   }
 
@@ -487,6 +490,7 @@ export default function ListDetailScreen() {
     Keyboard.dismiss();
     setAdding(true);
     await supabase.from('list_items').insert({ list_id: id, text, checked: false });
+    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
     setAdding(false);
     fetchItems();
   }
@@ -496,6 +500,7 @@ export default function ListDetailScreen() {
     const trimmed = text.trim();
     if (!trimmed) return;
     await supabase.from('list_items').update({ text: trimmed }).eq('id', itemId);
+    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
     fetchItems();
   }
 
