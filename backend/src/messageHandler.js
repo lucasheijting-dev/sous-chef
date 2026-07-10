@@ -899,9 +899,32 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
     // ── New list ─────────────────────────────────────────────────────────────
 
     case 'new_list': {
-      const name  = intent.new_list_name ?? originalText;
-      const emoji = intent.emoji ?? '📝';
-      const newList = await db.createList(userId, name, emoji, intent.list_type ?? 'checklist');
+      const name      = intent.new_list_name ?? originalText;
+      const emoji     = intent.emoji ?? '📝';
+      const lowerName = name.toLowerCase();
+
+      const isDefaultGroceries = /boodschappen/i.test(lowerName);
+      const isDefaultTodo      = /^to-?do$/i.test(lowerName);
+
+      // If name matches a default type, route to the existing live default instead of duplicating
+      if (isDefaultGroceries || isDefaultTodo) {
+        const dtype    = isDefaultGroceries ? 'groceries' : 'todo';
+        const existing = lists.find(l => l.default_type === dtype);
+        if (existing) {
+          if (intent.item_text) {
+            await db.addListItem(existing.id, intent.item_text, null, userId);
+            return `✅ *${intent.item_text}* toegevoegd aan ${existing.emoji ?? '📝'} *${existing.name}*.`;
+          }
+          return `${existing.emoji ?? '📝'} *${existing.name}* bestaat al.`;
+        }
+      }
+
+      // Stamp default_type when creating a list with a default-matching name (none existed)
+      const extra = isDefaultGroceries ? { default_type: 'groceries', is_default: true }
+        : isDefaultTodo ? { default_type: 'todo', is_default: true }
+        : {};
+
+      const newList = await db.createList(userId, name, emoji, intent.list_type ?? 'checklist', extra);
       undo.record(userId, 'create_list', { listId: newList.id, name: newList.name });
 
       if (intent.item_text) {
