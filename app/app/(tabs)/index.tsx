@@ -45,6 +45,9 @@ import { Toast, useToast } from '@/components/Toast';
 const BOT_NUMBER = '31684965318';
 import { apiFetch, API_BASE } from '@/lib/api';
 
+// Dedupes concurrent restore-defaults calls: a second useFocusEffect trigger awaits the first
+let _restoreDefaultsInFlight: Promise<boolean> | null = null;
+
 function getGreeting(): string {
   const h = new Date().getHours();
   const day = new Date().getDay(); // 0=Sun, 6=Sat
@@ -605,11 +608,16 @@ export default function LijstenTab() {
   const fetchLists = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     try {
-      // Ensure default lists exist before fetching (only once per session)
+      // Ensure default lists exist before fetching (only once per session).
+      // Module-level promise dedupes concurrent focus-event triggers — second caller awaits the first.
       if (!defaultsEnsured.current) {
-        const ok = await apiFetch(`/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' })
-          .then(r => r.ok)
-          .catch(() => false);
+        if (!_restoreDefaultsInFlight) {
+          _restoreDefaultsInFlight = apiFetch(`/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' })
+            .then(r => r.ok)
+            .catch(() => false)
+            .finally(() => { _restoreDefaultsInFlight = null; });
+        }
+        const ok = await _restoreDefaultsInFlight;
         if (ok) defaultsEnsured.current = true;
       }
 

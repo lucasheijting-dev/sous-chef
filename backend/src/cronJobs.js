@@ -470,8 +470,9 @@ cron.schedule('0 4 * * *', async () => {
       .filter(Boolean);
 
     // 2. Delete children of dead lists first (list_items, list_members, list_share_invites)
+    // Exclude typed-default tombstones — they must survive to block resurrection (Gotcha #3)
     const { data: deadLists } = await db.supabaseAdmin
-      .from('lists').select('id').lt('deleted_at', cutoff).not('deleted_at', 'is', null);
+      .from('lists').select('id').lt('deleted_at', cutoff).not('deleted_at', 'is', null).is('default_type', null);
     if (deadLists?.length) {
       const ids = deadLists.map(l => l.id);
       await Promise.all([
@@ -482,9 +483,10 @@ cron.schedule('0 4 * * *', async () => {
     }
 
     // 3. Hard-delete the parent records
+    // Lists: skip typed-default tombstones (default_type IS NOT NULL) — they guard against resurrection
     await Promise.all([
       db.supabaseAdmin.from('list_items').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
-      db.supabaseAdmin.from('lists').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+      db.supabaseAdmin.from('lists').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null).is('default_type', null),
       db.supabaseAdmin.from('notes').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
       db.supabaseAdmin.from('events').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
     ]);

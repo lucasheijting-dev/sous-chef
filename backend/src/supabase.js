@@ -163,14 +163,26 @@ async function getTodoList(userId) {
 }
 
 async function createDefaultLists(userId) {
-  // Check INCLUDING soft-deleted rows — don't recreate if user has ever had these lists
-  const { data: existing } = await supabase
+  // Typed check — includes soft-deleted rows (Gotcha #3: a typed tombstone blocks re-creation)
+  const { data: typed } = await supabase
     .from('lists')
     .select('default_type')
     .eq('user_id', userId)
     .in('default_type', ['groceries', 'todo']);
-  const hasGroceries = (existing ?? []).some(l => l.default_type === 'groceries');
-  const hasTodo     = (existing ?? []).some(l => l.default_type === 'todo');
+
+  // Name-based check — live untyped lookalikes (WhatsApp-created lists) block re-creation too
+  const { data: namedLive } = await supabase
+    .from('lists')
+    .select('name')
+    .eq('user_id', userId)
+    .is('default_type', null)
+    .is('deleted_at', null)
+    .or('name.ilike.boodschappen,name.ilike.to-do,name.ilike.todo');
+
+  const hasGroceries = (typed ?? []).some(l => l.default_type === 'groceries')
+    || (namedLive ?? []).some(l => /boodschappen/i.test(l.name));
+  const hasTodo     = (typed ?? []).some(l => l.default_type === 'todo')
+    || (namedLive ?? []).some(l => /^to-?do$/i.test(l.name));
 
   const toInsert = [];
   if (!hasGroceries) toInsert.push({ user_id: userId, name: 'Boodschappen', emoji: '🛒', sort_order: 0, is_default: true, default_type: 'groceries', last_activity_at: new Date().toISOString() });
