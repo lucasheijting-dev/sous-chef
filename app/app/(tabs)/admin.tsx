@@ -8,7 +8,7 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors, Radius } from '@/constants/Design';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch } from '@/lib/api';
 
 type CostItem = { label: string; eur: number; variable?: boolean };
 
@@ -63,7 +63,7 @@ export default function AdminScreen() {
     if (!silent) setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/admin/stats?userId=${user.id}`);
+      const res = await apiFetch(`/admin/stats?userId=${user.id}`);
       if (!res.ok) throw new Error('unauthorized');
       setStats(await res.json());
     } catch {
@@ -96,9 +96,8 @@ export default function AdminScreen() {
               ...prev,
               users: prev.users.map(x => x.id === u.id ? { ...x, is_blocked: newBlocked } : x),
             } : prev);
-            await fetch(`${API_BASE}/admin/users/${u.id}/block?userId=${user!.id}`, {
+            await apiFetch(`/admin/users/${u.id}/block?userId=${user!.id}`, {
               method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ blocked: newBlocked }),
             }).catch(() => load(true));
           },

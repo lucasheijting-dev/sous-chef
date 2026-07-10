@@ -31,7 +31,7 @@ import { getCache, setCache } from '@/lib/cache';
 import { Colors, Radius, Shadow } from '@/constants/Design';
 import { useTheme } from '@/context/ThemeContext';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch } from '@/lib/api';
 
 const todayStr = new Date().toISOString().split('T')[0];
 const yesterdayStr = (() => {
@@ -259,9 +259,8 @@ export default function NotitiesTab() {
     setNoteInviting(true);
     setNoteInviteError('');
     try {
-      const res = await fetch(`${API_BASE}/sharing/invite`, {
+      const res = await apiFetch(`/sharing/invite`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'note', resource_id: noteInviteTarget.id, phone: noteInvitePhone.trim(), user_id: user.id }),
       });
       const json = await res.json();
@@ -288,7 +287,7 @@ export default function NotitiesTab() {
       setSnackbarVisible(false);
       setDeletedNote(prev => {
         if (prev?.id === note.id) {
-          fetch(`${API_BASE}/notes/${note.id}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
+          apiFetch(`/notes/${note.id}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
           return null;
         }
         return prev;
@@ -323,9 +322,8 @@ export default function NotitiesTab() {
     try {
       const asset = result.assets[0];
       const mimeType = asset.mimeType ?? 'image/jpeg';
-      const res = await fetch(`${API_BASE}/notes/${note.id}/image?user_id=${user.id}`, {
+      const res = await apiFetch(`/notes/${note.id}/image?user_id=${user.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64: asset.base64, mime_type: mimeType }),
       }).catch(() => null);
       const data = res ? await res.json().catch(() => null) : null;
@@ -575,9 +573,8 @@ export default function NotitiesTab() {
                 onPress={async () => {
                   if (!user || !addNoteBody.trim() || addNoteSaving) return;
                   setAddNoteSaving(true);
-                  const res = await fetch(`${API_BASE}/notes?user_id=${user.id}`, {
+                  const res = await apiFetch(`/notes?user_id=${user.id}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title: addNoteTitle.trim() || null, body: addNoteBody.trim() }),
                   }).catch(() => null);
                   const data = res ? await res.json().catch(() => null) : null;

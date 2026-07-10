@@ -43,7 +43,7 @@ import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 import { Toast, useToast } from '@/components/Toast';
 
 const BOT_NUMBER = '31684965318';
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch, API_BASE } from '@/lib/api';
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -607,7 +607,7 @@ export default function LijstenTab() {
     try {
       // Ensure default lists exist before fetching (only once per session)
       if (!defaultsEnsured.current) {
-        const ok = await fetch(`${API_BASE}/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' })
+        const ok = await apiFetch(`/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' })
           .then(r => r.ok)
           .catch(() => false);
         if (ok) defaultsEnsured.current = true;
@@ -620,7 +620,7 @@ export default function LijstenTab() {
           .eq('user_id', user.id)
           .is('deleted_at', null)
           .order('sort_order', { ascending: true }),
-        fetch(`${API_BASE}/lists/shared?user_id=${user.id}`).then(r => r.json()).catch(() => ({ sharedWithMe: [], mySharedListIds: [], mySharedListMembers: {} })),
+        apiFetch(`/lists/shared?user_id=${user.id}`).then(r => r.json()).catch(() => ({ sharedWithMe: [], mySharedListIds: [], mySharedListMembers: {} })),
       ]);
       if (listsRes.data) {
         const sharedWithMe: any[] = sharedData?.sharedWithMe ?? [];
@@ -658,7 +658,7 @@ export default function LijstenTab() {
     if (!user || user.id === 'dev') return;
     const [notesRes] = await Promise.all([
       supabase.from('notes').select('id, user_id, title, body, created_at, updated_at, image_url, category_id').eq('user_id', user.id).order('created_at', { ascending: false }),
-      fetch(`${API_BASE}/notes/categories?user_id=${user.id}`).then(r => r.json()).then(cats => { if (Array.isArray(cats)) setNoteCats(cats); }).catch(() => {}),
+      apiFetch(`/notes/categories?user_id=${user.id}`).then(r => r.json()).then(cats => { if (Array.isArray(cats)) setNoteCats(cats); }).catch(() => {}),
     ]);
     if (notesRes.data) { setNotes(notesRes.data); setCache('cache_notes', notesRes.data); }
   }, [user]);
@@ -707,7 +707,7 @@ export default function LijstenTab() {
     setSelectedNote(null);
     setEditingNote(false);
     setNotes(prev => prev.filter(n => n.id !== noteId));
-    fetch(`${API_BASE}/notes/${noteId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+    apiFetch(`/notes/${noteId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   async function saveNoteEdit() {
@@ -762,8 +762,8 @@ export default function LijstenTab() {
     setReceiptError(false);
     try {
       const [rRes, cRes] = await Promise.all([
-        fetch(`${API_BASE}/receipts/${user.id}`),
-        fetch(`${API_BASE}/receipt-categories/${user.id}`),
+        apiFetch(`/receipts/${user.id}`),
+        apiFetch(`/receipt-categories/${user.id}`),
       ]);
       const [rData, cData] = await Promise.all([rRes.json(), cRes.json()]);
       if (Array.isArray(rData)) setReceipts(rData);
@@ -777,9 +777,8 @@ export default function LijstenTab() {
     if (!newCatName.trim() || !user) return;
     const emoji = [...newCatEmoji][0] ?? '📁';
     try {
-      const res = await fetch(`${API_BASE}/receipt-categories/${user.id}`, {
+      const res = await apiFetch(`/receipt-categories/${user.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newCatName.trim(), emoji, color: newCatColor }),
       });
       const cat = await res.json();
@@ -796,9 +795,8 @@ export default function LijstenTab() {
 
   async function assignReceiptCat(receiptId: string, categoryId: string | null) {
     if (!user) return;
-    await fetch(`${API_BASE}/receipt-categories/${user.id}/assign`, {
+    await apiFetch(`/receipt-categories/${user.id}/assign`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ receipt_id: receiptId, category_id: categoryId }),
     });
     setReceipts(prev => prev.map(r => r.id === receiptId ? { ...r, receipt_category_id: categoryId } : r));
@@ -814,7 +812,7 @@ export default function LijstenTab() {
           { text: 'Annuleer', style: 'cancel' },
           { text: 'Verlaten', style: 'destructive', onPress: () => {
             setLists(prev => prev.filter(l => l.id !== listId));
-            fetch(`${API_BASE}/lists/${listId}/leave?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
+            apiFetch(`/lists/${listId}/leave?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
           }},
         ]
       );
@@ -845,7 +843,7 @@ export default function LijstenTab() {
           setListUndoVisible(false);
           setPendingListDelete(null);
         });
-        await fetch(`${API_BASE}/lists/${listId}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
+        await apiFetch(`/lists/${listId}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
         pendingDeleteIdRef.current = null;
       }, 4000);
     };
@@ -895,9 +893,8 @@ export default function LijstenTab() {
   async function saveEmoji(listId: string, emoji: string) {
     setLists(prev => prev.map(l => l.id === listId ? { ...l, emoji } : l));
     setEmojiPickerList(null);
-    await fetch(`${API_BASE}/lists/${listId}/emoji?user_id=${user?.id}`, {
+    await apiFetch(`/lists/${listId}/emoji?user_id=${user?.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ emoji }),
     });
   }
@@ -920,9 +917,8 @@ export default function LijstenTab() {
     if (!newListName.trim() || !user || user.id === 'dev') return;
     setNewListCreating(true);
     const name = newListName.trim();
-    const res = await fetch(`${API_BASE}/lists?user_id=${user.id}`, {
+    const res = await apiFetch(`/lists?user_id=${user.id}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, emoji: '📝' }),
     }).catch(() => null);
     const data = res ? await res.json().catch(() => null) : null;
@@ -1261,7 +1257,7 @@ export default function LijstenTab() {
                   onLongPress={() => Alert.alert(`${cat.emoji} ${cat.name}`, 'Categorie verwijderen?', [
                     { text: 'Annuleer', style: 'cancel' },
                     { text: 'Verwijder', style: 'destructive', onPress: async () => {
-                      await fetch(`${API_BASE}/notes/categories/${cat.id}?user_id=${user?.id}`, { method: 'DELETE' });
+                      await apiFetch(`/notes/categories/${cat.id}?user_id=${user?.id}`, { method: 'DELETE' });
                       setNoteCats(prev => prev.filter(c => c.id !== cat.id));
                       if (selectedNoteCatId === cat.id) setSelectedNoteCatId(null);
                     }},
@@ -1352,7 +1348,7 @@ export default function LijstenTab() {
                     onLongPress={() => Alert.alert(`${cat.emoji} ${cat.name}`, 'Categorie verwijderen?', [
                       { text: 'Annuleer', style: 'cancel' },
                       { text: 'Verwijder', style: 'destructive', onPress: async () => {
-                        await fetch(`${API_BASE}/receipt-categories/${user?.id}/${cat.id}`, { method: 'DELETE' });
+                        await apiFetch(`/receipt-categories/${user?.id}/${cat.id}`, { method: 'DELETE' });
                         setReceiptCats(prev => prev.filter(c => c.id !== cat.id));
                         if (selectedCatId === cat.id) setSelectedCatId(null);
                       }},
@@ -1429,13 +1425,13 @@ export default function LijstenTab() {
                         { text: 'Verwijderen', style: 'destructive', onPress: () => {
                           if (pendingReceiptDelete) {
                             if (pendingReceiptDeleteTimer.current) clearTimeout(pendingReceiptDeleteTimer.current);
-                            fetch(`${API_BASE}/receipts/${user?.id}/${pendingReceiptDelete.id}`, { method: 'DELETE' }).catch(() => {});
+                            apiFetch(`/receipts/${user?.id}/${pendingReceiptDelete.id}`, { method: 'DELETE' }).catch(() => {});
                             setPendingReceiptDelete(null);
                           }
                           setReceipts(prev => prev.filter(r => r.id !== item.id));
                           setPendingReceiptDelete(item);
                           pendingReceiptDeleteTimer.current = setTimeout(() => {
-                            fetch(`${API_BASE}/receipts/${user?.id}/${item.id}`, { method: 'DELETE' }).catch(() => {});
+                            apiFetch(`/receipts/${user?.id}/${item.id}`, { method: 'DELETE' }).catch(() => {});
                             setPendingReceiptDelete(null);
                           }, 4000);
                         }},
@@ -1894,9 +1890,8 @@ export default function LijstenTab() {
                   if (!user || !addNoteBody.trim() || addNoteSaving) return;
                   setAddNoteSaving(true);
                   try {
-                    const res = await fetch(`${API_BASE}/notes?user_id=${user.id}`, {
+                    const res = await apiFetch(`/notes?user_id=${user.id}`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ title: addNoteTitle.trim() || null, body: addNoteBody.trim(), category_id: addNoteCatId }),
                     });
                     const data = await res.json().catch(() => null);
@@ -2006,9 +2001,8 @@ export default function LijstenTab() {
                       if (!newNoteCatName.trim() || newNoteCatSaving || !user) return;
                       setNewNoteCatSaving(true);
                       try {
-                        const res = await fetch(`${API_BASE}/notes/categories?user_id=${user.id}`, {
+                        const res = await apiFetch(`/notes/categories?user_id=${user.id}`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ name: newNoteCatName.trim(), emoji: newNoteCatEmoji, color: '#FCC10C' }),
                         });
                         const cat = await res.json().catch(() => null);
@@ -2028,9 +2022,8 @@ export default function LijstenTab() {
                   if (!newNoteCatName.trim() || newNoteCatSaving || !user) return;
                   setNewNoteCatSaving(true);
                   try {
-                    const res = await fetch(`${API_BASE}/notes/categories?user_id=${user.id}`, {
+                    const res = await apiFetch(`/notes/categories?user_id=${user.id}`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ name: newNoteCatName.trim(), emoji: newNoteCatEmoji, color: '#FCC10C' }),
                     });
                     const cat = await res.json().catch(() => null);

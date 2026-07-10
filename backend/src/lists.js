@@ -5,14 +5,16 @@ const db      = require('./supabase');
 
 const router = express.Router();
 
+function userId(req) { return req.user_id || req.query.user_id || req.body?.user_id; }
+
 // POST /lists?user_id=xxx
 router.post('/', async (req, res) => {
   try {
-    const { user_id } = req.query;
+    const uid = userId(req);
     const { name, emoji } = req.body;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     if (!name?.trim()) return res.status(400).json({ error: 'Missing name' });
-    const list = await db.createList(user_id, name.trim(), emoji || '📝');
+    const list = await db.createList(uid, name.trim(), emoji || '📝');
     res.json(list);
   } catch (err) {
     console.error('[Lists] Create error:', err.message);
@@ -24,13 +26,14 @@ router.post('/', async (req, res) => {
 router.delete('/:listId', async (req, res) => {
   try {
     const { listId } = req.params;
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
+    await db.assertListAccess(uid, listId, { ownerOnly: true });
     await db.deleteList(listId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Lists] Delete error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 
@@ -38,8 +41,8 @@ router.delete('/:listId', async (req, res) => {
 router.delete('/items/:itemId', async (req, res) => {
   try {
     const { itemId } = req.params;
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     await db.deleteListItem(itemId);
     res.json({ ok: true });
   } catch (err) {
@@ -52,8 +55,8 @@ router.delete('/items/:itemId', async (req, res) => {
 router.delete('/recipes/:recipeId', async (req, res) => {
   try {
     const { recipeId } = req.params;
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     await db.deleteRecipeGroup(recipeId);
     res.json({ ok: true });
   } catch (err) {
@@ -66,24 +69,25 @@ router.delete('/recipes/:recipeId', async (req, res) => {
 router.patch('/:listId/emoji', async (req, res) => {
   try {
     const { listId } = req.params;
-    const { user_id } = req.query;
+    const uid = userId(req);
     const { emoji } = req.body;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     if (!emoji) return res.status(400).json({ error: 'Missing emoji' });
+    await db.assertListAccess(uid, listId, { ownerOnly: true });
     await db.updateListEmoji(listId, emoji);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Lists] Emoji update error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 
 // PATCH /lists/items/reorder?user_id=xxx — body: [{id, sort_order}]
 router.patch('/items/reorder', async (req, res) => {
   try {
-    const { user_id } = req.query;
+    const uid = userId(req);
     const items = req.body;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'Missing items array' });
     await db.reorderListItems(items);
     res.json({ ok: true });
@@ -97,12 +101,12 @@ router.patch('/items/reorder', async (req, res) => {
 router.post('/items/:itemId/image', async (req, res) => {
   try {
     const { itemId } = req.params;
-    const { user_id } = req.query;
+    const uid = userId(req);
     const { base64, mime_type } = req.body;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     if (!base64)  return res.status(400).json({ error: 'Missing base64' });
-    const imageUrl = await db.uploadUserImage(user_id, base64, mime_type || 'image/jpeg');
-    await db.updateListItemImageUrl(user_id, itemId, imageUrl);
+    const imageUrl = await db.uploadUserImage(uid, base64, mime_type || 'image/jpeg');
+    await db.updateListItemImageUrl(uid, itemId, imageUrl);
     res.json({ image_url: imageUrl });
   } catch (err) {
     console.error('[Lists] Item image error:', err.message);
@@ -114,8 +118,8 @@ router.post('/items/:itemId/image', async (req, res) => {
 router.get('/:listId/members', async (req, res) => {
   try {
     const { listId } = req.params;
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
     const members = await db.getListMembers(listId);
     res.json(members);
   } catch (err) {
@@ -127,9 +131,9 @@ router.get('/:listId/members', async (req, res) => {
 // GET /lists/shared?user_id=xxx
 router.get('/shared', async (req, res) => {
   try {
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
-    const result = await db.getSharedListsForUser(user_id);
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
+    const result = await db.getSharedListsForUser(uid);
     res.json(result);
   } catch (err) {
     console.error('[Lists] Shared error:', err.message);
@@ -141,9 +145,9 @@ router.get('/shared', async (req, res) => {
 router.delete('/:listId/leave', async (req, res) => {
   try {
     const { listId } = req.params;
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
-    await db.leaveList(listId, user_id);
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
+    await db.leaveList(listId, uid);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Lists] Leave error:', err.message);
@@ -154,9 +158,9 @@ router.delete('/:listId/leave', async (req, res) => {
 // POST /lists/restore-defaults?user_id=xxx — recreate any missing default lists
 router.post('/restore-defaults', async (req, res) => {
   try {
-    const { user_id } = req.query;
-    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
-    await db.createDefaultLists(user_id);
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
+    await db.createDefaultLists(uid);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Lists] Restore defaults error:', err.message);

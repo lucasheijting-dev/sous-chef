@@ -355,7 +355,7 @@ async function handleMessage({ from, text }) {
         return;
       }
       for (const item of pendingPhoto.items) {
-        await db.addListItem(targetList.id, item).catch(() => {});
+        await db.addListItem(targetList.id, item, null, userId).catch(() => {});
       }
       await sendMessage(from, `✓ ${pendingPhoto.items.length} items toegevoegd aan ${pendingPhoto.listEmoji ?? '📝'} *${pendingPhoto.listName}*.`);
       await db.incrementMessageCount(userId);
@@ -375,7 +375,7 @@ async function handleMessage({ from, text }) {
       if (altList) {
         session.clearPendingPhotoItems(userId);
         for (const item of pendingPhoto.items) {
-          await db.addListItem(altList.id, item).catch(() => {});
+          await db.addListItem(altList.id, item, null, userId).catch(() => {});
         }
         await sendMessage(from, `✓ ${pendingPhoto.items.length} items toegevoegd aan ${altList.emoji ?? '📝'} *${altList.name}*.`);
         await db.incrementMessageCount(userId);
@@ -596,11 +596,15 @@ async function handleUndo(userId) {
   try {
     switch (last.action) {
       case 'add_item': {
+        const exists = await db.listItemExists(last.data.itemId);
+        if (!exists) { undo.pop(userId); return 'Er is niets om ongedaan te maken — het item bestaat niet meer.'; }
         await db.deleteListItem(last.data.itemId);
         undo.pop(userId);
         return `↩️ Ongedaan: *${last.data.text}* verwijderd uit ${last.data.listEmoji} ${last.data.listName}.`;
       }
       case 'add_items': {
+        const stillExist = (await Promise.all(last.data.itemIds.map(id => db.listItemExists(id)))).filter(Boolean);
+        if (!stillExist.length) { undo.pop(userId); return 'Er is niets om ongedaan te maken — de items bestaan niet meer.'; }
         for (const id of last.data.itemIds) await db.deleteListItem(id);
         undo.pop(userId);
         return `↩️ Ongedaan: ${last.data.count} items verwijderd uit ${last.data.listEmoji} ${last.data.listName}.`;
@@ -901,7 +905,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       undo.record(userId, 'create_list', { listId: newList.id, name: newList.name });
 
       if (intent.item_text) {
-        await db.addListItem(newList.id, intent.item_text);
+        await db.addListItem(newList.id, intent.item_text, null, userId);
         return `✅ Nieuwe lijst ${emoji} *${newList.name}* aangemaakt met *${intent.item_text}*.`;
       }
       return `✅ Nieuwe lijst ${emoji} *${newList.name}* aangemaakt.`;
@@ -1583,7 +1587,7 @@ async function processIntent(intent, userId, lists, activeHabits, originalText, 
       const targetList = intent.list_id ? lists.find(l => l.id === intent.list_id) : lists[0];
       if (!targetList) return 'Maak eerst een lijst aan om de actiepunten aan toe te voegen.';
 
-      await Promise.all(items.map(t => db.addListItem(targetList.id, String(t))));
+      await Promise.all(items.map(t => db.addListItem(targetList.id, String(t), null, userId)));
       return `✅ ${items.length} actiepunten uit *${target.title}* toegevoegd aan ${targetList.emoji ?? '📝'} *${targetList.name}*:\n${items.map(t => `• ${t}`).join('\n')}`;
     }
 

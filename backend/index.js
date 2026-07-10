@@ -20,29 +20,34 @@ const referralRouter          = require('./src/referral');
 const adminRouter             = require('./src/admin');
 const notifPrefsRouter        = require('./src/notifPrefs');
 const cronJobs           = require('./src/cronJobs');
+const { authMiddleware } = require('./src/authMiddleware');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
 
-app.use('/webhook', webhookRouter);
-app.use('/calendar', calendarFeedRouter);
+// Public routes (no auth needed)
+app.use('/webhook',          webhookRouter);
+app.use('/calendar',         calendarFeedRouter);
 app.use('/calendar-profile', calendarProfileRouter);
-app.use('/geo-alert', geoAlertRouter);
-app.use('/register', registerRouter);
-app.use('/calendar-streams', calendarStreamsRouter);
-app.use('/receipts', receiptsRouter);
+app.use('/geo-alert',        geoAlertRouter);
+app.use('/register',         registerRouter);
+app.use('/auth',             authRouter);
+
+// Protected routes — token validated when present, user_id accepted as fallback
+app.use(authMiddleware);
+app.use('/calendar-streams',   calendarStreamsRouter);
+app.use('/receipts',           receiptsRouter);
 app.use('/receipt-categories', receiptCategoriesRouter);
-app.use('/calendar-sync', calendarSyncRouter);
-app.use('/auth', authRouter);
-app.use('/recipe', recipesRouter);
-app.use('/sharing', sharingRouter);
-app.use('/events', eventsRouter);
-app.use('/lists', listsRouter);
-app.use('/notes', notesRouter);
-app.use('/habits', habitsRouter);
-app.use('/join', referralRouter);
-app.use('/admin', adminRouter);
-app.use('/user', notifPrefsRouter);
+app.use('/calendar-sync',      calendarSyncRouter);
+app.use('/recipe',             recipesRouter);
+app.use('/sharing',            sharingRouter);
+app.use('/events',             eventsRouter);
+app.use('/lists',              listsRouter);
+app.use('/notes',              notesRouter);
+app.use('/habits',             habitsRouter);
+app.use('/join',               referralRouter);
+app.use('/admin',              adminRouter);
+app.use('/user',               notifPrefsRouter);
 // ── List invite deep-link redirect page ───────────────────────────────────────
 app.get('/join/list/:token', async (req, res) => {
   const { token } = req.params;

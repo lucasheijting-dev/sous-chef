@@ -448,17 +448,60 @@ cron.schedule('30 7 * * *', async () => {
 });
 
 // ── Soft-delete cleanup — every day at 04:00 ─────────────────────────────────
-// Hard-deletes records soft-deleted more than 30 days ago
+// Hard-deletes records soft-deleted more than 30 days ago, including orphan cleanup
 
 cron.schedule('0 4 * * *', async () => {
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff         = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const inviteCutoff   = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   try {
+    // 1. Collect storage URLs from items/notes before deleting them
+    const [{ data: deadItems }, { data: deadNotes }] = await Promise.all([
+      db.supabaseAdmin.from('list_items').select('image_url').lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+      db.supabaseAdmin.from('notes').select('image_url').lt('deleted_at', cutoff).not('deleted_at', 'is', null),
+    ]);
+    const storageKeys = [...(deadItems ?? []), ...(deadNotes ?? [])]
+      .map(r => r.image_url)
+      .filter(Boolean)
+      .map(url => {
+        // Extract path after /object/public/<bucket>/
+        const m = url.match(/\/object\/public\/[^/]+\/(.+)/);
+        return m ? m[1] : null;
+      })
+      .filter(Boolean);
+
+    // 2. Delete children of dead lists first (list_items, list_members, list_share_invites)
+    const { data: deadLists } = await db.supabaseAdmin
+      .from('lists').select('id').lt('deleted_at', cutoff).not('deleted_at', 'is', null);
+    if (deadLists?.length) {
+      const ids = deadLists.map(l => l.id);
+      await Promise.all([
+        db.supabaseAdmin.from('list_items').delete().in('list_id', ids),
+        db.supabaseAdmin.from('list_members').delete().in('list_id', ids),
+        db.supabaseAdmin.from('list_share_invites').delete().in('list_id', ids),
+      ]);
+    }
+
+    // 3. Hard-delete the parent records
     await Promise.all([
       db.supabaseAdmin.from('list_items').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
       db.supabaseAdmin.from('lists').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
       db.supabaseAdmin.from('notes').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
       db.supabaseAdmin.from('events').delete().lt('deleted_at', cutoff).not('deleted_at', 'is', null),
     ]);
+
+    // 4. Clean up stale share invites (expired/used, older than 30 days)
+    await db.supabaseAdmin.from('list_share_invites').delete().lt('expires_at', inviteCutoff);
+
+    // 5. Remove orphan storage files (best-effort, don't fail the cron if this errors)
+    if (storageKeys.length) {
+      try {
+        await db.supabaseAdmin.storage.from('user-images').remove(storageKeys);
+        console.log('[SoftDelete] Removed', storageKeys.length, 'orphan storage files');
+      } catch (storageErr) {
+        console.error('[SoftDelete] Storage cleanup error:', storageErr.message);
+      }
+    }
+
     console.log('[SoftDelete] Cleanup done for records before', cutoff);
   } catch (err) {
     console.error('[SoftDelete] Cleanup error:', err.message);

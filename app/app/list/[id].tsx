@@ -47,7 +47,7 @@ import { SkeletonListCard } from '@/components/SkeletonCard';
 import Confetti from '@/components/Confetti';
 
 const ADD_INPUT_ACCESSORY_ID = 'sous-chef-add-input';
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch, API_BASE } from '@/lib/api';
 
 function haptic(style: 'light' | 'medium' | 'warning' = 'light') {
   if (Platform.OS === 'web') return;
@@ -336,7 +336,7 @@ export default function ListDetailScreen() {
 
   async function fetchMembers() {
     if (!user || user.id === 'dev') return;
-    const res = await fetch(`${API_BASE}/lists/${id}/members?user_id=${user.id}`).catch(() => null);
+    const res = await apiFetch(`/lists/${id}/members?user_id=${user.id}`).catch(() => null);
     if (res?.ok) {
       const data = await res.json().catch(() => []);
       setMembers(Array.isArray(data) ? data : []);
@@ -374,7 +374,7 @@ export default function ListDetailScreen() {
     fetchItems();
     fetchMembers();
     if (user && user.id !== 'dev') {
-      fetch(`${API_BASE}/sharing/invite-link?list_id=${id}&user_id=${user.id}&list_name=${encodeURIComponent(name ?? '')}&list_emoji=${encodeURIComponent(emoji ?? '📝')}`)
+      apiFetch(`/sharing/invite-link?list_id=${id}&user_id=${user.id}&list_name=${encodeURIComponent(name ?? '')}&list_emoji=${encodeURIComponent(emoji ?? '📝')}`)
         .then(r => r.json())
         .then(d => { if (d.url) setInviteUrl(d.url); })
         .catch(() => {});
@@ -428,12 +428,12 @@ export default function ListDetailScreen() {
     if (!itemToDelete) return;
     if (pendingDelete) {
       clearTimeout(pendingDelete.timer);
-      fetch(`${API_BASE}/lists/items/${pendingDelete.item.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+      apiFetch(`/lists/items/${pendingDelete.item.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
       setPendingDelete(null);
     }
     setItems(prev => prev.filter(i => i.id !== itemId));
     const timer = setTimeout(() => {
-      fetch(`${API_BASE}/lists/items/${itemId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+      apiFetch(`/lists/items/${itemId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
       setPendingDelete(null);
     }, 4000);
     setPendingDelete({ item: itemToDelete, timer });
@@ -465,9 +465,8 @@ export default function ListDetailScreen() {
     setUploadingImageItemId(itemId);
     try {
       const asset = result.assets[0];
-      const res = await fetch(`${API_BASE}/lists/items/${itemId}/image?user_id=${user.id}`, {
+      const res = await apiFetch(`/lists/items/${itemId}/image?user_id=${user.id}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64: asset.base64, mime_type: asset.mimeType ?? 'image/jpeg' }),
       }).catch(() => null);
       const data = res ? await res.json().catch(() => null) : null;
@@ -519,7 +518,7 @@ export default function ListDetailScreen() {
             haptic('warning');
             const ids = checkedItems.map(i => i.id);
             setItems(prev => prev.filter(i => !i.checked));
-            await Promise.all(ids.map(id => fetch(`${API_BASE}/lists/items/${id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {})));
+            await Promise.all(ids.map(id => apiFetch(`/lists/items/${id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {})));
             showToast(`${ids.length} item${ids.length > 1 ? 's' : ''} verwijderd`, 'info');
             fetchItems();
           },
@@ -570,9 +569,8 @@ export default function ListDetailScreen() {
     setInvitePhoneError('');
     setInvitePhoneSuccess(false);
     try {
-      const res = await fetch(`${API_BASE}/sharing/invite`, {
+      const res = await apiFetch(`/sharing/invite`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'list', resource_id: id, phone: invitePhone.trim(), user_id: user!.id }),
       });
       const data = await res.json();
@@ -586,7 +584,7 @@ export default function ListDetailScreen() {
     const token = inviteUrl.split('/').pop();
     if (!token) return;
     try {
-      await fetch(`${API_BASE}/sharing/invite?token=${token}&user_id=${user!.id}`, { method: 'DELETE' });
+      await apiFetch(`/sharing/invite?token=${token}&user_id=${user!.id}`, { method: 'DELETE' });
     } catch {}
     setInviteUrl('');
     setInviteError(false);
@@ -597,9 +595,8 @@ export default function ListDetailScreen() {
   const isSharedWithMe = members.some(m => m.user_id === user?.id);
 
   async function leaveList() {
-    await fetch(`${API_BASE}/sharing/member`, {
+    await apiFetch(`/sharing/member`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'list', resource_id: id, target_user_id: user!.id, user_id: user!.id }),
     });
     router.back();
@@ -612,9 +609,8 @@ export default function ListDetailScreen() {
     setRecipeResult(null);
     setRecipeError(null);
     try {
-      const res = await fetch(`${API_BASE}/recipe/import`, {
+      const res = await apiFetch(`/recipe/import`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, listId: id, url, scalingHint: recipeServings ? `voor ${recipeServings} personen` : null }),
       });
       const data = await res.json();
@@ -641,7 +637,7 @@ export default function ListDetailScreen() {
   }
 
   async function deleteRecipeGroup(recipeId: string) {
-    await fetch(`${API_BASE}/lists/recipes/${recipeId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+    await apiFetch(`/lists/recipes/${recipeId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
     fetchItems();
   }
 

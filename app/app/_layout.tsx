@@ -25,6 +25,7 @@ import { registerForPushNotifications } from '@/lib/pushNotifications';
 import { OfflineBanner } from '@/components/OfflineBanner';
 import { MorningScreen } from '@/components/MorningScreen';
 import { triggerListRefresh } from '@/lib/listEvents';
+import { apiFetch } from '@/lib/api';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -89,16 +90,14 @@ function AuthGate() {
     AsyncStorage.getItem('pending_invite_from').then(from => {
       if (!from) return;
       AsyncStorage.removeItem('pending_invite_from').catch(() => {});
-      const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
-      fetch(`${API_BASE}/join/referral?user_id=${user.id}&from=${encodeURIComponent(from)}`, { method: 'POST' })
+      apiFetch(`/join/referral?user_id=${user.id}&from=${encodeURIComponent(from)}`, { method: 'POST' })
         .catch(() => {});
     }).catch(() => {});
   }, [user?.id]);
 
   async function fetchInviteDetails(token: string) {
-    const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
     try {
-      const res = await fetch(`${API_BASE}/sharing/invite-details?token=${encodeURIComponent(token)}`);
+      const res = await apiFetch(`/sharing/invite-details?token=${encodeURIComponent(token)}`);
       if (!res.ok) {
         const data = await res.json();
         setInviteBanner({ type: 'error', message: data.error ?? 'Uitnodiging niet gevonden of verlopen' });
@@ -115,11 +114,9 @@ function AuthGate() {
 
   async function acceptPendingInvite() {
     if (!pendingInviteToken || !user) return;
-    const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
     try {
-      const res = await fetch(`${API_BASE}/sharing/accept-invite`, {
+      const res = await apiFetch(`/sharing/accept-invite`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: pendingInviteToken, user_id: user.id }),
       });
       const data = await res.json();

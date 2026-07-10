@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { User, UserPrefs } from '@/lib/types';
+import { API_BASE, setApiToken } from '@/lib/api';
 
 const DEV_PIN = '2409';
 
@@ -43,7 +44,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   async function loadUser() {
     try {
-      const storedNumber = await AsyncStorage.getItem('whatsapp_number');
+      const [storedNumber, storedToken] = await Promise.all([
+        AsyncStorage.getItem('whatsapp_number'),
+        AsyncStorage.getItem('api_token'),
+      ]);
+      if (storedToken) setApiToken(storedToken);
+
       if (storedNumber === DEV_PIN) {
         setUser(DEV_USER);
         setPrefs(DEFAULT_PREFS);
@@ -100,8 +106,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     // New user — register via backend (creates user + sends welcome WhatsApp)
     try {
-      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
-      const res = await fetch(`${apiBase}/register`, {
+      const res = await fetch(`${API_BASE}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ whatsapp_number: normalized }),
@@ -119,8 +124,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   async function requestOTP(phone: string): Promise<{ ok: boolean; error?: string }> {
     try {
-      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
-      const res = await fetch(`${apiBase}/auth/request-otp`, {
+      const res = await fetch(`${API_BASE}/auth/request-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
@@ -135,15 +139,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   async function verifyOTP(phone: string, code: string): Promise<{ ok: boolean; error?: string; isNew?: boolean }> {
     try {
-      const apiBase = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
-      const res = await fetch(`${apiBase}/auth/verify-otp`, {
+      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, code }),
       });
       const json = await res.json();
       if (!res.ok) return { ok: false, error: json.error ?? 'Onjuiste code' };
-      const { user: userData } = json;
+      const { user: userData, token } = json;
+      if (token) {
+        setApiToken(token);
+        await AsyncStorage.setItem('api_token', token);
+      }
       setUser(userData);
       await AsyncStorage.setItem('whatsapp_number', phone);
       await fetchPrefs(userData.id);
@@ -154,7 +161,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    await AsyncStorage.removeItem('whatsapp_number');
+    setApiToken(null);
+    await Promise.all([
+      AsyncStorage.removeItem('whatsapp_number'),
+      AsyncStorage.removeItem('api_token'),
+    ]);
     setUser(null);
     setPrefs(null);
   }

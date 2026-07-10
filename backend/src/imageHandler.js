@@ -268,7 +268,7 @@ async function handleImageMessage({ from, mediaId, userId, caption }) {
 
       if (list) {
         const itemText = analysis.item_text ?? analysis.description ?? 'Foto-item';
-        await db.addListItemWithImage(list.id, itemText, imageUrl);
+        await db.addListItemWithImage(list.id, itemText, imageUrl, userId);
         await sendMessage(from, `📸 *"${itemText}"* met foto toegevoegd aan ${list.emoji ?? '📝'} *${list.name}*.\n\n_${analysis.description ?? ''}_`);
       } else {
         // List not found → fall back to creating a note

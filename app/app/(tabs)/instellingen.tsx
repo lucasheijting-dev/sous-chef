@@ -34,6 +34,7 @@ import { Toast, useToast } from '@/components/Toast';
 import { startGeoAlertTask, stopGeoAlertTask, isGeoAlertEnabled } from '@/lib/geoAlert';
 import { getMorningListIds, setMorningListIds as saveMorningListIds } from '@/components/MorningScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, API_BASE } from '@/lib/api';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -554,21 +555,18 @@ export default function InstellingenTab() {
   async function saveStream() {
     if (!user || user.id === 'dev' || !streamName.trim()) return;
     setStreamSaving(true);
-    const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
     try {
       if (editingStream) {
-        const res = await fetch(`${API_BASE_URL}/calendar-streams/${user.id}/${editingStream.id}`, {
+        const res = await apiFetch(`/calendar-streams/${user.id}/${editingStream.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: streamName.trim(), emoji: streamEmoji, color: streamColor }),
         });
         const updated = await res.json();
         setStreams(prev => prev.map(s => s.id === updated.id ? updated : s));
       } else {
         const caldav_id = `stream-${Date.now()}`;
-        const res = await fetch(`${API_BASE_URL}/calendar-streams/${user.id}`, {
+        const res = await apiFetch(`/calendar-streams/${user.id}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: streamName.trim(), emoji: streamEmoji, color: streamColor, caldav_id, claude_key: caldav_id }),
         });
         const created = await res.json();
@@ -583,8 +581,6 @@ export default function InstellingenTab() {
       setStreamSaving(false);
     }
   }
-
-  const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
 
   async function toggleNotifPref(key: string, enabled: boolean) {
     if (!user) return;
@@ -640,9 +636,8 @@ export default function InstellingenTab() {
   async function setNoCalendar() {
     if (!user || user.id === 'dev') return;
     try {
-      await fetch(`${API_BASE}/auth/calendar-provider`, {
+      await apiFetch(`/auth/calendar-provider`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, provider: 'none' }),
       });
       setCalendarProvider('none');
@@ -655,9 +650,8 @@ export default function InstellingenTab() {
   async function selectIPhoneCalendar() {
     if (!user || user.id === 'dev') return;
     try {
-      await fetch(`${API_BASE}/auth/calendar-provider`, {
+      await apiFetch(`/auth/calendar-provider`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, provider: 'iphone' }),
       });
       setCalendarProvider('iphone');
@@ -695,7 +689,7 @@ export default function InstellingenTab() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/export/${user.id}`);
+      const res = await apiFetch(`/export/${user.id}`);
       if (!res.ok) throw new Error('not_found');
       showToast('Export gestart — je ontvangt een bestand', 'success');
     } catch {
@@ -946,7 +940,7 @@ export default function InstellingenTab() {
               if (!user || user.id === 'dev') return;
               setRestoringDefaults(true);
               try {
-                await fetch(`${API_BASE}/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' });
+                await apiFetch(`/lists/restore-defaults?user_id=${user.id}`, { method: 'POST' });
                 Alert.alert('Hersteld', 'Standaardlijsten zijn aangemaakt als ze ontbraken.');
               } catch {
                 Alert.alert('Fout', 'Kon standaardlijsten niet herstellen.');

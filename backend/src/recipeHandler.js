@@ -69,7 +69,7 @@ async function importRecipe({ userId, url, listId = null, scalingHint = null, us
       await db.addListItemSource(existingItem.id, savedRecipe.id, ingredient).catch(() => {});
       merged.push(ingredient);
     } else {
-      const newItem = await db.addListItem(targetList.id, ingredient);
+      const newItem = await db.addListItem(targetList.id, ingredient, null, userId);
       await db.addListItemSource(newItem.id, savedRecipe.id, ingredient).catch(() => {});
       existingByName.set(strippedIng, newItem);
       added.push(ingredient);

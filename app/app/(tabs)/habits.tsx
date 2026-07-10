@@ -34,7 +34,7 @@ import Confetti from '@/components/Confetti';
 import { getCache, setCache } from '@/lib/cache';
 import { SwipeDeleteRow } from '@/components/SwipeDeleteRow';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch } from '@/lib/api';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -850,7 +850,7 @@ function HabitsMain() {
 
     if (existing?.level === level) {
       haptic('light');
-      await fetch(`${API_BASE}/habits/logs/${existing.id}?user_id=${user.id}`, { method: 'DELETE' }).catch(() => {});
+      await apiFetch(`/habits/logs/${existing.id}?user_id=${user.id}`, { method: 'DELETE' }).catch(() => {});
       showToast(`${habit.name} verwijderd`, 'info');
     } else {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -899,7 +899,7 @@ function HabitsMain() {
       const idx = CYCLE.indexOf(currentLog.level as any);
       if (idx === CYCLE.length - 1 || currentLog.level === 'not_done') {
         haptic('light');
-        await fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user.id}`, { method: 'DELETE' }).catch(() => {});
+        await apiFetch(`/habits/logs/${currentLog.id}?user_id=${user.id}`, { method: 'DELETE' }).catch(() => {});
         showToast(`${habit.name} verwijderd`, 'info');
       } else {
         const next = CYCLE[idx + 1];
@@ -919,14 +919,14 @@ function HabitsMain() {
 
   async function deleteHabit(habitId: string) {
     setHabits(prev => prev.filter(h => h.id !== habitId));
-    fetch(`${API_BASE}/habits/${habitId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+    apiFetch(`/habits/${habitId}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
   }
 
   async function saveQuickAddHabit() {
     if (!user || !quickAddName.trim()) return;
     setQuickAddSaving(true);
     const name = quickAddName.trim();
-    await fetch(`${API_BASE}/habits?user_id=${user.id}`, {
+    await apiFetch(`/habits?user_id=${user.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1236,7 +1236,7 @@ function HabitsMain() {
                         supabase.from('habit_logs').update({ level: 'not_done', logged_at: new Date().toISOString() }).eq('id', currentLog.id).then(() => fetchData());
                         showToast(`${detailHabit.name} — Niet gedaan`, 'info');
                       } else if (isNotDone && currentLog) {
-                        fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+                        apiFetch(`/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
                         showToast(`${detailHabit.name} verwijderd`, 'info');
                         fetchData();
                       } else {
@@ -1259,7 +1259,7 @@ function HabitsMain() {
                     onPress={() => {
                       if (!detailHabit) return;
                       if (isSkip && currentLog) {
-                        fetch(`${API_BASE}/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
+                        apiFetch(`/habits/logs/${currentLog.id}?user_id=${user?.id}`, { method: 'DELETE' }).catch(() => {});
                         showToast(`${detailHabit.name} — teruggedraaid`, 'info');
                         fetchData();
                       } else if (currentLog) {

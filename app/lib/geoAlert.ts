@@ -13,7 +13,7 @@ const COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
 const KEY_ARRIVAL = 'geo_arrival_at';
 const KEY_LAST_SENT = 'geo_last_sent_at';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch } from '@/lib/api';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -96,9 +96,8 @@ export async function handleLocationUpdate(
 
   // Trigger the alert
   try {
-    await fetch(`${API_BASE}/geo-alert`, {
+    await apiFetch(`/geo-alert`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId }),
     });
     await AsyncStorage.setItem(KEY_LAST_SENT, String(now));

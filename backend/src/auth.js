@@ -3,7 +3,8 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('./supabase');
-const { sendMessage } = require('./whatsapp');
+const { sendMessage }  = require('./whatsapp');
+const { makeToken }    = require('./authMiddleware');
 
 function generateOTP() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -54,8 +55,9 @@ router.post('/verify-otp', async (req, res) => {
       return res.status(401).json({ error: result.reason });
     }
 
-    const user = await db.getUserByPhone(normalized);
-    res.json({ ok: true, user });
+    const user  = await db.getUserByPhone(normalized);
+    const token = makeToken(user.id);
+    res.json({ ok: true, user, token });
   } catch (err) {
     console.error('[Auth] verify-otp error:', err.message);
     res.status(500).json({ error: 'internal' });

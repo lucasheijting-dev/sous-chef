@@ -13,7 +13,7 @@ import { useUser } from '@/context/UserContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors, Radius, Shadow } from '@/constants/Design';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch, API_BASE } from '@/lib/api';
 
 type Receipt = {
   id: string;
@@ -113,7 +113,7 @@ export default function BonnetjesTab() {
   const load = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
     try {
-      const res = await fetch(`${API_BASE}/receipts/${user.id}`);
+      const res = await apiFetch(`/receipts/${user.id}`);
       const data = await res.json();
       setReceipts(Array.isArray(data) ? data : []);
     } catch {}
@@ -130,7 +130,7 @@ export default function BonnetjesTab() {
   async function deleteReceipt(receiptId: string) {
     setReceipts(prev => prev.filter(r => r.id !== receiptId));
     setDeletingId(null);
-    await fetch(`${API_BASE}/receipts/${user?.id}/${receiptId}`, { method: 'DELETE' });
+    await apiFetch(`/receipts/${user?.id}/${receiptId}`, { method: 'DELETE' });
   }
 
   function openPDF() {

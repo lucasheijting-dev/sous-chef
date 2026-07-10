@@ -34,7 +34,7 @@ const CUSTOM_STEPS: StepId[] = ['welcome', 'name', 'theme', 'preset', 'custom', 
 const PROGRESS_STEPS: StepId[] = ['name', 'theme', 'preset', 'caldav', 'geo'];
 const STORAGE_KEY = 'onboarding_step';
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { API_BASE } from '@/lib/api';
 
 export default function OnboardingScreen() {
   const router = useRouter();

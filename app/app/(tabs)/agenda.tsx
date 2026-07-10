@@ -530,7 +530,7 @@ function WeekView({
 
 // ── AgendaLite (period pills + stream chips) ──────────────────────────────────
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'https://sous-chef-pckg.onrender.com';
+import { apiFetch } from '@/lib/api';
 
 function AgendaLite() {
   const { user }   = useUser();
@@ -680,7 +680,7 @@ function AgendaLite() {
   useEffect(() => {
     if (!user || user.id === 'dev') { setLoading(false); return; }
 
-    fetch(`${API_BASE}/calendar-sync/${user.id}`, { method: 'POST' }).catch(() => {});
+    apiFetch(`/calendar-sync/${user.id}`, { method: 'POST' }).catch(() => {});
 
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const end = new Date(now); end.setFullYear(end.getFullYear() + 1);
@@ -893,7 +893,7 @@ function AgendaLite() {
   async function saveDetailStream(newStream: string | null) {
     if (!selectedEvent || selectedEvent.source !== 'sous-chef') return;
     setDetailSaving(true);
-    await fetch(`${API_BASE}/events/${selectedEvent.id}?user_id=${user?.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ calendar_stream: newStream }) }).catch(() => {});
+    await apiFetch(`/events/${selectedEvent.id}?user_id=${user?.id}`, { method: 'PATCH', body: JSON.stringify({ calendar_stream: newStream }) }).catch(() => {});
     setAllEvents(prev => prev.map(e => e.id === selectedEvent.id ? { ...e, calendar_stream: newStream } : e));
     setDetailStream(newStream);
     setDetailSaving(false);
@@ -903,7 +903,7 @@ function AgendaLite() {
     setAllEvents(prev => prev.filter(e => e.id !== event.id));
     setDeletingId(null);
     if (event.source === 'sous-chef') {
-      await fetch(`${API_BASE}/events/${event.id}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
+      await apiFetch(`/events/${event.id}?user_id=${user!.id}`, { method: 'DELETE' }).catch(() => {});
     } else if (event.source === 'phone' && Platform.OS !== 'web') {
       try { await Calendar.deleteEventAsync(event.id.replace('phone-', '')); } catch (_) {}
     }
@@ -927,9 +927,8 @@ function AgendaLite() {
     const timeStr = quickAddTime
       ? `${String(quickAddTime.getHours()).padStart(2,'0')}:${String(quickAddTime.getMinutes()).padStart(2,'0')}`
       : null;
-    const res = await fetch(`${API_BASE}/events?user_id=${user.id}`, {
+    const res = await apiFetch(`/events?user_id=${user.id}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: quickAddTitle.trim(), date: dateStr, time: timeStr, calendar_stream: quickAddStream ?? null }),
     }).catch(() => null);
     const created = res ? await res.json().catch(() => null) : null;
@@ -972,7 +971,7 @@ function AgendaLite() {
       ? `${String(editTime.getHours()).padStart(2,'0')}:${String(editTime.getMinutes()).padStart(2,'0')}`
       : null;
     if (editEvent.source === 'sous-chef') {
-      await fetch(`${API_BASE}/events/${editEvent.id}?user_id=${user?.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream }) }).catch(() => {});
+      await apiFetch(`/events/${editEvent.id}?user_id=${user?.id}`, { method: 'PATCH', body: JSON.stringify({ title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream }) }).catch(() => {});
     }
     setAllEvents(prev => prev.map(e => e.id === editEvent.id ? { ...e, title: editTitle.trim(), date: dateStr, time: timeStr, calendar_stream: editStream } : e));
     setEditEvent(null);
@@ -1324,7 +1323,7 @@ function AgendaLite() {
                     const nm = Math.round(((newTop - 4) / 60 - (nh - 6)) * 60 / 15) * 15;
                     const newTime = `${String(Math.min(nh,23)).padStart(2,'0')}:${String(Math.min(nm,59)).padStart(2,'0')}`;
                     if (e.source === 'sous-chef') {
-                      await fetch(`${API_BASE}/events/${e.id}?user_id=${user?.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ time: newTime }) }).catch(() => {});
+                      await apiFetch(`/events/${e.id}?user_id=${user?.id}`, { method: 'PATCH', body: JSON.stringify({ time: newTime }) }).catch(() => {});
                     }
                     setAllEvents(prev => prev.map(ev => ev.id === e.id ? { ...ev, time: newTime } : ev));
                     setDragEvent(null);

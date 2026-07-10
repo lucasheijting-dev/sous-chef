@@ -261,7 +261,7 @@ async function deleteList(listId) {
 }
 
 async function addListItem(listId, text, quantity = null, userId = null) {
-  const insertData = { list_id: listId, text, checked: false };
+  const insertData = { list_id: listId, text, checked: false, sort_order: Date.now() };
   if (quantity != null) insertData.quantity = quantity;
   if (userId != null) insertData.added_by_user_id = userId;
 
@@ -272,6 +272,11 @@ async function addListItem(listId, text, quantity = null, userId = null) {
 
   if (error) throw new Error(`Failed to add list item: ${error.message}`);
   return data;
+}
+
+async function listItemExists(itemId) {
+  const { data } = await supabase.from('list_items').select('id').eq('id', itemId).is('deleted_at', null).single();
+  return !!data;
 }
 
 async function getListItems(listId) {
@@ -315,9 +320,11 @@ async function deleteRecipeGroup(recipeId) {
   await supabase.from('recipes').delete().eq('id', recipeId);
 }
 
-async function addListItemWithImage(listId, text, imageUrl) {
+async function addListItemWithImage(listId, text, imageUrl, userId = null) {
+  const insertData = { list_id: listId, text, checked: false, image_url: imageUrl, sort_order: Date.now() };
+  if (userId != null) insertData.added_by_user_id = userId;
   const [{ data, error }] = await Promise.all([
-    supabase.from('list_items').insert({ list_id: listId, text, checked: false, image_url: imageUrl }).select('id, text').single(),
+    supabase.from('list_items').insert(insertData).select('id, text').single(),
     supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', listId),
   ]);
   if (error) throw new Error(`Failed to add list item with image: ${error.message}`);
@@ -1555,7 +1562,19 @@ async function createEventWithBirthYear(userId, { title, date, time, recurrence,
   return data;
 }
 
+// ── Authorization helpers ──────────────────────────────────────────────────────
+
+async function assertListAccess(userId, listId, { ownerOnly = false } = {}) {
+  const { data: list } = await supabase.from('lists').select('user_id').eq('id', listId).single();
+  if (!list) { const e = new Error('Lijst niet gevonden'); e.status = 404; throw e; }
+  if (list.user_id === userId) return;
+  if (ownerOnly) { const e = new Error('Alleen de eigenaar kan dit doen'); e.status = 403; throw e; }
+  const { data: member } = await supabase.from('list_members').select('id').eq('list_id', listId).eq('user_id', userId).single();
+  if (!member) { const e = new Error('Geen toegang tot deze lijst'); e.status = 403; throw e; }
+}
+
 module.exports = {
+  assertListAccess,
   getOrCreateUserFull,
   markOnboardingComplete,
   incrementMessageCount,
@@ -1573,6 +1592,7 @@ module.exports = {
   updateListEmoji,
   deleteList,
   addListItem,
+  listItemExists,
   getListItems,
   deleteListItem,
   reorderListItems,
