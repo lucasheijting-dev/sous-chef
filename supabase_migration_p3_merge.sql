@@ -90,12 +90,6 @@ ALTER TABLE list_members
   ADD CONSTRAINT list_members_list_id_fkey
     FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE;
 
-ALTER TABLE list_share_invites
-  DROP CONSTRAINT IF EXISTS list_share_invites_list_id_fkey;
-ALTER TABLE list_share_invites
-  ADD CONSTRAINT list_share_invites_list_id_fkey
-    FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE;
-
 -- ── Step 4: Unique partial index — one live typed default per user ────────────
 -- Must run AFTER the merge so no duplicate typed rows remain to violate it.
 
