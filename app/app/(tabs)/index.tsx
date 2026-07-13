@@ -524,7 +524,6 @@ export default function LijstenTab() {
 
   function switchTab(tab: Tab) {
     if (tab === activeTab) return;
-    if (activeTab === 'lists') setListSearch('');
     if (activeTab === 'notes') setSearch('');
     setActiveTab(tab);
     AsyncStorage.setItem('home_active_tab', tab);
@@ -568,7 +567,6 @@ export default function LijstenTab() {
   const [newListModalVisible, setNewListModalVisible] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [newListCreating, setNewListCreating] = useState(false);
-  const [listSearch, setListSearch] = useState('');
   const [editingNote, setEditingNote] = useState(false);
   const [editNoteBody, setEditNoteBody] = useState('');
   const [editNoteTitle, setEditNoteTitle] = useState('');
@@ -747,13 +745,9 @@ export default function LijstenTab() {
     }
     return (a.sort_order ?? 0) - (b.sort_order ?? 0);
   });
-  const listSearchTerm = listSearch.trim().toLowerCase();
-  const filteredSortedLists = listSearchTerm
-    ? sortedLists.filter(l => l.name.toLowerCase().includes(listSearchTerm))
-    : sortedLists;
-  const pinnedLists   = filteredSortedLists.filter(l => !!(l as any).is_default);
-  const sharedLists   = filteredSortedLists.filter(l => !(l as any).is_default && ((l as any).is_shared || (l as any).shared_with_me));
-  const createdLists  = filteredSortedLists.filter(l => !(l as any).is_default && !(l as any).is_shared && !(l as any).shared_with_me);
+  const pinnedLists   = sortedLists.filter(l => !!(l as any).is_default);
+  const sharedLists   = sortedLists.filter(l => !(l as any).is_default && ((l as any).is_shared || (l as any).shared_with_me));
+  const createdLists  = sortedLists.filter(l => !(l as any).is_default && !(l as any).is_shared && !(l as any).shared_with_me);
   const isDone = (l: any) => !l.is_default && !l.is_shared && !l.shared_with_me && l.item_count > 0 && l.open_count === 0;
   const activeLists   = createdLists.filter(l => !isDone(l));
   const doneLists     = createdLists.filter(l => isDone(l));
@@ -1086,39 +1080,6 @@ export default function LijstenTab() {
             </View>
           </ScrollView>
         ) : (
-          <>
-            {/* Search sticky above scroll */}
-            <View style={[styles.sortSticky, { backgroundColor: colors.offWhite, zIndex: 2, justifyContent: 'flex-end' }]}>
-              <TouchableOpacity onPress={() => setListSearch(s => s ? '' : ' ')} hitSlop={{ top: 12, bottom: 12, left: 8, right: 12 }}>
-                <Ionicons name={listSearch.trim() ? 'close-circle' : 'search-outline'} size={18} color={listSearch.trim() ? Colors.yellow : colors.gray400} />
-              </TouchableOpacity>
-            </View>
-            {listSearch.trim().length > 0 && (
-              <View style={[styles.searchBar, { marginHorizontal: 16, marginBottom: 4, backgroundColor: colors.gray100, borderColor: colors.gray200 }]}>
-                <Ionicons name="search-outline" size={15} color={Colors.yellow} />
-                <TextInput
-                  style={[styles.searchInput, { color: colors.black }]}
-                  value={listSearch}
-                  onChangeText={setListSearch}
-                  placeholder="Zoek in lijsten..."
-                  placeholderTextColor={colors.gray400}
-                  selectionColor={Colors.yellow}
-                  autoFocus
-                />
-                <TouchableOpacity onPress={() => setListSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Ionicons name="close-circle-outline" size={16} color={colors.gray400} />
-                </TouchableOpacity>
-              </View>
-            )}
-            {listSearch.trim().length > 0 && filteredSortedLists.length === 0 ? (
-              <View style={[styles.emptyContainer, { backgroundColor: colors.offWhite }]}>
-                <View style={[styles.emptyIcon, { backgroundColor: colors.gray100 }]}>
-                  <Ionicons name="search-outline" size={32} color={colors.gray400} />
-                </View>
-                <Text style={[styles.emptyTitle, { color: colors.black }]}>Geen lijsten gevonden</Text>
-                <Text style={[styles.emptyText, { color: colors.gray400 }]}>Geen lijsten voor "{listSearch.trim()}".</Text>
-              </View>
-            ) : (
           <ScrollView
             ref={listsScrollRef}
             style={{ backgroundColor: colors.offWhite }}
@@ -1211,8 +1172,6 @@ export default function LijstenTab() {
               </>
             )}
           </ScrollView>
-            )}
-          </>
         )
       )}
 
