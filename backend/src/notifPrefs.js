@@ -29,4 +29,17 @@ router.put('/notif-prefs', async (req, res) => {
   }
 });
 
+// PATCH /user/profile?user_id=xxx — body: { display_name }
+router.patch('/profile', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const { display_name } = req.body;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    await db.updateUserDisplayName(user_id, display_name?.trim() || null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

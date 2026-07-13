@@ -921,6 +921,10 @@ async function updateNoteFields(noteId, fields) {
   await supabase.from('notes').update(update).eq('id', noteId);
 }
 
+async function updateUserDisplayName(userId, displayName) {
+  await supabase.from('users').update({ display_name: displayName ?? null }).eq('id', userId);
+}
+
 // ── Extended Habit Operations ──────────────────────────────────────────────────
 
 async function getHabitStreak(userId, habitId) {
@@ -1598,6 +1602,7 @@ async function assertListAccess(userId, listId, { ownerOnly = false } = {}) {
 module.exports = {
   assertListAccess,
   getOrCreateUserFull,
+  updateUserDisplayName,
   markOnboardingComplete,
   incrementMessageCount,
   getUserContext,

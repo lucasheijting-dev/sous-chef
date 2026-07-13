@@ -421,6 +421,7 @@ export default function InstellingenTab() {
       interesses: profileInteresses.length > 0 ? profileInteresses : undefined,
       vrij: profileExtra.trim() || undefined,
     });
+    const trimmedName = nameValue.trim();
     await Promise.all([
       supabase.from('user_prefs').upsert({
         user_id: user.id,
@@ -429,7 +430,11 @@ export default function InstellingenTab() {
         profile_friends: profileFriends.trim() || null,
         profile_extra: extraJson,
       }, { onConflict: 'user_id' }),
-      updateSetting('user_name', nameValue.trim()),
+      updateSetting('user_name', trimmedName),
+      trimmedName ? apiFetch(`/user/profile?user_id=${user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: trimmedName }),
+      }).catch(() => {}) : Promise.resolve(),
     ]);
     setProfileSaving(false);
     setProfielModalVisible(false);
@@ -527,13 +532,26 @@ export default function InstellingenTab() {
   }
 
   async function saveName() {
-    await updateSetting('user_name', nameInputValue.trim());
+    const trimmed = nameInputValue.trim();
+    await updateSetting('user_name', trimmed);
+    if (trimmed && user && user.id !== 'dev') {
+      apiFetch(`/user/profile?user_id=${user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: trimmed }),
+      }).catch(() => {});
+    }
     setNameModalVisible(false);
   }
 
   async function saveBannerName() {
     const trimmed = nameValue.trim();
     await updateSetting('user_name', trimmed);
+    if (trimmed && user && user.id !== 'dev') {
+      apiFetch(`/user/profile?user_id=${user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: trimmed }),
+      }).catch(() => {});
+    }
     setEditingName(false);
   }
 

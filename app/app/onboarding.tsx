@@ -34,7 +34,7 @@ const CUSTOM_STEPS: StepId[] = ['welcome', 'name', 'theme', 'preset', 'custom', 
 const PROGRESS_STEPS: StepId[] = ['name', 'theme', 'preset', 'caldav', 'geo'];
 const STORAGE_KEY = 'onboarding_step';
 
-import { API_BASE } from '@/lib/api';
+import { API_BASE, apiFetch } from '@/lib/api';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -131,6 +131,12 @@ export default function OnboardingScreen() {
       patch = { ...chosenCustom };
     }
     await updateSettings({ ...patch, onboarding_done: true, user_name: userName });
+    if (userName.trim() && user && user.id !== 'dev') {
+      apiFetch(`/user/profile?user_id=${user.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ display_name: userName.trim() }),
+      }).catch(() => {});
+    }
     await AsyncStorage.removeItem(STORAGE_KEY);
     router.replace('/(tabs)');
   }

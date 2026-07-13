@@ -72,6 +72,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
     if (data) {
       setUser(data);
       await fetchPrefs(data.id);
+      // Backfill display_name from local settings if not set on server yet
+      if (!data.display_name) {
+        AsyncStorage.getItem('module_settings_v2').then(raw => {
+          if (!raw) return;
+          try {
+            const localName = JSON.parse(raw)?.user_name?.trim();
+            if (!localName) return;
+            fetch(`${API_BASE}/user/profile?user_id=${data.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ display_name: localName }),
+            }).catch(() => {});
+          } catch {}
+        }).catch(() => {});
+      }
       return true;
     }
     return false;
