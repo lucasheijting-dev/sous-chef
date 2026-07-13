@@ -1,9 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-// DraggableFlatList temporarily replaced with FlatList to diagnose rendering issue
 import {
   View,
   Text,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -134,7 +133,7 @@ function SwipeableItem({
         <Pressable
           style={({ pressed }) => [
             styles.item,
-            { backgroundColor: colors.white, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isFirst ? 'transparent' : colors.hairline },
+            { backgroundColor: colors.white },
             item.checked && { backgroundColor: colors.gray100 },
             pressed && { transform: [{ scale: 0.98 }] },
           ]}
@@ -164,19 +163,16 @@ function SwipeableItem({
               <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 8, color: '#6B7280' }}>{addedByInitial}</Text>
             </View>
           )}
-          {!isEditing && (
+          {!isEditing && item.image_url ? (
             <TouchableOpacity
-              onPress={() => item.image_url ? onViewImage?.(item.image_url) : onAddPhoto?.()}
+              onPress={() => onViewImage?.(item.image_url!)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={{ marginRight: 4 }}
               activeOpacity={0.7}
             >
-              {item.image_url
-                ? <Image source={{ uri: item.image_url }} style={{ width: 26, height: 26, borderRadius: 5 }} />
-                : <Ionicons name="camera-outline" size={16} color={colors.gray400} />
-              }
+              <Image source={{ uri: item.image_url }} style={{ width: 32, height: 32, borderRadius: 6 }} />
             </TouchableOpacity>
-          )}
+          ) : null}
         </Pressable>
       </SwipeDeleteRow>
     </Animated.View>
@@ -309,14 +305,37 @@ export default function ListDetailScreen() {
     Share.share({ message: text, title: name });
   }
 
+  const unchecked = items.filter(i => !i.checked);
+  const checked = items.filter(i => i.checked);
+  const allDone = items.length > 0 && unchecked.length === 0;
+
   useEffect(() => {
     const badge = listType === 'links' ? ' 🔗' : listType === 'tips' ? ' 💡' : '';
+    const emojiPrefix = emoji ? `${emoji} ` : '';
+    const showCheckAll = unchecked.length > 0 && listType !== 'tips' && listType !== 'links';
+    const showUncheckAll = allDone && listType !== 'tips' && listType !== 'links';
     navigation.setOptions({
-      title: `${name}${badge}`,
+      title: `${emojiPrefix}${name}${badge}`,
       headerBackTitle: 'Terug',
       headerTintColor: Colors.yellow,
       headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 4 }}>
+          {showCheckAll && (
+            <TouchableOpacity onPress={checkAllItems} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Ionicons name="checkmark-done" size={14} color={Colors.black} />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.black }}>Alles</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          {showUncheckAll && (
+            <TouchableOpacity onPress={uncheckAllItems} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.gray100, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Ionicons name="refresh-outline" size={14} color={colors.black} />
+                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black }}>Terugzetten</Text>
+              </View>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={openInviteModal} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
             <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
               <Ionicons name="person-add-outline" size={17} color={Colors.black} />
@@ -325,7 +344,7 @@ export default function ListDetailScreen() {
         </View>
       ),
     });
-  }, [name, emoji, listType, items]);
+  }, [name, emoji, listType, items, unchecked.length, allDone]);
 
   useEffect(() => {
     if (!id) return;
@@ -689,10 +708,6 @@ export default function ListDetailScreen() {
     }
   }
 
-  const unchecked = items.filter(i => !i.checked);
-  const checked = items.filter(i => i.checked);
-  const allDone = items.length > 0 && unchecked.length === 0;
-
   useEffect(() => {
     if (allDone && !prevAllDone.current) {
       haptic('warning');
@@ -744,47 +759,57 @@ export default function ListDetailScreen() {
   if (filteredChecked.length > 0) flatItems.push(doneSentinel);
   if (doneExpanded) flatItems.push(...filteredChecked);
 
+  const sentinelIdx = flatItems.findIndex(i => i.id === DONE_SENTINEL_ID);
+  const topItems = sentinelIdx !== -1 ? flatItems.slice(0, sentinelIdx) : flatItems;
+
   return (
     <View style={styles.root}>
       <View style={[styles.container, { backgroundColor: colors.offWhite }]}>
         <Confetti active={confettiActive} />
-        {isGroceryList && (
-          <View style={[styles.geoBanner, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
-            <View style={styles.geoLeft}>
-              <Text style={styles.geoIcon}>🛒</Text>
-              <View>
-                <Text style={[styles.geoTitle, { color: colors.black }]}>Supermarktherkenning</Text>
-                <Text style={[styles.geoSub, { color: colors.gray400 }]}>
-                  {geoEnabled ? 'Je krijgt een melding als je een supermarkt nadert' : 'Melding als je een supermarkt nadert'}
-                </Text>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: addRowHeight + 20 }}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
+          }
+        >
+          {isGroceryList && (
+            <View style={[styles.geoBanner, { backgroundColor: colors.white, borderBottomColor: colors.gray100 }]}>
+              <View style={styles.geoLeft}>
+                <Text style={styles.geoIcon}>🛒</Text>
+                <View>
+                  <Text style={[styles.geoTitle, { color: colors.black }]}>Supermarktherkenning</Text>
+                  <Text style={[styles.geoSub, { color: colors.gray400 }]}>
+                    {geoEnabled ? 'Je krijgt een melding als je een supermarkt nadert' : 'Melding als je een supermarkt nadert'}
+                  </Text>
+                </View>
               </View>
+              <Switch
+                value={geoEnabled}
+                onValueChange={toggleGeoAlert}
+                disabled={geoToggling}
+                trackColor={{ false: colors.gray200, true: Colors.yellow }}
+                thumbColor={Colors.white}
+              />
             </View>
-            <Switch
-              value={geoEnabled}
-              onValueChange={toggleGeoAlert}
-              disabled={geoToggling}
-              trackColor={{ false: colors.gray200, true: Colors.yellow }}
-              thumbColor={Colors.white}
-            />
-          </View>
-        )}
+          )}
 
-        {/* Progress bar */}
-        {!loading && totalCount > 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 8, marginBottom: 4, gap: 8 }}>
-            <View style={{ flex: 1, height: 4, backgroundColor: colors.gray200, borderRadius: 2 }}>
-              <View style={{ height: 4, backgroundColor: progress === 1 ? '#4CAF50' : Colors.yellow, width: `${progress * 100}%` as any, borderRadius: 2 }} />
+          {/* Progress bar */}
+          {!loading && totalCount > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 6, marginBottom: 2, gap: 8 }}>
+              <View style={{ flex: 1, height: 3, backgroundColor: colors.gray200, borderRadius: 2 }}>
+                <View style={{ height: 3, backgroundColor: progress === 1 ? '#4CAF50' : Colors.yellow, width: `${progress * 100}%` as any, borderRadius: 2 }} />
+              </View>
+              <Text style={{ fontFamily: 'Inter_400Regular', fontSize: 10, color: colors.gray400, opacity: 0.8 }}>
+                {checkedCount}/{totalCount}
+              </Text>
             </View>
-            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 11, color: Colors.gray400 }}>
-              {checkedCount}/{totalCount}
-            </Text>
-          </View>
-        )}
+          )}
 
-        {/* Search bar (only when 10+ items) + Alles afvinken */}
-        {!loading && items.length > 0 && (
-          <View style={[styles.searchRow, items.length < 10 && { justifyContent: 'flex-end' }]}>
-            {items.length >= 10 && (
+          {/* Search bar (only when 10+ items) */}
+          {!loading && items.length >= 10 && (
+            <View style={styles.searchRow}>
               <View style={[styles.searchBar, { backgroundColor: colors.white, borderColor: colors.gray100, flex: 1 }]}>
                 <Ionicons name="search-outline" size={16} color={colors.gray400} />
                 <TextInput
@@ -797,139 +822,139 @@ export default function ListDetailScreen() {
                   clearButtonMode="while-editing"
                 />
               </View>
-            )}
-            {unchecked.length > 0 && listType !== 'tips' && listType !== 'links' && (
-              <TouchableOpacity
-                onPress={checkAllItems}
-                style={[styles.checkAllBtn, { backgroundColor: Colors.yellow }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="checkmark-done" size={14} color={Colors.black} />
-                <Text style={styles.checkAllText}>Alles</Text>
-              </TouchableOpacity>
-            )}
-            {allDone && listType !== 'tips' && listType !== 'links' && (
-              <TouchableOpacity
-                onPress={uncheckAllItems}
-                style={[styles.checkAllBtn, { backgroundColor: colors.gray100 }]}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="refresh-outline" size={14} color={colors.black} />
-                <Text style={[styles.checkAllText, { color: colors.black }]}>Terugzetten</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+            </View>
+          )}
 
-        {/* Members row — only shown when there are actual members */}
-        {members.length > 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 6 }}>
-            <Ionicons name="people-outline" size={13} color={colors.gray400} />
-            {!isSharedWithMe && user && user.id !== 'dev' && (
-              <View style={{ position: 'relative', width: 26, height: 26 }}>
-                <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFB800', justifyContent: 'center', alignItems: 'center' }}>
-                  <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>
-                    {(user.whatsapp_number ?? '?').slice(0, 2).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
-                  <Ionicons name="star" size={8} color="#fff" />
-                </View>
-              </View>
-            )}
-            {members.map(m => {
-              const memberName = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
-              const memberPhone = m.users?.whatsapp_number;
-              const initials = memberName.slice(0, 2).toUpperCase();
-              const isOwner = false;
-              const joinedDate = m.created_at ? new Date(m.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-              return (
-                <View key={m.user_id} style={{ position: 'relative', width: 26, height: 26 }}>
-                  <TouchableOpacity
-                    onLongPress={() => Alert.alert(memberName, [memberPhone, joinedDate ? `Lid sinds ${joinedDate}` : ''].filter(Boolean).join('\n'))}
-                    activeOpacity={0.8}
-                    style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: isOwner ? '#FFB800' : Colors.yellow, justifyContent: 'center', alignItems: 'center' }}
-                  >
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
-                  </TouchableOpacity>
-                  {isOwner && (
-                    <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
-                      <Ionicons name="star" size={8} color="#fff" />
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        )}
-        {isSharedWithMe && (
-          <TouchableOpacity
-            onPress={() => Alert.alert('Lijst verlaten?', 'Je verlaat deze gedeelde lijst. De eigenaar kan je opnieuw uitnodigen.', [
-              { text: 'Annuleer', style: 'cancel' },
-              { text: 'Verlaat', style: 'destructive', onPress: leaveList },
-            ])}
-            style={{ marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#EF4444', alignItems: 'center' }}
-            activeOpacity={0.8}
-          >
-            <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#EF4444' }}>Verlaat gedeelde lijst</Text>
-          </TouchableOpacity>
-        )}
-
-        {loading ? (
-          <View style={styles.skeletonList}>
-            {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
-          </View>
-        ) : (
-          <View style={{ flex: 1 }}>
-          <View style={[styles.itemCard, { backgroundColor: colors.surface }, Platform.OS === 'android' && { borderRadius: 0, overflow: 'visible', elevation: 0 }]}>
-          <FlatList
-            data={flatItems}
-            keyExtractor={(i) => i.id}
-            style={{ flex: 1 }}
-            contentContainerStyle={[styles.list, { paddingBottom: addRowHeight + 16 }]}
-            keyboardShouldPersistTaps="handled"
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchItems(); }} tintColor={Colors.yellow} />
-            }
-            ListHeaderComponent={
-              allDone ? (
-                <View style={styles.allDoneBanner}>
-                  <Text style={styles.allDoneEmoji}>🎉</Text>
-                  <Text style={styles.allDoneText}>Alles afgevinkt!</Text>
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              searchQuery.trim() ? (
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="search-outline" size={36} color={colors.gray400} />
-                  <Text style={[styles.emptyTitle, { color: colors.black }]}>Geen resultaten</Text>
-                  <Text style={[styles.emptyText, { color: colors.gray400 }]}>Geen items gevonden voor "{searchQuery}".</Text>
-                </View>
-              ) : (
-                <View style={styles.emptyContainer}>
-                  <View style={[styles.emptyIconBox, { backgroundColor: colors.gray100 }]}>
-                    <Ionicons name="basket-outline" size={36} color={colors.gray400} />
+          {/* Members row */}
+          {members.length > 0 && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, gap: 6 }}>
+              <Ionicons name="people-outline" size={13} color={colors.gray400} />
+              {!isSharedWithMe && user && user.id !== 'dev' && (
+                <View style={{ position: 'relative', width: 26, height: 26 }}>
+                  <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFB800', justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>
+                      {(user.whatsapp_number ?? '?').slice(0, 2).toUpperCase()}
+                    </Text>
                   </View>
-                  <Text style={[styles.emptyTitle, { color: colors.black }]}>Lijst is leeg</Text>
-                  <Text style={[styles.emptyText, { color: colors.gray400 }]}>Voeg items toe via het veld hieronder, of stuur een WhatsApp-bericht.</Text>
+                  <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
+                    <Ionicons name="star" size={8} color="#fff" />
+                  </View>
                 </View>
-              )
-            }
-            renderItem={({ item, index }: { item: any; index: number }) => {
-              if (item.type === 'recipe_header') {
+              )}
+              {members.map(m => {
+                const memberName = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
+                const memberPhone = m.users?.whatsapp_number;
+                const initials = memberName.slice(0, 2).toUpperCase();
+                const isOwner = false;
+                const joinedDate = m.created_at ? new Date(m.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
                 return (
-                  <View style={[styles.recipeGroupHeader, { borderBottomColor: colors.gray100 }]}>
-                    <Text style={[styles.recipeGroupTitle, { color: colors.gray400 }]} numberOfLines={1}>{item.title}</Text>
-                    <TouchableOpacity onPress={() => deleteRecipeGroup(item.recipeId)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.6}>
-                      <Ionicons name="trash-outline" size={15} color={colors.gray400} />
+                  <View key={m.user_id} style={{ position: 'relative', width: 26, height: 26 }}>
+                    <TouchableOpacity
+                      onLongPress={() => Alert.alert(memberName, [memberPhone, joinedDate ? `Lid sinds ${joinedDate}` : ''].filter(Boolean).join('\n'))}
+                      activeOpacity={0.8}
+                      style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: isOwner ? '#FFB800' : Colors.yellow, justifyContent: 'center', alignItems: 'center' }}
+                    >
+                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
                     </TouchableOpacity>
+                    {isOwner && (
+                      <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
+                        <Ionicons name="star" size={8} color="#fff" />
+                      </View>
+                    )}
                   </View>
                 );
-              }
-              if (item.id === DONE_SENTINEL_ID) {
-                return (
-                  <View style={[styles.doneSectionHeader, { marginTop: 28 }]}>
+              })}
+            </View>
+          )}
+          {isSharedWithMe && (
+            <TouchableOpacity
+              onPress={() => Alert.alert('Lijst verlaten?', 'Je verlaat deze gedeelde lijst. De eigenaar kan je opnieuw uitnodigen.', [
+                { text: 'Annuleer', style: 'cancel' },
+                { text: 'Verlaat', style: 'destructive', onPress: leaveList },
+              ])}
+              style={{ marginHorizontal: 16, marginBottom: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#EF4444', alignItems: 'center' }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 14, color: '#EF4444' }}>Verlaat gedeelde lijst</Text>
+            </TouchableOpacity>
+          )}
+
+          {loading ? (
+            <View style={styles.skeletonList}>
+              {[0, 1, 2, 3].map(i => <SkeletonListCard key={i} />)}
+            </View>
+          ) : (
+            <View style={[styles.itemCard, { backgroundColor: colors.surface }, Platform.OS === 'android' && { borderRadius: 0, overflow: 'visible', elevation: 0 }]}>
+              <View style={styles.list}>
+                {allDone && (
+                  <View style={styles.allDoneBanner}>
+                    <Text style={styles.allDoneEmoji}>🎉</Text>
+                    <Text style={styles.allDoneText}>Alles afgevinkt!</Text>
+                  </View>
+                )}
+
+                {topItems.length === 0 && filteredChecked.length === 0 ? (
+                  searchQuery.trim() ? (
+                    <View style={styles.emptyContainer}>
+                      <Ionicons name="search-outline" size={36} color={colors.gray400} />
+                      <Text style={[styles.emptyTitle, { color: colors.black }]}>Geen resultaten</Text>
+                      <Text style={[styles.emptyText, { color: colors.gray400 }]}>Geen items gevonden voor "{searchQuery}".</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <View style={[styles.emptyIconBox, { backgroundColor: colors.gray100 }]}>
+                        <Ionicons name="basket-outline" size={36} color={colors.gray400} />
+                      </View>
+                      <Text style={[styles.emptyTitle, { color: colors.black }]}>Lijst is leeg</Text>
+                      <Text style={[styles.emptyText, { color: colors.gray400 }]}>Voeg items toe via het veld hieronder, of stuur een WhatsApp-bericht.</Text>
+                    </View>
+                  )
+                ) : null}
+
+                {topItems.map((item: any, index: number) => {
+                  if (item.type === 'recipe_header') {
+                    return (
+                      <View key={item.id} style={[styles.recipeGroupHeader, { borderBottomColor: colors.gray100 }]}>
+                        <Text style={[styles.recipeGroupTitle, { color: colors.gray400 }]} numberOfLines={1}>{item.title}</Text>
+                        <TouchableOpacity onPress={() => deleteRecipeGroup(item.recipeId)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.6}>
+                          <Ionicons name="trash-outline" size={15} color={colors.gray400} />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }
+                  if (listType === 'links') {
+                    return <LinkItemRow key={item.id} item={item} colors={colors} />;
+                  }
+                  const isTips = listType === 'tips';
+                  const addedByInitial = (() => {
+                    if (!item.added_by_user_id) return null;
+                    if (item.added_by_user_id === user?.id) return null;
+                    const member = members.find((m: any) => m.user_id === item.added_by_user_id);
+                    if (!member) return null;
+                    const name = member.users?.display_name?.trim();
+                    if (name) return name[0].toUpperCase();
+                    return member.users?.whatsapp_number?.slice(-2) ?? null;
+                  })();
+                  return (
+                    <SwipeableItem
+                      key={item.id}
+                      item={item}
+                      onToggle={() => toggleItem(item)}
+                      onDelete={() => deleteItem(item.id)}
+                      onLongPress={() => setEditingItemId(item.id)}
+                      editingItemId={editingItemId}
+                      onEditSubmit={saveInlineEdit}
+                      isFirst={true}
+                      tapToEdit={isTips}
+                      onAddPhoto={() => addPhotoToItem(item.id)}
+                      onViewImage={setImageViewUrl}
+                      addedByInitial={addedByInitial}
+                    />
+                  );
+                })}
+
+                {filteredChecked.length > 0 && (
+                  <View style={[styles.doneSectionHeader, { marginTop: topItems.length === 0 ? 0 : 28 }]}>
                     <TouchableOpacity
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}
                       onPress={() => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setDoneExpanded(v => !v); }}
@@ -943,45 +968,37 @@ export default function ListDetailScreen() {
                       hitSlop={{ top: 8, bottom: 8, left: 12, right: 4 }}
                       activeOpacity={0.6}
                     >
-                      <Ionicons name="trash-outline" size={17} color="#EF4444" />
+                      <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: '#EF4444' }}>Wis alles</Text>
                     </TouchableOpacity>
                   </View>
-                );
-              }
-              if (listType === 'links') {
-                return <LinkItemRow item={item} colors={colors} />;
-              }
-              const isTips = listType === 'tips';
-              const addedByInitial = (() => {
-                if (!item.added_by_user_id) return null;
-                if (item.added_by_user_id === user?.id) return null; // own items: no badge
-                const member = members.find(m => m.user_id === item.added_by_user_id);
-                if (!member) return null;
-                const name = member.users?.display_name?.trim();
-                if (name) return name[0].toUpperCase();
-                return member.users?.whatsapp_number?.slice(-2) ?? null;
-              })();
-              return (
-                <SwipeableItem
-                  item={item}
-                  onToggle={() => toggleItem(item)}
-                  onDelete={() => deleteItem(item.id)}
-                  onLongPress={() => setEditingItemId(item.id)}
-                  editingItemId={editingItemId}
-                  onEditSubmit={saveInlineEdit}
-                  isFirst={index === 0}
-                  tapToEdit={isTips}
-                  onAddPhoto={() => addPhotoToItem(item.id)}
-                  onViewImage={setImageViewUrl}
-                  addedByInitial={addedByInitial}
-                />
-              );
+                )}
 
-            }}
-          />
-          </View>
-          </View>
-        )}
+                {doneExpanded && filteredChecked.length > 0 && (
+                  <View style={{ marginHorizontal: 8, marginTop: 8, marginBottom: 8, backgroundColor: colors.gray100, borderRadius: Radius.lg, overflow: 'hidden' }}>
+                    {filteredChecked.map((item: any, index: number) => (
+                      <View key={item.id}>
+                        {index > 0 && <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline }} />}
+                        <SwipeableItem
+                          item={item}
+                          onToggle={() => toggleItem(item)}
+                          onDelete={() => deleteItem(item.id)}
+                          onLongPress={() => setEditingItemId(item.id)}
+                          editingItemId={editingItemId}
+                          onEditSubmit={saveInlineEdit}
+                          isFirst={true}
+                          tapToEdit={listType === 'tips'}
+                          onAddPhoto={() => addPhotoToItem(item.id)}
+                          onViewImage={setImageViewUrl}
+                          addedByInitial={null}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+        </ScrollView>
 
         <View
           onLayout={e => setAddRowHeight(e.nativeEvent.layout.height)}
@@ -1308,7 +1325,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#4A90D8', borderRadius: 0, width: 72,
     justifyContent: 'center', alignItems: 'center', marginBottom: 8, marginRight: 4,
   },
-  itemCard: { flex: 1, marginHorizontal: 16, marginTop: 16, marginBottom: 10, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
+  itemCard: { marginHorizontal: 16, marginTop: 16, marginBottom: 10, borderRadius: Radius.lg, overflow: 'hidden', ...Shadow.card },
   emptyContainer: { alignItems: 'center', paddingVertical: 60, gap: 12, paddingHorizontal: 32 },
   emptyIconBox: {
     width: 72, height: 72, borderRadius: 20, backgroundColor: Colors.gray100,
