@@ -1,7 +1,8 @@
 'use strict';
 
-const express = require('express');
-const db      = require('./supabase');
+const express   = require('express');
+const db        = require('./supabase');
+const whatsapp  = require('./whatsapp');
 
 const router = express.Router();
 
@@ -114,6 +115,34 @@ router.patch('/items/reorder', async (req, res) => {
   } catch (err) {
     console.error('[Lists] Reorder error:', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /lists/:listId/notify-item-added?user_id=xxx
+// body: { item_text, list_name, list_emoji }
+// Fire-and-forget: always responds 200 immediately, sends WhatsApp in the background
+router.post('/:listId/notify-item-added', async (req, res) => {
+  res.json({ ok: true }); // respond immediately, never block the client
+  try {
+    const { listId } = req.params;
+    const uid = userId(req);
+    const { item_text, list_name, list_emoji } = req.body;
+    if (!uid || !item_text) return;
+
+    const members = await db.getListMembers(listId);
+    const others = members.filter(m => m.user_id !== uid && m.users?.whatsapp_number);
+    if (!others.length) return; // personal list or no other members with phone numbers
+
+    const sender = await db.getUserById(uid);
+    const senderName = sender?.display_name?.trim() || 'Iemand';
+    const listLabel = list_emoji ? `${list_emoji} ${list_name ?? 'lijst'}` : (list_name ?? 'de lijst');
+    const msg = `${listLabel}: *${senderName}* heeft '${item_text}' toegevoegd`;
+
+    await Promise.all(others.map(m =>
+      whatsapp.sendMessage(m.users.whatsapp_number, msg).catch(() => {})
+    ));
+  } catch (err) {
+    console.error('[Lists] notify-item-added error:', err.message);
   }
 });
 

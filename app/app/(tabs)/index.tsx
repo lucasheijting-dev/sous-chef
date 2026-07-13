@@ -207,14 +207,8 @@ function AnimatedCard({
           <Text style={[styles.tileName, { color: colors.black, flex: 1 }]} numberOfLines={1}>{item.name}</Text>
         </View>
         <View style={styles.tileCountRow}>
-          {totalCount > 0 ? (
-            allDone ? (
-              <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
-            ) : (
-              <Text style={[styles.tileCount, { color: colors.gray400 }]}>{totalCount - openCount}/{totalCount}</Text>
-            )
-          ) : (
-            <Text style={[styles.tileCount, { color: colors.gray400 }]}>Leeg</Text>
+          {allDone && totalCount > 0 && (
+            <Text style={[styles.tileCount, { color: '#5A8A5A', fontFamily: 'Inter_600SemiBold' }]}>✓ Klaar</Text>
           )}
           {typeLabel && (
             <View style={[styles.typeBadge, { backgroundColor: colors.gray100 }]}>

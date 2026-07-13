@@ -2,6 +2,7 @@ export type User = {
   id: string;
   whatsapp_number: string;
   created_at: string;
+  display_name?: string | null;
 };
 
 export type UserPrefs = {

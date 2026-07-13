@@ -312,39 +312,19 @@ export default function ListDetailScreen() {
   useEffect(() => {
     const badge = listType === 'links' ? ' 🔗' : listType === 'tips' ? ' 💡' : '';
     const emojiPrefix = emoji ? `${emoji} ` : '';
-    const showCheckAll = unchecked.length > 0 && listType !== 'tips' && listType !== 'links';
-    const showUncheckAll = allDone && listType !== 'tips' && listType !== 'links';
     navigation.setOptions({
       title: `${emojiPrefix}${name}${badge}`,
       headerBackTitle: 'Terug',
       headerTintColor: Colors.yellow,
       headerRight: () => (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 4 }}>
-          {showCheckAll && (
-            <TouchableOpacity onPress={checkAllItems} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.yellow, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 6 }}>
-                <Ionicons name="checkmark-done" size={14} color={Colors.black} />
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.black }}>Alles</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          {showUncheckAll && (
-            <TouchableOpacity onPress={uncheckAllItems} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.gray100, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 6 }}>
-                <Ionicons name="refresh-outline" size={14} color={colors.black} />
-                <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: colors.black }}>Terugzetten</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={openInviteModal} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-            <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
-              <Ionicons name="person-add-outline" size={17} color={Colors.black} />
-            </View>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={openInviteModal} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }} style={{ marginRight: 4 }}>
+          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F2F7', justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="person-add-outline" size={17} color={Colors.black} />
+          </View>
+        </TouchableOpacity>
       ),
     });
-  }, [name, emoji, listType, items, unchecked.length, allDone]);
+  }, [name, emoji, listType]);
 
   useEffect(() => {
     if (!id) return;
@@ -514,6 +494,12 @@ export default function ListDetailScreen() {
     supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
     setAdding(false);
     fetchItems();
+    if (members.length > 0 && user && user.id !== 'dev') {
+      apiFetch(`/lists/${id}/notify-item-added?user_id=${user.id}`, {
+        method: 'POST',
+        body: JSON.stringify({ item_text: text, list_name: name, list_emoji: emoji }),
+      }).catch(() => {});
+    }
   }
 
   async function saveInlineEdit(itemId: string, text: string) {
@@ -832,9 +818,10 @@ export default function ListDetailScreen() {
               {!isSharedWithMe && user && user.id !== 'dev' && (
                 <View style={{ position: 'relative', width: 26, height: 26 }}>
                   <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#FFB800', justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>
-                      {(user.whatsapp_number ?? '?').slice(0, 2).toUpperCase()}
-                    </Text>
+                    {user.display_name?.trim()
+                      ? <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{user.display_name.trim()[0].toUpperCase()}</Text>
+                      : <Ionicons name="person" size={13} color={Colors.black} />
+                    }
                   </View>
                   <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
                     <Ionicons name="star" size={8} color="#fff" />
@@ -842,25 +829,22 @@ export default function ListDetailScreen() {
                 </View>
               )}
               {members.map(m => {
-                const memberName = m.users?.display_name ?? m.users?.whatsapp_number ?? '?';
+                const displayName = m.users?.display_name?.trim() ?? null;
                 const memberPhone = m.users?.whatsapp_number;
-                const initials = memberName.slice(0, 2).toUpperCase();
-                const isOwner = false;
+                const alertTitle = displayName ?? memberPhone ?? 'Lid';
                 const joinedDate = m.created_at ? new Date(m.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
                 return (
                   <View key={m.user_id} style={{ position: 'relative', width: 26, height: 26 }}>
                     <TouchableOpacity
-                      onLongPress={() => Alert.alert(memberName, [memberPhone, joinedDate ? `Lid sinds ${joinedDate}` : ''].filter(Boolean).join('\n'))}
+                      onLongPress={() => Alert.alert(alertTitle, [memberPhone, joinedDate ? `Lid sinds ${joinedDate}` : ''].filter(Boolean).join('\n'))}
                       activeOpacity={0.8}
-                      style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: isOwner ? '#FFB800' : Colors.yellow, justifyContent: 'center', alignItems: 'center' }}
+                      style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: Colors.yellow, justifyContent: 'center', alignItems: 'center' }}
                     >
-                      <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{initials}</Text>
+                      {displayName
+                        ? <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 10, color: Colors.black }}>{displayName[0].toUpperCase()}</Text>
+                        : <Ionicons name="person" size={13} color={Colors.black} />
+                      }
                     </TouchableOpacity>
-                    {isOwner && (
-                      <View style={{ position: 'absolute', top: -2, right: -2, width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFB800', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.white }}>
-                        <Ionicons name="star" size={8} color="#fff" />
-                      </View>
-                    )}
                   </View>
                 );
               })}
