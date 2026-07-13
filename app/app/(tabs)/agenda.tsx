@@ -909,11 +909,17 @@ function AgendaLite() {
     }
   }
 
-  function openQuickAdd(prefillDate?: string) {
+  function openQuickAdd(prefillDate?: string, prefillHour?: number) {
     const d = prefillDate ? new Date(prefillDate + 'T12:00:00') : new Date();
     setQuickAddTitle('');
     setQuickAddDate(d);
-    setQuickAddTime(null);
+    if (prefillHour !== undefined) {
+      const t = new Date();
+      t.setHours(prefillHour, 0, 0, 0);
+      setQuickAddTime(t);
+    } else {
+      setQuickAddTime(null);
+    }
     setQuickAddStream(null);
     setShowDatePicker(false);
     setShowTimePicker(false);
@@ -1279,14 +1285,22 @@ function AgendaLite() {
             {/* Hour timeline */}
             <View style={{ position: 'relative', paddingTop: 4 }}>
               {Array.from({ length: 18 }, (_, i) => i + 6).map(h => (
-                <View key={h} style={{ height: 60, flexDirection: 'row' }}>
+                <Pressable
+                  key={h}
+                  style={{ height: 60, flexDirection: 'row' }}
+                  onLongPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    openQuickAdd(selectedDate, h);
+                  }}
+                  delayLongPress={400}
+                >
                   <View style={{ width: 52, paddingRight: 10, alignItems: 'flex-end', justifyContent: 'flex-start' }}>
                     <Text style={{ fontFamily: 'Inter_300Light', fontSize: 11, color: colors.gray400, marginTop: -7 }}>
                       {String(h).padStart(2, '0')}:00
                     </Text>
                   </View>
                   <View style={{ flex: 1, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.gray100 }} />
-                </View>
+                </Pressable>
               ))}
 
               {/* Current time indicator */}
