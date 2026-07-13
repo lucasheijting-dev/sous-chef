@@ -348,6 +348,7 @@ export default function ListDetailScreen() {
       .from('list_items')
       .select('*')
       .eq('list_id', id)
+      .is('deleted_at', null)
       .order('created_at', { ascending: true });
     if (data) {
       // Fetch recipe sources separately so a missing FK doesn't kill the main query
@@ -389,8 +390,10 @@ export default function ListDetailScreen() {
     haptic('light');
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: !item.checked } : i));
-    await supabase.from('list_items').update({ checked: !item.checked }).eq('id', item.id);
-    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
+    await apiFetch(`/lists/items/${item.id}?user_id=${user?.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ checked: !item.checked }),
+    }).catch(() => {});
     if (!item.checked) {
       showBatchDeleteBanner();
     }
@@ -498,8 +501,10 @@ export default function ListDetailScreen() {
     setEditingItemId(null);
     const trimmed = text.trim();
     if (!trimmed) return;
-    await supabase.from('list_items').update({ text: trimmed }).eq('id', itemId);
-    supabase.from('lists').update({ last_activity_at: new Date().toISOString() }).eq('id', id).then(() => {});
+    await apiFetch(`/lists/items/${itemId}?user_id=${user?.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ text: trimmed }),
+    }).catch(() => {});
     fetchItems();
   }
 

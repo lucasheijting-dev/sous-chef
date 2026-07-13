@@ -43,11 +43,31 @@ router.delete('/items/:itemId', async (req, res) => {
     const { itemId } = req.params;
     const uid = userId(req);
     if (!uid) return res.status(400).json({ error: 'Missing user_id' });
+    const listId = await db.getListItemListId(itemId);
+    if (listId) await db.assertListAccess(uid, listId);
     await db.deleteListItem(itemId);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Lists] Item delete error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(err.status ?? 500).json({ error: err.message });
+  }
+});
+
+// PATCH /lists/items/:itemId?user_id=xxx — body: { checked?, text? }
+router.patch('/items/:itemId', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const uid = userId(req);
+    if (!uid) return res.status(400).json({ error: 'Missing user_id' });
+    const listId = await db.getListItemListId(itemId);
+    if (listId) await db.assertListAccess(uid, listId);
+    const { checked, text } = req.body;
+    if (checked !== undefined) await db.checkListItem(itemId, checked);
+    if (text !== undefined) await db.updateListItemText(itemId, text.trim());
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Lists] Item patch error:', err.message);
+    res.status(err.status ?? 500).json({ error: err.message });
   }
 });
 

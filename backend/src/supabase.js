@@ -302,6 +302,11 @@ async function getListItems(listId) {
   return data ?? [];
 }
 
+async function getListItemListId(itemId) {
+  const { data } = await supabase.from('list_items').select('list_id').eq('id', itemId).single();
+  return data?.list_id ?? null;
+}
+
 async function deleteListItem(itemId) {
   const { error } = await supabase.from('list_items').update({ deleted_at: new Date().toISOString() }).eq('id', itemId);
   if (error) throw new Error(`deleteListItem: ${error.message}`);
@@ -909,6 +914,11 @@ async function updateNote(noteId, title, body) {
   if (body !== undefined) update.body = body;
   update.updated_at = new Date().toISOString();
   if (Object.keys(update).length) await supabase.from('notes').update(update).eq('id', noteId);
+}
+
+async function updateNoteFields(noteId, fields) {
+  const update = { updated_at: new Date().toISOString(), ...fields };
+  await supabase.from('notes').update(update).eq('id', noteId);
 }
 
 // ── Extended Habit Operations ──────────────────────────────────────────────────
@@ -1606,6 +1616,7 @@ module.exports = {
   addListItem,
   listItemExists,
   getListItems,
+  getListItemListId,
   deleteListItem,
   reorderListItems,
   deleteRecipeGroup,
@@ -1658,6 +1669,7 @@ module.exports = {
   getNotes,
   appendToNote,
   updateNote,
+  updateNoteFields,
   getHabitStreak,
   logMessage,
   enqueueCalDAVOperation,
