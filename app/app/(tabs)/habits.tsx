@@ -771,7 +771,13 @@ function HabitsMain() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState(getTodayStr);
-  const strip = useMemo(() => getWeekStrip(utcMsFromStr(today)), [today]);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, negative = past
+  const strip = useMemo(() => {
+    const todayMs = utcMsFromStr(today);
+    const dow = (new Date(todayMs).getUTCDay() + 6) % 7;
+    const thisMondayMs = todayMs - dow * 86400000;
+    return getWeekStrip(thisMondayMs + weekOffset * 7 * 86400000);
+  }, [today, weekOffset]);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const { toastProps, show: showToast } = useToast();
 
@@ -817,7 +823,11 @@ function HabitsMain() {
   useFocusEffect(useCallback(() => {
     const realToday = getTodayStr();
     setToday(realToday);
-    setSelectedDay(prev => (prev > realToday ? realToday : prev));
+    setSelectedDay(prev => {
+      if (prev > realToday) return realToday;
+      return prev;
+    });
+    setWeekOffset(prev => (prev > 0 ? 0 : prev));
     fetchData();
   }, [fetchData]));
 
@@ -829,8 +839,29 @@ function HabitsMain() {
   }, []);
 
 
-  function selectDay(date: string) {
-    if (date === selectedDay) return;
+  function shiftWeek(newOffset: number) {
+    const todayMs = utcMsFromStr(today);
+    const todayDow = (new Date(todayMs).getUTCDay() + 6) % 7;
+    const thisMondayMs = todayMs - todayDow * 86400000;
+    const curDow = (new Date(utcMsFromStr(selectedDay)).getUTCDay() + 6) % 7;
+    const targetMs = thisMondayMs + newOffset * 7 * 86400000 + curDow * 86400000;
+    const targetDay = utcDateStr(Math.min(targetMs, utcMsFromStr(today)));
+    selectDay(targetDay, newOffset);
+  }
+
+  function selectDay(date: string, forceWeekOffset?: number) {
+    if (date === selectedDay && forceWeekOffset === undefined) return;
+    // Sync weekOffset so the strip shows the week containing this date
+    if (forceWeekOffset !== undefined) {
+      setWeekOffset(forceWeekOffset);
+    } else {
+      const todayMs = utcMsFromStr(today);
+      const todayDow = (new Date(todayMs).getUTCDay() + 6) % 7;
+      const thisMondayMs = todayMs - todayDow * 86400000;
+      const dateDow = (new Date(utcMsFromStr(date)).getUTCDay() + 6) % 7;
+      const dateMondayMs = utcMsFromStr(date) - dateDow * 86400000;
+      setWeekOffset(Math.round((dateMondayMs - thisMondayMs) / (7 * 86400000)));
+    }
     Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start(() => {
       setSelectedDay(date);
       Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
@@ -1053,13 +1084,33 @@ function HabitsMain() {
 
         {/* ── Day strip (sc-weekstrip) ── */}
         {habits.length > 0 && (
+          <>
+            {viewMode === 'day' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, marginTop: 8, marginBottom: 0 }}>
+                <TouchableOpacity onPress={() => shiftWeek(weekOffset - 1)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Ionicons name="chevron-back" size={20} color={colors.gray400} />
+                </TouchableOpacity>
+                {weekOffset !== 0 ? (
+                  <TouchableOpacity onPress={() => selectDay(today, 0)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={{ fontFamily: 'Inter_600SemiBold', fontSize: 12, color: Colors.yellow }}>Vandaag</Text>
+                  </TouchableOpacity>
+                ) : <View style={{ width: 20 }} />}
+                <TouchableOpacity
+                  disabled={weekOffset >= 0}
+                  onPress={() => shiftWeek(weekOffset + 1)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="chevron-forward" size={20} color={weekOffset >= 0 ? colors.gray200 : colors.gray400} />
+                </TouchableOpacity>
+              </View>
+            )}
           <FlatList
             ref={stripRef}
             data={strip}
             keyExtractor={d => d.date}
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ marginTop: 10 }}
+            style={{ marginTop: 8 }}
             contentContainerStyle={{ paddingHorizontal: 18, gap: 6 }}
             renderItem={({ item: day }) => {
               const isSelected = day.date === selectedDay;
@@ -1098,6 +1149,7 @@ function HabitsMain() {
               );
             }}
           />
+          </>
         )}
 
         {habits.length === 0 ? (
