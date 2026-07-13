@@ -72,6 +72,25 @@ router.patch('/:noteId/category', async (req, res) => {
   }
 });
 
+// PATCH /notes/:noteId?user_id=xxx — body: { title?, body?, category_id? }
+router.patch('/:noteId', async (req, res) => {
+  try {
+    const { noteId } = req.params;
+    const { user_id } = req.query;
+    if (!user_id) return res.status(400).json({ error: 'Missing user_id' });
+    const fields = {};
+    if ('title' in req.body) fields.title = req.body.title?.trim() || null;
+    if ('body' in req.body) fields.body = req.body.body?.trim() || null;
+    if ('category_id' in req.body) fields.category_id = req.body.category_id ?? null;
+    if (Object.keys(fields).length === 0) return res.status(400).json({ error: 'Nothing to update' });
+    await db.updateNoteFields(noteId, fields);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Notes] Patch error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /notes/:noteId?user_id=xxx
 router.delete('/:noteId', async (req, res) => {
   try {

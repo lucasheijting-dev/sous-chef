@@ -230,7 +230,7 @@ export default function NotitiesTab() {
   const fetchNotes = useCallback(async () => {
     if (!user || user.id === 'dev') { setLoading(false); setRefreshing(false); return; }
     const [notesRes, sharedNoteRes] = await Promise.all([
-      supabase.from('notes').select('id, user_id, title, body, created_at, updated_at, image_url').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('notes').select('id, user_id, title, body, created_at, updated_at, image_url, category_id').eq('user_id', user.id).order('created_at', { ascending: false }),
       supabase.from('note_members').select('note_id').eq('user_id', user.id),
     ]);
     if (notesRes.data) { setNotes(notesRes.data); setCache('cache_notes', notesRes.data); }

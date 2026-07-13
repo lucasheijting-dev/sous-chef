@@ -727,7 +727,10 @@ export default function LijstenTab() {
     setNotes(prev => prev.map(n => n.id === selectedNote.id ? updated : n));
     setSelectedNote(updated);
     setEditingNote(false);
-    await supabase.from('notes').update({ body, title, category_id: editNoteCatId }).eq('id', selectedNote.id);
+    await apiFetch(`/notes/${selectedNote.id}?user_id=${user?.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ body, title, category_id: editNoteCatId }),
+    }).catch(() => {});
   }
 
   const sortedLists = [...lists].sort((a, b) => {
